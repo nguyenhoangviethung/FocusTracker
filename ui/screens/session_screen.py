@@ -24,6 +24,16 @@ STATE_VI = {
     "NO_FACE": "Không thấy khuôn mặt",
 }
 
+DISPLAY_CONFIDENCE_FLOOR = 0.0
+DISPLAY_CONFIDENCE_CEILING = 0.65
+
+
+def _scale_display_confidence(raw_score: float) -> float:
+    bounded = max(DISPLAY_CONFIDENCE_FLOOR, min(DISPLAY_CONFIDENCE_CEILING, float(raw_score)))
+    if DISPLAY_CONFIDENCE_CEILING <= DISPLAY_CONFIDENCE_FLOOR:
+        return 0.0
+    return (bounded - DISPLAY_CONFIDENCE_FLOOR) / (DISPLAY_CONFIDENCE_CEILING - DISPLAY_CONFIDENCE_FLOOR)
+
 
 class SessionScreen(ctk.CTkFrame):
     def __init__(self, parent, controller) -> None:
@@ -261,7 +271,7 @@ class SessionScreen(ctk.CTkFrame):
         try:
             detector = FaceFeatureDetector(draw_landmarks=True)
             sequence_buffer = FeatureSequenceBuffer(sequence_length=60, frame_feature_dim=30)
-            inferencer = ONNXEngagementInferencer(threshold=0.55, smoothing_window=5)
+            inferencer = ONNXEngagementInferencer(smoothing_window=5)
 
             capture = cv2.VideoCapture(0)
             if not capture.isOpened():
@@ -346,8 +356,11 @@ class SessionScreen(ctk.CTkFrame):
         focus_score = float(payload.get("focus_score", 0.0))
 
         self.state_label.configure(text=STATE_VI.get(state, state))
-        self.score_bar.set(max(0.0, min(1.0, focus_score)))
-        self.score_label.configure(text=f"Focus: {focus_score * 100:.1f}%")
+        display_score = _scale_display_confidence(focus_score)
+        self.score_bar.set(display_score)
+        self.score_label.configure(text=f"Focus: {display_score * 100:.1f}%")
+        # Color based on actual ENGAGED threshold (0.30)
+        self.score_bar.configure(progress_color="#2cb884" if state == "ENGAGED" else "#4c6f9f")
 
         if self._session_running and not self._session_paused and state in {"ENGAGED", "DISTRACTED"}:
             elapsed = self._current_elapsed_seconds()

@@ -3,6 +3,17 @@ from __future__ import annotations
 import customtkinter as ctk
 
 
+DISPLAY_CONFIDENCE_FLOOR = 0.0
+DISPLAY_CONFIDENCE_CEILING = 0.65
+
+
+def _scale_display_confidence(raw_score: float) -> float:
+    bounded = max(DISPLAY_CONFIDENCE_FLOOR, min(DISPLAY_CONFIDENCE_CEILING, float(raw_score)))
+    if DISPLAY_CONFIDENCE_CEILING <= DISPLAY_CONFIDENCE_FLOOR:
+        return 0.0
+    return (bounded - DISPLAY_CONFIDENCE_FLOOR) / (DISPLAY_CONFIDENCE_CEILING - DISPLAY_CONFIDENCE_FLOOR)
+
+
 class ReportScreen(ctk.CTkFrame):
     def __init__(self, parent, controller) -> None:
         super().__init__(parent, fg_color="#0f1724")
@@ -68,21 +79,23 @@ class ReportScreen(ctk.CTkFrame):
         ).pack(side="left", padx=8)
 
     def show_loading(self, minute_scores: list[float], average_score: float) -> None:
+        display_average = _scale_display_confidence(average_score)
         self.summary_label.configure(
             text=(
                 f"Số phút ghi nhận: {len(minute_scores)} | "
-                f"Điểm tập trung trung bình: {average_score * 100:.1f}%"
+                f"Điểm tập trung trung bình: {display_average * 100:.1f}%"
             )
         )
         self.feedback_text.delete("1.0", "end")
         self.feedback_text.insert("1.0", "Đang tạo phản hồi AI...")
 
     def set_report(self, minute_scores: list[float], average_score: float, feedback: str) -> None:
-        formatted_scores = ", ".join(f"{score * 100:.1f}%" for score in minute_scores)
+        display_average = _scale_display_confidence(average_score)
+        formatted_scores = ", ".join(f"{_scale_display_confidence(score) * 100:.1f}%" for score in minute_scores)
         self.summary_label.configure(
             text=(
                 f"Số phút ghi nhận: {len(minute_scores)} | "
-                f"TB: {average_score * 100:.1f}% | "
+                f"TB: {display_average * 100:.1f}% | "
                 f"Điểm từng phút: [{formatted_scores}]"
             )
         )

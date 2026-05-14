@@ -10,7 +10,7 @@ import math
 MODEL_PATH = "models/engagement_gru.onnx"
 WINDOW_SIZE = 60
 FEATURE_DIM = 90
-THRESHOLD = 0.55
+THRESHOLD =0.45
 
 # Các chỉ số landmark từ extract_features.py
 LEFT_EYE = [33, 160, 158, 133, 153, 144]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 import platform
 import shutil
 import subprocess
@@ -104,13 +105,14 @@ class ActiveWindowTracker:
         self,
         productive_keywords: Iterable[str] | None = None,
         distraction_keywords: Iterable[str] | None = None,
-        ai_focus_threshold: float = 0.55,
+        ai_focus_threshold: float = 0.45,
         heuristic_override_threshold: float = 0.60,
     ) -> None:
         self.productive_keywords = tuple((productive_keywords or PRODUCTIVE_KEYWORDS))
         self.distraction_keywords = tuple((distraction_keywords or DISTRACTION_KEYWORDS))
         self.ai_focus_threshold = float(ai_focus_threshold)
         self.heuristic_override_threshold = float(heuristic_override_threshold)
+        self._self_pid = os.getpid()
 
     def snapshot(self) -> ActiveWindowSnapshot:
         system_name = platform.system().lower()
@@ -363,12 +365,15 @@ class ActiveWindowTracker:
         if psutil is not None:
             try:
                 processes = sorted(
-                    psutil.process_iter(["pid", "cpu_percent"]),
+                    psutil.process_iter(["pid", "cpu_percent", "name", "cmdline"]),
                     key=lambda proc: float(proc.info.get("cpu_percent") or 0.0),
                     reverse=True,
                 )
                 for proc in processes:
-                    return int(proc.info["pid"])
+                    pid = self._safe_int(proc.info.get("pid"))
+                    if pid is None or self._should_ignore_process(proc.info.get("name"), proc.info.get("cmdline"), pid):
+                        continue
+                    return pid
             except Exception:
                 pass
 
@@ -376,7 +381,36 @@ class ActiveWindowTracker:
         if not output:
             return None
         parts = output.split()
-        return self._safe_int(parts[0]) if parts else None
+        pid = self._safe_int(parts[0]) if parts else None
+        if pid is not None and self._should_ignore_process(None, None, pid):
+            return None
+        return pid
+
+    def _should_ignore_process(
+        self,
+        process_name: str | None,
+        cmdline: object | None,
+        pid: int | None,
+    ) -> bool:
+        if pid is None:
+            return True
+        if pid == self._self_pid:
+            return True
+
+        lowered_name = (process_name or "").strip().lower()
+        if lowered_name in {"python", "python3", "python.exe", "pythonw.exe", "python3.exe"}:
+            return True
+
+        if isinstance(cmdline, (list, tuple)):
+            joined = " ".join(str(part).lower() for part in cmdline)
+            if "python" in joined and "main.py" in joined:
+                return True
+        elif isinstance(cmdline, str):
+            lowered_cmd = cmdline.lower()
+            if "python" in lowered_cmd and "main.py" in lowered_cmd:
+                return True
+
+        return False
 
     def _tasklist_name(self, pid: int) -> str | None:
         output = self._run_command([
@@ -444,7 +478,7 @@ class ActiveWindowTracker:
 def fuse_ai_and_os_signals(
     ai_probability: float,
     window_info: ActiveWindowSnapshot | None = None,
-    ai_focus_threshold: float = 0.55,
+    ai_focus_threshold: float = 0.45,
     productive_keywords: Iterable[str] | None = None,
     distraction_keywords: Iterable[str] | None = None,
 ) -> FusionDecision:

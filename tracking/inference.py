@@ -12,10 +12,12 @@ from utils.paths import model_path
 class ONNXEngagementInferencer:
     """Runs ONNX inference and returns smoothed engagement score/state."""
 
+    DEFAULT_THRESHOLD = 0.30
+
     def __init__(
         self,
         model_file: str | Path | None = None,
-        threshold: float = 0.55,
+        threshold: float = DEFAULT_THRESHOLD,
         smoothing_window: int = 5,
     ) -> None:
         resolved_model = Path(model_file) if model_file else model_path()

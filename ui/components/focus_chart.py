@@ -6,6 +6,11 @@ import tkinter as tk
 import customtkinter as ctk
 
 
+# Display scale constants borrowed from session_screen for consistency
+DISPLAY_CONFIDENCE_FLOOR = 0.0
+DISPLAY_CONFIDENCE_CEILING = 0.65
+
+
 class FocusTrendChart(ctk.CTkFrame):
     def __init__(self, parent, max_points: int = 180, **kwargs) -> None:
         super().__init__(parent, corner_radius=14, fg_color="#101a2a", **kwargs)
@@ -20,7 +25,15 @@ class FocusTrendChart(ctk.CTkFrame):
         self._redraw()
 
     def add_score(self, score: float) -> None:
-        clamped = max(0.0, min(1.0, float(score)))
+        """Add a raw score. Internally scale it to display range for visualization."""
+        raw = float(score)
+        # Scale to display range [0, 1] using same logic as top bar
+        bounded = max(DISPLAY_CONFIDENCE_FLOOR, min(DISPLAY_CONFIDENCE_CEILING, raw))
+        if DISPLAY_CONFIDENCE_CEILING <= DISPLAY_CONFIDENCE_FLOOR:
+            scaled = 0.0
+        else:
+            scaled = (bounded - DISPLAY_CONFIDENCE_FLOOR) / (DISPLAY_CONFIDENCE_CEILING - DISPLAY_CONFIDENCE_FLOOR)
+        clamped = max(0.0, min(1.0, scaled))
         self._scores.append(clamped)
         self._redraw()
 
