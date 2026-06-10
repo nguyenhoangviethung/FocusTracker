@@ -1,48 +1,117 @@
 [
   {
-    "timestamp": "2026-05-12T03:14:43.583763+00:00",
+    "timestamp": "2026-06-09T09:35:02.536756+00:00",
+    "duration_seconds": 83,
+    "focused_seconds": 37,
     "minute_focus_scores": [
-      0.51
+      0.5863487841938143,
+      0.5597530206959709
     ],
-    "average_focus": 0.51,
-    "ai_feedback": "You've shown great determination by dedicating time to focus, which is a strong foundation for your productivity. However, maintaining consistent focus can be a challenge, so let's work on minimizing distractions in future sessions. For our next session, try setting a specific goal to achieve within that minute to help sharpen your concentration."
+    "average_focus": 0.5787025021881843,
+    "distraction_count": 3,
+    "focus_streak_seconds": 24.0,
+    "completed": false,
+    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 57.9% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
   },
   {
-    "timestamp": "2026-05-12T03:29:05.046952+00:00",
+    "timestamp": "2026-06-09T09:24:03.669357+00:00",
+    "duration_seconds": 45,
+    "focused_seconds": 17,
     "minute_focus_scores": [
-      0.4897
+      0.4625033947940333
     ],
-    "average_focus": 0.4897,
-    "ai_feedback": "You showed great determination by staying engaged throughout the session, which is a real strength! However, it seems that maintaining focus for longer periods is a challenge right now. For our next session, let’s set a specific goal to increase your focus time by just a few minutes, so you can build on your progress."
+    "average_focus": 0.4625033947940333,
+    "distraction_count": 1,
+    "focus_streak_seconds": 15.0,
+    "completed": false,
+    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 46.3% với 1 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
   },
   {
-    "timestamp": "2026-05-12T05:19:54.406341+00:00",
+    "timestamp": "2026-06-09T09:08:59.245321+00:00",
+    "duration_seconds": 34,
+    "focused_seconds": 6,
     "minute_focus_scores": [
-      0.5297
+      0.44216951041627456
     ],
-    "average_focus": 0.5297,
-    "ai_feedback": "Great job on maintaining focus during your session; your ability to stay engaged is a real strength! However, it seems like there’s a pattern of fluctuating focus that we can work on together. For our next session, let’s implement a brief mindfulness exercise at the start to help enhance your concentration even further."
+    "average_focus": 0.44216951041627456,
+    "distraction_count": 3,
+    "focus_streak_seconds": 3.0,
+    "completed": false,
+    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 44.2% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
   },
   {
-    "timestamp": "2026-05-12T05:26:19.046976+00:00",
+    "timestamp": "2026-06-09T08:55:16.242557+00:00",
+    "duration_seconds": 30,
+    "focused_seconds": 6,
     "minute_focus_scores": [
-      0.5265
+      0.39130992315989416
     ],
-    "average_focus": 0.5265,
-    "ai_feedback": "You demonstrated great perseverance by staying engaged for the full minute, which is a valuable strength! However, it seems like maintaining focus could be a challenge at times. For our next session, let’s set a timer for shorter intervals to help build your concentration gradually."
+    "average_focus": 0.39130992315989416,
+    "distraction_count": 3,
+    "focus_streak_seconds": 2.0,
+    "completed": false,
+    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 39.1% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
   },
   {
-    "timestamp": "2026-05-14T03:45:50.655727+00:00",
-    "duration_seconds": 180,
-    "focused_seconds": 100,
+    "timestamp": "2026-06-06T08:13:32.810129+00:00",
+    "duration_seconds": 18,
+    "focused_seconds": 4,
     "minute_focus_scores": [
-      0.5,
-      0.6,
-      0.4
+      0.5153702129774127
     ],
-    "average_focus": 0.5,
-    "distraction_count": 5,
-    "focus_streak_seconds": 45.0,
-    "completed": true
+    "average_focus": 0.5153702129774127,
+    "distraction_count": 2,
+    "focus_streak_seconds": 2.0,
+    "completed": false,
+    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 51.5% với 2 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
+  },
+  {
+    "timestamp": "2026-06-06T08:12:46.209146+00:00",
+    "duration_seconds": 22,
+    "focused_seconds": 3,
+    "minute_focus_scores": [
+      0.4549207974821302
+    ],
+    "average_focus": 0.4549207974821302,
+    "distraction_count": 3,
+    "focus_streak_seconds": 1.0,
+    "completed": false,
+    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 45.5% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
+    "email_status": {
+      "sent": false,
+      "status": "skipped",
+      "message": "Không bật gửi mentor report."
+    },
+    "hardcore_enabled": false
   }
 ]

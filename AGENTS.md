@@ -1,131 +1,131 @@
-MASTER AGENT INSTRUCTION: FocusFlow AI (End-to-End)
+# 🚀 PROJECT MASTER SPECIFICATION: FOCUSFLOW AI (V1.0)
 
-1. PROJECT CONTEXT & GOAL
+## 1. CONTEXT & ROLE
+You are a Senior Full-Stack Python Developer and UI/UX Expert. We are building "FocusFlow AI", a cross-platform desktop application using Python and `CustomTkinter`.
+The UI stack is intentionally standardized on `CustomTkinter` only. Do not add `ttkbootstrap` unless the team explicitly revisits the decision; mixing Tk theme systems has caused pixelated/inconsistent rendering on Ubuntu.
+It is an advanced Pomodoro timer integrated with a Spatio-Temporal AI model (MediaPipe + late-fusion GRU + TCN + XGBoost) to track user focus via webcam, combined with an OS-level Heuristic Tracker (Window Title parsing).
 
-Project Name: FocusFlow AI
-Mission: Build a desktop application (Windows/macOS) that tracks user concentration during study/work sessions (like a Pomodoro timer). It uses Computer Vision (MediaPipe) and a trained Deep Learning model (Bi-GRU with Temporal Attention) to classify "Engaged" vs "Distracted" states in real-time. Post-session, it uses OpenAI API to provide coaching feedback.
-Core Rule: Do NOT use PyTorch in the production app to keep the .exe lightweight. The trained GRU model MUST be exported to .onnx and inferred using onnxruntime. Please base on exist python file and checkpoints
+Read this ENTIRE document to understand the architectural vision, UI/UX guidelines, ASCII wireframes, and the 10 Core Use Cases before writing any code.
 
-2. DIRECTORY STRUCTURE
+---
 
-Strictly enforce this structure. Create files exactly where specified.
+## 2. DESIGN SYSTEM & THEMING
+The app must support dynamic Light/Dark mode toggling using `CustomTkinter` (`customtkinter.set_appearance_mode`).
+**Strict Rule:** Do NOT use native borders (`border_width=0`). Rely strictly on color contrast between `Bg_App` and `Bg_Card`.
+**Linux Rendering Rule:** Keep all application pages inside CTk widgets, use `CTkImage` for OpenCV frames, avoid native `ttk` widgets, and keep one semantic theme source in `ui/theme.py`.
+
+**Semantic Colors (Light Mode):**
+- `Bg_App`: "#F3F4F6" | `Bg_Sidebar`: "#FFFFFF" | `Bg_Card`: "#FFFFFF"
+- `Text_Primary`: "#1F2937" | `Text_Secondary`: "#6B7280"
+- `Accent_Focus`: "#10B981" | `Accent_Warn`: "#EF4444" | `Btn_Neutral`: "#E5E7EB"
+
+**Semantic Colors (Dark Mode):**
+- `Bg_App`: "#0F0F0F" | `Bg_Sidebar`: "#141414" | `Bg_Card`: "#1A1A1A"
+- `Text_Primary`: "#FFFFFF" | `Text_Secondary`: "#888888"
+- `Accent_Focus`: "#2ECC71" | `Accent_Warn`: "#E74C3C" | `Btn_Neutral`: "#333333"
+
+**Global Styles:** Font=("Inter", 14) or ("Segoe UI", 14). Corner_Radius=12.
+
+---
+
+## 3. ASCII UI WIREFRAMES (LAYOUT REFERENCE)
+The app uses a fixed Left Sidebar (width ~200) and a dynamic Main Content Frame. Here is the exact layout you must replicate using `CustomTkinter` frames and grids:
+
+### Page 1: HomePage (Routing: Home)
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [Bg_Sidebar] │ [Bg_App] -> Contains [Bg_Card] elements                      │
+│ ❖ Home       │   [Text_Primary] Hello! Ready for a deep focus session?      │
+│              │                                                              │
+│ 📊 Report    │   ┌────────────────────────────────────────────────────────┐ │
+│              │   │ [Bg_Card] POMODORO SETUP                               │ │
+│ ⚙ Settings   │   │  Duration:              [ < ]  25 Mins  [ > ]          │ │
+│              │   │  ⚡ Hardcore Mode:       [ Switch Toggle ]              │ │
+│ 👁 Vision     │   │  ✉ Send Mentor Report:  [ Switch Toggle ]              │ │
+│              │   │  ▶ Demo Mode Video:     [ Select .mp4 File ]           │ │
+│              │   │                                                        │ │
+│              │   │         [ START SESSION (Color: Accent_Focus) ]        │ │
+│              │   └────────────────────────────────────────────────────────┘ │
+└──────────────┴──────────────────────────────────────────────────────────────┘
 ```
-FocusTracker/
-├── main.py                     # Entry point: Initializes Tkinter & starts threads
-├── requirements.txt            # customtkinter, opencv-python, mediapipe, onnxruntime, openai, numpy, pandas
-├── .env                        # OPENAI_API_KEY
-├── assets/                     # Icons, logo
-├── data/                       # Local JSON storage for session logs
-├── models/                     # Holds engagement_gru.onnx
-│
-├── ui/                         # FRONTEND (CustomTkinter)
-│   ├── app_window.py           # Main window & routing
-│   ├── components/             # Reusable UI (Circular Progress, Timer)
-│   └── screens/
-│       ├── dashboard.py        # Start screen
-│       ├── session_screen.py   # Pomodoro + Camera Feed + Real-time Focus Chart
-│       └── report_screen.py    # AI Coach feedback
-│
-├── tracking/                   # SENSORS & AI LOGIC (Background Thread)
-│   ├── detector.py             # MediaPipe logic -> Extracts 30-dim frame feature
-│   ├── buffer.py               # Time-series Queue -> Enriches to 90-dim sequence
-│   └── inference.py            # ONNXRuntime logic -> Predicts Engagement Score
-│
-└── core_ai/                    # LLM INTEGRATION
-    └── ai_coach.py             # Sends session JSON to OpenAI -> Returns feedback string
+### Page 2: ActiveSessionPage (Replaces Main Frame on Start)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [Bg_Sidebar] │ [Bg_App]                                                     │
+│ ❖ Home       │   ┌────────────────────────────────────────────────────────┐ │
+│              │   │ [Bg_Card]                                              │ │
+│ 📊 Report    │   │                  24:59 (Text: Huge)                    │ │
+│              │   │          STATUS: FOCUSED (Color: Accent_Focus)         │ │
+│ ⚙ Settings   │   └────────────────────────────────────────────────────────┘ │
+│              │   ┌────────────────────────┐  ┌────────────────────────────┐ │
+│ 👁 Vision     │   │ [Bg_Card] AI CAMERA    │  │ [Bg_Card] OS TRACKER       │ │
+│              │   │ Signal: Coding         │  │ Active App: VS Code        │ │
+│              │   │ State : FOCUSED        │  │ State     : FOCUSED        │ │
+│              │   └────────────────────────┘  └────────────────────────────┘ │
+│              │      [ PAUSE (Btn_Neutral) ]      [ END (Accent_Warn) ]      │
+└──────────────┴──────────────────────────────────────────────────────────────┘
 
 ```
-3. TECHNICAL SPECIFICATIONS & INFERENCE LOGIC (CRITICAL)
 
-The Deep Learning model is a Bidirectional GRU with Temporal Attention. It relies on highly specific feature extraction and preprocessing steps.
+### Page 3: SettingsPage (Routing: Settings)
 
-3.1. Feature Extraction (detector.py)
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [Bg_Sidebar] │ [Bg_App]                                                     │
+│ ❖ Home       │   ┌────────────────────────────────────────────────────────┐ │
+│              │   │ [Bg_Card] APPEARANCE & ACCOUNT                         │ │
+│ 📊 Report    │   │  Theme:          ( ) Light    (•) Dark                 │ │
+│              │   │  Mentor Email:   [ Entry Field                 ]       │ │
+│ ⚙ Settings   │   └────────────────────────────────────────────────────────┘ │
+│              │   ┌────────────────────────────────────────────────────────┐ │
+│ 👁 Vision     │   │ [Bg_Card] OS TRACKER KEYWORDS                          │ │
+│              │   │  Productive: [ vscode, github, pdf, docx, figma ]      │ │
+│              │   │  Distracting: [ facebook, netflix, lol, tiktok  ]      │ │
+│              │   └────────────────────────────────────────────────────────┘ │
+└──────────────┴──────────────────────────────────────────────────────────────┘
 
-Each frame from the webcam (~30 FPS) must be processed using mp.solutions.face_mesh (refine_landmarks=True). You must extract exactly 30 features per frame in this exact order:
+```
 
-EAR Left Eye (Indices: [33, 160, 158, 133, 153, 144])
+### Page 4: AIVisionPage (Routing: Vision - Developer Showcase)
 
-EAR Right Eye (Indices: [362, 385, 387, 263, 373, 380])
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [Bg_Sidebar] │ [Bg_App]                                                     │
+│ ❖ Home       │  ┌─────────────────────────────┐ ┌─────────────────────────┐ │
+│              │  │ [Bg_Card] CAMERA FEED       │ │ [Bg_Card] TELEMETRY     │ │
+│ 📊 Report    │  │   [ CTkLabel containing ]   │ │ E2E Latency: 28 ms      │ │
+│              │  │   [ OpenCV Frame with   ]   │ │ Throughput : 35 FPS     │ │
+│ ⚙ Settings   │  │   [ MediaPipe Mesh      ]   │ │ EAR : 0.32 [ProgressBa] │ │
+│              │  │                             │ │ MAR : 0.05 [ProgressBa] │ │
+│ 👁 Vision     │  └─────────────────────────────┘ │ Pitch: -5° Yaw: +2°     │ │
+│              │  ┌─────────────────────────────────────────────────────────┐ │
+│              │  │ [Bg_Card] LATE-FUSION MODEL OUTPUT                      │ │
+│              │  │  Confidence: [████████████████░░░░] 82%                 │ │
+│              │  │  VOTE: [ FOCUSED ] (Color: Accent_Focus)                │ │
+│              │  └─────────────────────────────────────────────────────────┘ │
+└──────────────┴──────────────────────────────────────────────────────────────┘
 
-MAR (Mouth Aspect Ratio) (Top: 13, Bottom: 14, Left: 61, Right: 291)
+```
 
-Head Pose Proxy (Pitch, Yaw, Roll calculated using landmarks 1, 152, 33, 263, 61, 291)
+---
 
-Flattened XYZ Landmarks: Extract (x, y, z) for exactly 8 indices: [33, 133, 362, 263, 61, 291, 13, 14]. (8 * 3 = 24 features).
-Total: 1 + 1 + 1 + 3 + 24 = 30 dimensions.
+## 4. THE 10 CORE USE CASES (BUSINESS LOGIC)
 
-3.2. Sequence Enrichment (buffer.py)
+* **UC1: Start Session:** Initializes Pomodoro timer and background tracking threads.
+* **UC2: Hybrid Monitoring:** AI (Webcam, MediaPipe features, late-fusion engagement ensemble) + OS Tracker (Window Titles). 
+* **UC3: Pause/Resume:** Must temporarily sleep/release OpenCV camera and OS tracking threads to save CPU.
+* **UC4: End & AI Coach:** Aggregates focus %, sends to OpenAI API, displays 3 lines of feedback.
+* **UC5: View History:** Read/Write `history.json`.
+* **UC6: Customize Keywords:** Edit `PRODUCTIVE_KEYWORDS` and `DISTRACTING_KEYWORDS`.
+* **UC7: Guardian Report:** Auto-send email via `smtplib` at session end.
+* **UC8: Hardcore Mode:** If distracted > 30s, use `psutil` to auto-kill the distracting app.
+* **UC9: AI Vision Showcase:** The AIVisionPage displaying live inference telemetry and late-fusion component output.
+* **UC10: Demo Mode (Video Import):** Allows selecting an `.mp4` file via `customtkinter.filedialog` to feed `cv2.VideoCapture()` instead of webcam (ID 0).
 
-The model expects a sequence length of 60 frames, but the input dimension is 90, NOT 30.
+## 5. MAINTENANCE NOTES
 
-Maintain a sliding window (deque) of 60 raw frames (Shape: 60 x 30).
-
-Velocity: Calculate the frame-to-frame difference. The first frame's velocity is 0. (Shape: 60 x 30).
-
-Standard Deviation: Calculate the np.std over axis 0 for the 60 frames, then tile it 60 times. (Shape: 60 x 30).
-
-Concatenate: enriched_chunk = np.concatenate([raw_frames, velocity, std_matrix], axis=-1). Final shape: (60, 90).
-
-3.3. ONNX Inference (inference.py)
-
-When the buffer reaches 60, convert the enriched chunk to a NumPy array of shape (1, 60, 90) with dtype=np.float32.
-
-Run onnxruntime.InferenceSession("models/engagement_gru.onnx").run(None, {input_name: data}).
-
-Sigmoid Activation: The ONNX model outputs RAW LOGITS. You MUST apply: probability = 1 / (1 + np.exp(-logit)).
-
-Threshold: Compare the probability against 0.55. If >= 0.55, state is ENGAGED, else DISTRACTED.
-
-Smoothing: Apply a Moving Average over the last 3-5 probabilities to prevent UI jitter.
-
-3.4. Thread Safety & Concurrency
-
-customtkinter MUST run on the Main Thread.
-
-OpenCV, MediaPipe, Buffer, and ONNX Runtime MUST run on a Daemon Background Thread.
-
-Communication: Use queue.Queue. The background thread puts a dictionary {"frame": cv2_image, "focus_score": prob, "state": "ENGAGED"} into the queue.
-
-The UI thread uses .after(15, process_queue) to update the canvas.
-
-3.5. AI Coaching (Post-Session)
-
-At the end of a Pomodoro session, save an array of minute-by-minute focus averages to data/history.json. Send this JSON to OpenAI gpt-4o-mini with a prompt to act as an encouraging productivity coach and provide a 3-sentence actionable review.
-
-4. EXECUTION ROADMAP FOR THE AGENT
-
-PHASE 1: ONNX Exporter
-
-Write scripts/export_to_onnx.py. Load the PyTorch model (EngagementGRU) with TemporalAttention, initialize dummy input torch.randn(1, 60, 90), and export to models/engagement_gru.onnx using torch.onnx.export.
-
-PHASE 2: The Core Tracking Engine
-
-Build tracking/detector.py (30-dim extraction).
-
-Build tracking/buffer.py (90-dim enrichment).
-
-Build tracking/inference.py (ONNX session + Sigmoid + 0.55 threshold).
-
-Build a standalone test_tracker.py CLI script to verify the webcam + ONNX pipeline works.
-
-PHASE 3: UI & Multithreading
-
-Build ui/app_window.py and ui/session_screen.py using customtkinter.
-
-Implement the queue.Queue pattern to stream the webcam frame and focus score securely.
-
-PHASE 4: LLM & Packaging
-
-Implement core_ai/ai_coach.py.
-
-Provide a detailed .spec file and PyInstaller command to compile this app into a single standalone .exe, ensuring hidden imports (onnxruntime, mediapipe) and static assets (the .onnx file) are bundled via sys._MEIPASS.
-
-5. STRICT RULES
-
-Never use PyTorch in the main app. Only onnxruntime and numpy.
-
-Never block the UI. Heavy computation (CV2, ONNX) goes to threading.Thread(daemon=True).
-
-Write complete, modular code for the specific phase requested. No placeholder code.
-
-Add Vietnamese comments and labels in the UI.
+* Main entrypoint: run `python main.py`. Do not reintroduce a second UI entrypoint unless there is a clear packaging reason.
+* Active UI pages live in `ui/screens/home_page.py`, `active_session_page.py`, `settings_page.py`, `report_page.py`, and `ai_vision_page.py`.
+* Model deployment notes are copied from `../engagement-cpu/checkpoints/reports/GUIDE.md` into this repo at `GUIDE.md`; use the local copy during app maintenance.
+* Runtime artifacts for the current model live under `models/late_fusion/`.

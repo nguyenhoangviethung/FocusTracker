@@ -1,172 +1,149 @@
-# FocusFlow AI - Guide
+# FocusFlow Model Guide
 
-Tài liệu này hướng dẫn cách chạy, kiểm tra và đóng gói ứng dụng FocusFlow AI trong môi trường `miniconda3/envs/thesis`.
+Tài liệu này được kéo về từ repo `engagement-cpu`, source gốc:
 
-## 1. Chuẩn bị môi trường
+```text
+../engagement-cpu/checkpoints/reports/GUIDE.md
+```
 
-### 1.1 Kích hoạt môi trường Conda
+Giữ bản copy trong FocusTracker để bảo trì app mà không cần đọc tài liệu ở thư mục khác.
+
+## Model Đang Dùng
+
+| Mục đích | Model | Ghi chú |
+|---|---|---|
+| Runtime chính | `late_fusion_gru_tcn_xgb` | Ensemble GRU + TCN + XGBoost |
+| Neural temporal | `gru`, `tcn` | Chạy qua ONNXRuntime |
+| Tabular temporal | `xgboost` | Chạy từ `engagement_xgb.json` + preprocessor |
+
+## Input Contract
+
+Pipeline app:
+
+1. Webcam/video frame -> MediaPipe FaceMesh features.
+2. Feature frame -> `FeatureSequenceBuffer`.
+3. Sequence enriched shape `(30, 90)` -> GRU/TCN ONNX + XGBoost tabular features.
+4. GRU/TCN inputs must be normalized with `feature_mean`/`feature_std` from the source `.pt` checkpoints when `normalize_features=true`.
+5. XGBoost uses the raw enriched sequence to build tsfresh-like tabular features, then applies `engagement_xgb.preprocess.npz`.
+6. Late fusion probability -> `fusion_logic` kết hợp OS tracker.
+
+Shape chuẩn:
+
+```text
+T = 30
+raw frame feature dim = 30
+enriched sequence dim = 90
+model input = (30, 90)
+```
+
+## Artifacts Trong Repo App
+
+```text
+models/late_fusion/engagement_gru.onnx
+models/late_fusion/engagement_gru.json
+models/late_fusion/engagement_tcn.onnx
+models/late_fusion/engagement_tcn.json
+models/late_fusion/engagement_xgb.json
+models/late_fusion/engagement_xgb.summary.json
+models/late_fusion/engagement_xgb.preprocess.npz
+models/late_fusion/late_fusion_gru_tcn_xgb_report.json
+models/face_landmarker.task
+```
+
+## Fusion Contract
+
+Late-fusion model probability:
+
+```python
+p_final = (0.30 * p_gru) + (0.30 * p_tcn) + (0.40 * p_xgb)
+prediction = int(p_final >= 0.54)
+```
+
+The app then combines `p_final` with OS context in `main.fusion_logic`.
+
+## Runtime Code Map
+
+| File | Responsibility |
+|---|---|
+| `tracking/detector.py` | MediaPipe feature extraction |
+| `tracking/buffer.py` | Builds the 30-frame enriched sequence |
+| `tracking/inference.py` | Loads GRU/TCN ONNX, XGBoost, metadata, and runs late fusion |
+| `tracking/tracker.py` | Camera thread, OS thread, pause/resume, queue telemetry |
+| `main.py` | Final AI + OS decision fusion |
+
+## Service Response Shape
+
+`ONNXEngagementInferencer.predict()` should return enough trace data to debug production sessions:
+
+```json
+{
+  "model_name": "late_fusion_gru_tcn_xgb",
+  "model_version": "20260608",
+  "threshold": 0.54,
+  "probability": 0.0,
+  "focus_score": 0.0,
+  "state": "ENGAGED",
+  "sequence_length": 30,
+  "raw_feature_dim": 30,
+  "enriched_feature_dim": 90,
+  "components": {
+    "gru": {"probability": 0.0},
+    "tcn": {"probability": 0.0},
+    "xgboost": {"probability": 0.0}
+  },
+  "weights": {
+    "gru": 0.30,
+    "tcn": 0.30,
+    "xgboost": 0.40
+  }
+}
+```
+
+## Fallbacks Cần Giữ
+
+* Không đủ 30 frame: giữ trạng thái `WARMING_UP`.
+* Không detect face: vẫn render frame, nhưng không tin AI score mới.
+* NaN/Inf trong feature: replace bằng `0.0` trước inference.
+* Thiếu artifact: fail rõ bằng `FileNotFoundError` để biết bundle bị thiếu.
+* Thiếu `feature_mean`/`feature_std` khi `normalize_features=true`: fail rõ bằng `ValueError`, không được chạy inference sai scale.
+* Pause session: release camera và reset buffer/inferencer để tiết kiệm CPU.
+
+## Khi Cập Nhật Model
+
+1. Export ONNX bằng exporter repo app để dùng đúng source model GRU/TCN:
 
 ```bash
-source /home/bear/miniconda3/etc/profile.d/conda.sh
-conda activate thesis
+python scripts/export_to_onnx.py \
+  --checkpoint ../engagement-cpu/checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
+  --output models/late_fusion/engagement_gru.onnx
+
+python scripts/export_to_onnx.py \
+  --checkpoint ../engagement-cpu/checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt \
+  --output models/late_fusion/engagement_tcn.onnx
 ```
 
-Nếu máy bạn đã cấu hình sẵn `conda` trong shell, có thể chỉ cần:
+2. Copy/sync normalization metadata vào repo app:
 
 ```bash
-conda activate thesis
+python scripts/sync_late_fusion_metadata.py --engagement-repo ../engagement-cpu
 ```
 
-### 1.2 Cài dependencies
+Runtime chỉ được đọc artifact dưới `models/late_fusion/`; mọi đường dẫn source training trong metadata chỉ là ghi chú bảo trì, không phải dependency deploy.
 
-Từ thư mục gốc của dự án:
+Trong app live, runtime vẫn infer đủ GRU + TCN + XGBoost. Tuy nhiên nếu GRU và TCN cùng vượt threshold riêng, score chính dùng `neural_consensus_guarded` để tránh XGBoost under-calibrated trên webcam cá nhân kéo tụt confidence; XGBoost vẫn được giữ trong telemetry/trace và vẫn tham gia khi neural chưa đồng thuận.
+
+3. Đảm bảo metadata khai báo đúng `sequence_length`, `raw_feature_dim`, `enriched_feature_dim`, threshold và calibration.
+
+4. Chạy regression test. Test này pin golden output cho GRU + TCN + XGBoost để bắt lỗi export sai kiến trúc hoặc sai calibration:
 
 ```bash
-pip install -r requirements.txt
+pytest tests/test_logic_oonx.py
 ```
 
-Nếu bạn cần export lại model từ checkpoint PyTorch sang ONNX, cài thêm bộ công cụ export:
+5. Chạy manual test nếu cần xem telemetry:
 
 ```bash
-pip install -r scripts/requirements_export.txt
+python tests/manual/test_tracker.py --model models/late_fusion/engagement_gru.onnx
 ```
 
-### 1.3 Cấu hình API key cho AI Coach
-
-Tạo file `.env` ở thư mục gốc nếu muốn dùng phần AI Coach sau phiên:
-
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-```
-
-Nếu không có API key, ứng dụng vẫn chạy được, nhưng phần báo cáo AI sẽ dùng nội dung thay thế.
-
-## 2. Chạy ứng dụng chính
-
-Khởi chạy giao diện desktop bằng:
-
-```bash
-python main.py
-```
-
-Luồng sử dụng cơ bản:
-
-1. Màn hình Dashboard hiện ra.
-2. Chọn thời lượng Pomodoro.
-3. Bấm nút bắt đầu phiên.
-4. Ứng dụng mở camera, chạy tracking nền và hiển thị focus score theo thời gian thực.
-5. Kết thúc phiên để xem báo cáo và phản hồi AI.
-
-## 3. Kiểm tra logic camera + ONNX
-
-Trước khi dùng giao diện, bạn nên test nhanh pipeline camera, MediaPipe và ONNX:
-
-### 3.1 Export ONNX model
-
-```bash
-python scripts/export_to_onnx.py
-```
-
-Lệnh này tạo file `models/engagement_gru.onnx` từ checkpoint PyTorch trong `train_2/engagement_gru.pt`.
-
-### 3.2 Chạy test tracker
-
-```bash
-python test_tracker.py
-```
-
-Trong cửa sổ OpenCV:
-
-- `WARMING_UP` nghĩa là buffer chưa đủ 60 frame.
-- Khi đủ dữ liệu, trạng thái sẽ chuyển sang `ENGAGED` hoặc `DISTRACTED`.
-- Nhấn `q` để thoát.
-
-## 4. Chạy kiểm tra logic trong môi trường `thesis`
-
-Nếu bạn muốn xác nhận nhanh rằng môi trường Python đang đúng và module chính import được, có thể chạy một lệnh kiểm tra nhẹ:
-
-```bash
-python -c "from tracking.buffer import FeatureSequenceBuffer; from tracking.inference import ONNXEngagementInferencer; print('OK')"
-```
-
-Nếu muốn kiểm tra riêng phần UI khởi tạo được hay không:
-
-```bash
-python -c "import customtkinter as ctk; from ui.app_window import FocusFlowApp; print('UI OK')"
-```
-
-## 5. Đóng gói ứng dụng
-
-### 5.1 Build bằng script
-
-```bash
-bash scripts/build_exe.sh
-```
-
-### 5.2 Build bằng PyInstaller trực tiếp
-
-```bash
-pyinstaller focusflow_app.spec --clean
-```
-
-Kết quả build thường nằm trong thư mục `dist/`.
-
-## 6. Dữ liệu và file quan trọng
-
-- `models/engagement_gru.onnx`: model ONNX dùng ở runtime.
-- `train_2/engagement_gru.pt`: checkpoint gốc để export lại model.
-- `data/history.json`: lịch sử các phiên đã hoàn thành.
-- `.env`: nơi lưu `OPENAI_API_KEY`.
-
-## 7. Ghi chú vận hành
-
-- Ứng dụng được thiết kế để chạy nền, ưu tiên CPU thấp.
-- Camera, MediaPipe và ONNX chạy ở background thread, không chặn giao diện.
-- Nếu camera không mở được, hãy kiểm tra quyền truy cập webcam và số index camera.
-- Nếu thiếu model ONNX, hãy chạy lại `python scripts/export_to_onnx.py`.
-
-## 8. Xử lý lỗi thường gặp
-
-### Không mở được camera
-
-- Kiểm tra webcam có đang bị ứng dụng khác chiếm dụng không.
-- Thử đổi camera index trong `test_tracker.py`.
-
-### Thiếu `engagement_gru.onnx`
-
-- Chạy:
-
-```bash
-python scripts/export_to_onnx.py
-```
-
-### Thiếu OpenAI API key
-
-- Tạo file `.env` ở thư mục gốc và thêm `OPENAI_API_KEY`.
-
-### Lỗi import thư viện
-
-- Xác nhận bạn đang ở môi trường `thesis`:
-
-```bash
-conda activate thesis
-python -c "import sys; print(sys.executable)"
-```
-
-## 9. Trình tự khuyến nghị
-
-Nếu bạn mới clone project, hãy làm theo thứ tự này:
-
-1. Kích hoạt `thesis`.
-2. Cài dependencies.
-3. Tạo `.env` nếu cần AI Coach.
-4. Export ONNX model.
-5. Chạy `test_tracker.py` để kiểm tra camera + inference.
-6. Chạy `main.py` để dùng toàn bộ ứng dụng.
-
-## 10. Tóm tắt ngắn
-
-- Dùng `python main.py` để chạy app.
-- Dùng `python test_tracker.py` để kiểm tra logic camera và ONNX.
-- Dùng `bash scripts/build_exe.sh` để đóng gói.
-- Luôn chạy trong môi trường `miniconda3/envs/thesis` nếu bạn muốn đúng phụ thuộc của dự án.
+6. Cập nhật file này nếu weight, threshold, shape hoặc artifact name thay đổi.

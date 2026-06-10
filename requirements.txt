@@ -1,8 +1,1 @@
-customtkinter
-opencv-python
-mediapipe
-onnxruntime
-openai
-numpy
-pandas
-pyinstaller
+-r requirements/runtime.txt
