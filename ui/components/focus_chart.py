@@ -5,35 +5,36 @@ import tkinter as tk
 
 import customtkinter as ctk
 
-
-# Display scale constants borrowed from session_screen for consistency
-DISPLAY_CONFIDENCE_FLOOR = 0.0
-DISPLAY_CONFIDENCE_CEILING = 0.65
+from ui.theme import APP_FONT_FAMILY
 
 
 class FocusTrendChart(ctk.CTkFrame):
-    def __init__(self, parent, max_points: int = 180, **kwargs) -> None:
-        super().__init__(parent, corner_radius=14, fg_color="#101a2a", **kwargs)
+    def __init__(self, parent, max_points: int = 180, palette: dict[str, str] | None = None, **kwargs) -> None:
+        self._palette = palette or {
+            "input": "#101a2a",
+            "text_secondary": "#8191ad",
+            "accent_focus": "#37d69b",
+            "accent_warn": "#E74C3C",
+        }
+        super().__init__(parent, corner_radius=14, fg_color=self._palette["input"], **kwargs)
         self._scores: deque[float] = deque(maxlen=max_points)
 
-        self.canvas = tk.Canvas(self, bg="#101a2a", highlightthickness=0)
+        self.canvas = tk.Canvas(self, bg=self._palette["input"], highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, padx=8, pady=8)
         self.canvas.bind("<Configure>", lambda _event: self._redraw())
+
+    def apply_theme(self, palette: dict[str, str]) -> None:
+        self._palette = palette
+        self.configure(fg_color=palette["input"])
+        self.canvas.configure(bg=palette["input"])
+        self._redraw()
 
     def clear(self) -> None:
         self._scores.clear()
         self._redraw()
 
     def add_score(self, score: float) -> None:
-        """Add a raw score. Internally scale it to display range for visualization."""
-        raw = float(score)
-        # Scale to display range [0, 1] using same logic as top bar
-        bounded = max(DISPLAY_CONFIDENCE_FLOOR, min(DISPLAY_CONFIDENCE_CEILING, raw))
-        if DISPLAY_CONFIDENCE_CEILING <= DISPLAY_CONFIDENCE_FLOOR:
-            scaled = 0.0
-        else:
-            scaled = (bounded - DISPLAY_CONFIDENCE_FLOOR) / (DISPLAY_CONFIDENCE_CEILING - DISPLAY_CONFIDENCE_FLOOR)
-        clamped = max(0.0, min(1.0, scaled))
+        clamped = max(0.0, min(1.0, float(score)))
         self._scores.append(clamped)
         self._redraw()
 
@@ -42,20 +43,23 @@ class FocusTrendChart(ctk.CTkFrame):
         width = max(1, self.canvas.winfo_width())
         height = max(1, self.canvas.winfo_height())
 
-        # Vẽ lưới ngang để quan sát xu hướng điểm tập trung.
-        guide_color = "#223049"
-        for index, value in enumerate([0.0, 0.5, 1.0]):
+        guide_color = "#D1D5DB" if self._palette.get("bg_app") == "#F3F4F6" else "#2A2A2A"
+        muted_color = self._palette["text_secondary"]
+        for value in [0.0, 0.5, 1.0]:
             y = height - int(value * (height - 24)) - 12
             self.canvas.create_line(8, y, width - 8, y, fill=guide_color, dash=(2, 3))
-            self.canvas.create_text(12, y - 8, text=f"{int(value * 100)}%", fill="#8191ad", anchor="w")
+            self.canvas.create_text(12, y - 8, text=f"{int(value * 100)}%", fill=muted_color, anchor="w")
+
+        threshold_y = height - int(0.54 * (height - 24)) - 12
+        self.canvas.create_line(8, threshold_y, width - 8, threshold_y, fill=self._palette["accent_warn"], dash=(4, 4))
 
         if len(self._scores) < 2:
             self.canvas.create_text(
                 width // 2,
                 height // 2,
-                text="Chờ dữ liệu focus...",
-                fill="#7f90ad",
-                font=("Segoe UI", 12),
+                text="Waiting for focus data...",
+                fill=muted_color,
+                font=(APP_FONT_FAMILY, 12),
             )
             return
 
@@ -72,4 +76,4 @@ class FocusTrendChart(ctk.CTkFrame):
             y = bottom - score * span_y
             points.extend([x, y])
 
-        self.canvas.create_line(*points, fill="#37d69b", width=2, smooth=True)
+        self.canvas.create_line(*points, fill=self._palette["accent_focus"], width=2, smooth=True)

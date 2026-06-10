@@ -22,7 +22,43 @@ def writable_base_dir() -> Path:
 
 
 def model_path() -> Path:
-    return resource_base_dir() / "models" / "engagement_gru.onnx"
+    return late_fusion_gru_model_path()
+
+
+def late_fusion_model_dir() -> Path:
+    return resource_base_dir() / "models" / "late_fusion"
+
+
+def late_fusion_gru_model_path() -> Path:
+    return late_fusion_model_dir() / "engagement_gru.onnx"
+
+
+def late_fusion_tcn_model_path() -> Path:
+    return late_fusion_model_dir() / "engagement_tcn.onnx"
+
+
+def late_fusion_gru_metadata_path() -> Path:
+    return late_fusion_model_dir() / "engagement_gru.json"
+
+
+def late_fusion_tcn_metadata_path() -> Path:
+    return late_fusion_model_dir() / "engagement_tcn.json"
+
+
+def late_fusion_xgb_model_path() -> Path:
+    return late_fusion_model_dir() / "engagement_xgb.json"
+
+
+def late_fusion_xgb_summary_path() -> Path:
+    return late_fusion_model_dir() / "engagement_xgb.summary.json"
+
+
+def late_fusion_xgb_preprocessor_path() -> Path:
+    return late_fusion_model_dir() / "engagement_xgb.preprocess.npz"
+
+
+def late_fusion_report_path() -> Path:
+    return late_fusion_model_dir() / "late_fusion_gru_tcn_xgb_report.json"
 
 
 def data_dir() -> Path:

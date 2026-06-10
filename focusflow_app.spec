@@ -13,16 +13,34 @@ hiddenimports = [
     "customtkinter",
     "onnxruntime",
     "onnxruntime.capi.onnxruntime_pybind11_state",
+    "xgboost",
 ]
 hiddenimports += collect_submodules("mediapipe")
 hiddenimports += collect_submodules("onnxruntime")
 
 mediapipe_datas = collect_data_files("mediapipe", include_py_files=False)
 
+
+def add_data(path: Path, target: str) -> tuple[str, str] | None:
+    return (str(path), target) if path.exists() else None
+
+
 datas = [
-    (str(project_root / "models" / "engagement_gru.onnx"), "models"),
-    (str(project_root / "assets"), "assets"),
-    (str(project_root / "data"), "data"),
+    item
+    for item in [
+        add_data(project_root / "models" / "late_fusion" / "engagement_gru.onnx", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_gru.json", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_tcn.onnx", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_tcn.json", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.json", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.summary.json", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.preprocess.npz", "models/late_fusion"),
+        add_data(project_root / "models" / "late_fusion" / "late_fusion_gru_tcn_xgb_report.json", "models/late_fusion"),
+        add_data(project_root / "models" / "face_landmarker.task", "models"),
+        add_data(project_root / "assets", "assets"),
+        add_data(project_root / "data", "data"),
+    ]
+    if item is not None
 ]
 datas += mediapipe_datas
 
