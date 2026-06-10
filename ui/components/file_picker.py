@@ -28,7 +28,7 @@ class VideoFilePicker(ctk.CTkToplevel):
         self._selected_file: Path | None = None
         self._rows: list[ctk.CTkButton] = []
 
-        self.title("Chọn video demo")
+        self.title("Select Demo Video")
         self.geometry("760x520")
         self.minsize(680, 460)
         self.transient(parent.winfo_toplevel())
@@ -40,7 +40,7 @@ class VideoFilePicker(ctk.CTkToplevel):
         self.header.grid(row=0, column=0, sticky="ew")
         self.header.grid_columnconfigure(1, weight=1)
 
-        self.title_label = ctk.CTkLabel(self.header, text="Chọn video demo", font=font(22, "bold"), anchor="w")
+        self.title_label = ctk.CTkLabel(self.header, text="Select Demo Video", font=font(22, "bold"), anchor="w")
         self.title_label.grid(row=0, column=0, columnspan=3, sticky="ew", padx=24, pady=(20, 6))
 
         self.path_label = ctk.CTkLabel(self.header, text="", font=font(13), anchor="w")
@@ -48,7 +48,7 @@ class VideoFilePicker(ctk.CTkToplevel):
 
         self.up_button = ctk.CTkButton(
             self.header,
-            text="Lên thư mục",
+            text="Parent Folder",
             width=120,
             height=36,
             corner_radius=10,
@@ -78,7 +78,7 @@ class VideoFilePicker(ctk.CTkToplevel):
             corner_radius=10,
             border_width=0,
             font=font(13),
-            placeholder_text="Chọn file .mp4/.mov/.avi...",
+            placeholder_text="Select .mp4/.mov/.avi file...",
         )
         self.file_entry.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 12))
 
@@ -90,12 +90,12 @@ class VideoFilePicker(ctk.CTkToplevel):
         self.actions.grid(row=3, column=0, sticky="ew", padx=24, pady=(0, 24))
         self.actions.grid_columnconfigure(0, weight=1)
 
-        self.hint_label = ctk.CTkLabel(self.actions, text="Chỉ hiển thị thư mục và file video.", font=font(12), anchor="w")
+        self.hint_label = ctk.CTkLabel(self.actions, text="Only showing folders and video files.", font=font(12), anchor="w")
         self.hint_label.grid(row=0, column=0, sticky="ew")
 
         self.cancel_button = ctk.CTkButton(
             self.actions,
-            text="Hủy",
+            text="Cancel",
             width=96,
             height=38,
             corner_radius=10,
@@ -107,7 +107,7 @@ class VideoFilePicker(ctk.CTkToplevel):
 
         self.select_button = ctk.CTkButton(
             self.actions,
-            text="Chọn video",
+            text="Select Video",
             width=128,
             height=38,
             corner_radius=10,
@@ -166,7 +166,7 @@ class VideoFilePicker(ctk.CTkToplevel):
         if not entries:
             empty = ctk.CTkButton(
                 self.list_frame,
-                text="Không có video trong thư mục này",
+                text="No videos in this folder",
                 height=42,
                 corner_radius=10,
                 border_width=0,
@@ -242,7 +242,7 @@ class VideoFilePicker(ctk.CTkToplevel):
             candidate = self._current_dir / self.file_name.get().strip()
             selected = candidate if candidate.is_file() else None
         if selected is None or selected.suffix.lower() not in VIDEO_EXTENSIONS:
-            self.hint_label.configure(text="Hãy chọn một file video hợp lệ.")
+            self.hint_label.configure(text="Please select a valid video file.")
             return
         self._on_select(str(selected))
         self.destroy()
