@@ -1,0 +1,17 @@
+{
+  "session_minutes": 5,
+  "camera_index": 0,
+  "theme_mode": "Light",
+  "show_landmarks": true,
+  "hardcore_enabled": false,
+  "hardcore_countdown_seconds": 30,
+  "mentor_report_enabled": false,
+  "mentor_email": "",
+  "demo_video_path": "",
+  "productive_keywords": "vscode, github, pdf, docx, figma",
+  "distracting_keywords": "facebook, netflix, lol, tiktok",
+  "engagement_threshold": 0.54,
+  "smoothing_window": 5,
+  "os_ai_threshold": 0.45,
+  "os_override_threshold": 0.6
+}

@@ -1,0 +1,10 @@
+customtkinter
+opencv-python
+mediapipe==0.10.30
+onnxruntime
+xgboost
+openai
+numpy
+pandas
+pillow
+psutil
