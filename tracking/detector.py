@@ -47,10 +47,12 @@ class FaceFeatureDetector:
         min_tracking_confidence: float = 0.5,
         draw_landmarks: bool = True,
         expected_feature_dim: int = FRAME_FEATURE_DIM,
+        camera_distance_scale: float = 0.085,
     ) -> None:
         logger.debug("Initializing FaceFeatureDetector (draw_landmarks=%s)", draw_landmarks)
         self.draw_landmarks = draw_landmarks
         self.expected_feature_dim = int(expected_feature_dim)
+        self.camera_distance_scale = float(camera_distance_scale)
         self._closed = False
         self._model_path = self._resolve_model_path()
         logger.info("Loading FaceLandmarker model from: %s", self._model_path)
@@ -165,8 +167,24 @@ class FaceFeatureDetector:
         ]
         features.extend(self._head_pose_proxy(landmarks).tolist())
 
+        # Normalize 8 selected XYZ landmarks to simulate a fixed distance (scale factor)
+        left_eye = self._lm_xy(landmarks, 33)
+        right_eye = self._lm_xy(landmarks, 263)
+        eye_center = (left_eye + right_eye) / 2.0
+        face_width = self._distance(left_eye, right_eye) + 1e-6
+        
+        # Only shrink faces that are too close (face_width > camera_distance_scale).
+        # Do not stretch faces that are far away (scale_factor <= 1.0).
+        scale_factor = min(1.0, self.camera_distance_scale / face_width)
+
         for landmark_index in FLATTEN_LANDMARKS:
-            features.extend(self._lm_xyz(landmarks, landmark_index).tolist())
+            p = self._lm_xyz(landmarks, landmark_index)
+            # Scale X and Y around the eye center to stretch/shrink the face
+            p[0] = eye_center[0] + (p[0] - eye_center[0]) * scale_factor
+            p[1] = eye_center[1] + (p[1] - eye_center[1]) * scale_factor
+            # Z is relative, so we just scale it directly
+            p[2] = p[2] * scale_factor
+            features.extend(p.tolist())
 
         vector = np.asarray(features, dtype=np.float32)
         if vector.shape != (self.expected_feature_dim,):

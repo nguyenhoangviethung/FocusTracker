@@ -18,6 +18,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "camera_index": 0,
     "theme_mode": "Dark",
     "show_landmarks": True,
+    "camera_distance_scale": 0.18,
     "hardcore_enabled": False,
     "hardcore_countdown_seconds": 30,
     "mentor_report_enabled": False,
@@ -66,6 +67,7 @@ def normalize_settings(payload: dict[str, Any] | None) -> dict[str, Any]:
     mode = str(source.get("theme_mode", "Dark")).strip().title()
     normalized["theme_mode"] = "Light" if mode == "Light" else "Dark"
     normalized["show_landmarks"] = bool(source.get("show_landmarks", True))
+    normalized["camera_distance_scale"] = _clamp(_to_float(source.get("camera_distance_scale"), 0.18), 0.05, 0.4)
     normalized["hardcore_enabled"] = bool(source.get("hardcore_enabled", False))
     normalized["hardcore_countdown_seconds"] = max(
         5,

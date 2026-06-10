@@ -1,79 +1,81 @@
 from __future__ import annotations
-
 from collections import deque
-import tkinter as tk
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtGui import QPainter, QColor, QPen, QPainterPath
+from PyQt6.QtCore import Qt
+from ui.theme import font
 
-import customtkinter as ctk
-
-from ui.theme import APP_FONT_FAMILY
-
-
-class FocusTrendChart(ctk.CTkFrame):
-    def __init__(self, parent, max_points: int = 180, palette: dict[str, str] | None = None, **kwargs) -> None:
+class FocusTrendChart(QWidget):
+    def __init__(self, max_points: int = 180, palette: dict | None = None) -> None:
+        super().__init__()
         self._palette = palette or {
             "input": "#101a2a",
             "text_secondary": "#8191ad",
             "accent_focus": "#37d69b",
             "accent_warn": "#E74C3C",
         }
-        super().__init__(parent, corner_radius=14, fg_color=self._palette["input"], **kwargs)
+        self.setMinimumHeight(150)
         self._scores: deque[float] = deque(maxlen=max_points)
 
-        self.canvas = tk.Canvas(self, bg=self._palette["input"], highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, padx=8, pady=8)
-        self.canvas.bind("<Configure>", lambda _event: self._redraw())
-
-    def apply_theme(self, palette: dict[str, str]) -> None:
+    def apply_theme(self, palette: dict) -> None:
         self._palette = palette
-        self.configure(fg_color=palette["input"])
-        self.canvas.configure(bg=palette["input"])
-        self._redraw()
+        self.update()
 
     def clear(self) -> None:
         self._scores.clear()
-        self._redraw()
+        self.update()
 
     def add_score(self, score: float) -> None:
-        clamped = max(0.0, min(1.0, float(score)))
-        self._scores.append(clamped)
-        self._redraw()
+        self._scores.append(max(0.0, min(1.0, float(score))))
+        self.update()
 
-    def _redraw(self) -> None:
-        self.canvas.delete("all")
-        width = max(1, self.canvas.winfo_width())
-        height = max(1, self.canvas.winfo_height())
-
-        guide_color = "#D1D5DB" if self._palette.get("bg_app") == "#F3F4F6" else "#2A2A2A"
-        muted_color = self._palette["text_secondary"]
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Background
+        painter.fillRect(self.rect(), QColor(self._palette["input"]))
+        
+        w, h = self.width(), self.height()
+        guide_color = QColor(self._palette["text_secondary"])
+        guide_color.setAlpha(50)
+        
+        # Grid lines
+        pen = QPen(guide_color, 1, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
         for value in [0.0, 0.5, 1.0]:
-            y = height - int(value * (height - 24)) - 12
-            self.canvas.create_line(8, y, width - 8, y, fill=guide_color, dash=(2, 3))
-            self.canvas.create_text(12, y - 8, text=f"{int(value * 100)}%", fill=muted_color, anchor="w")
+            y = h - int(value * (h - 24)) - 12
+            painter.drawLine(8, y, w - 8, y)
+            painter.setPen(QPen(QColor(self._palette["text_secondary"])))
+            painter.setFont(font(10))
+            painter.drawText(12, y - 4, f"{int(value * 100)}%")
+            painter.setPen(pen)
 
-        threshold_y = height - int(0.54 * (height - 24)) - 12
-        self.canvas.create_line(8, threshold_y, width - 8, threshold_y, fill=self._palette["accent_warn"], dash=(4, 4))
+        # Threshold
+        warn_pen = QPen(QColor(self._palette["accent_warn"]), 1, Qt.PenStyle.DashLine)
+        painter.setPen(warn_pen)
+        threshold_y = h - int(0.54 * (h - 24)) - 12
+        painter.drawLine(8, threshold_y, w - 8, threshold_y)
 
         if len(self._scores) < 2:
-            self.canvas.create_text(
-                width // 2,
-                height // 2,
-                text="Waiting for focus data...",
-                fill=muted_color,
-                font=(APP_FONT_FAMILY, 12),
-            )
+            painter.setPen(QColor(self._palette["text_secondary"]))
+            painter.setFont(font(12))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Waiting for focus data...")
             return
 
-        left = 14
-        right = width - 14
-        top = 14
-        bottom = height - 14
-        span_x = max(1, right - left)
-        span_y = max(1, bottom - top)
+        left, right = 14, w - 14
+        top, bottom = 14, h - 14
+        span_x, span_y = max(1, right - left), max(1, bottom - top)
 
-        points: list[float] = []
+        path = QPainterPath()
         for idx, score in enumerate(self._scores):
             x = left + (idx / max(1, len(self._scores) - 1)) * span_x
             y = bottom - score * span_y
-            points.extend([x, y])
+            if idx == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
 
-        self.canvas.create_line(*points, fill=self._palette["accent_focus"], width=2, smooth=True)
+        line_pen = QPen(QColor(self._palette["accent_focus"]), 2)
+        painter.setPen(line_pen)
+        painter.drawPath(path)
