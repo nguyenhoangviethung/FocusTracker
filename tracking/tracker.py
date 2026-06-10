@@ -33,6 +33,7 @@ class TrackerConfig:
     camera_index: int = 0
     demo_video_path: str = ""
     show_landmarks: bool = True
+    camera_distance_scale: float = 0.085
     engagement_threshold: float = 0.54
     smoothing_window: int = 5
     os_ai_threshold: float = 0.45
@@ -50,6 +51,7 @@ class TrackerConfig:
             camera_index=_to_int(payload.get("camera_index"), 0),
             demo_video_path=str(payload.get("demo_video_path") or "").strip(),
             show_landmarks=_to_bool(payload.get("show_landmarks"), True),
+            camera_distance_scale=_to_float(payload.get("camera_distance_scale"), 0.18),
             engagement_threshold=_to_float(payload.get("engagement_threshold"), 0.54),
             smoothing_window=max(3, min(5, _to_int(payload.get("smoothing_window"), 5))),
             os_ai_threshold=_to_float(payload.get("os_ai_threshold"), 0.45),
@@ -133,7 +135,10 @@ class FocusSessionTracker:
                 threshold=self.config.engagement_threshold,
                 smoothing_window=self.config.smoothing_window,
             )
-            detector = FaceFeatureDetector(draw_landmarks=self.config.show_landmarks)
+            detector = FaceFeatureDetector(
+                draw_landmarks=self.config.show_landmarks,
+                camera_distance_scale=self.config.camera_distance_scale,
+            )
             buffer = FeatureSequenceBuffer(
                 sequence_length=inferencer.spec.sequence_length,
                 frame_feature_dim=inferencer.spec.raw_feature_dim,

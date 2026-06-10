@@ -1,96 +1,108 @@
 from __future__ import annotations
-
 from collections.abc import Callable
-import customtkinter as ctk
-
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy
+from PyQt6.QtCore import Qt, pyqtSignal
 from ui.theme import ThemeManager, font
 
+class SidebarNavigation(QFrame):
+    route_selected = pyqtSignal(str)
 
-class SidebarNavigation(ctk.CTkFrame):
-    def __init__(
-        self,
-        parent,
-        theme: ThemeManager,
-        on_select: Callable[[str], None],
-        on_toggle_theme: Callable[[], None],
-    ) -> None:
-        super().__init__(parent, width=200, corner_radius=0, border_width=0)
-        self.grid_propagate(False)
+    def __init__(self, theme: ThemeManager, on_toggle_theme: Callable[[], None]) -> None:
+        super().__init__()
         self.theme = theme
-        self._on_select = on_select
-        self._on_toggle_theme = on_toggle_theme
-        self._active_key = "home"
-        self._buttons: dict[str, ctk.CTkButton] = {}
-        self._labels: list[ctk.CTkLabel] = []
+        self.on_toggle_theme = on_toggle_theme
+        self.setObjectName("bg_sidebar")
+        self.setFixedWidth(220)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 24, 16, 24)
+        layout.setSpacing(8)
 
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(8, weight=1)
+        self.logo = QLabel("FocusFlow")
+        self.logo.setFont(font(20, bold=True))
+        
+        self.subtitle = QLabel("AI Pomodoro")
+        self.subtitle.setFont(font(12))
+        
+        layout.addWidget(self.logo)
+        layout.addWidget(self.subtitle)
+        layout.addSpacing(24)
 
-        self.logo_label = ctk.CTkLabel(self, text="FocusFlow", font=font(24, "bold"), anchor="w")
-        self.logo_label.grid(row=0, column=0, sticky="ew", padx=18, pady=(22, 2))
-        self._labels.append(self.logo_label)
-
-        self.subtitle_label = ctk.CTkLabel(self, text="AI Pomodoro", font=font(12), anchor="w")
-        self.subtitle_label.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 24))
-        self._labels.append(self.subtitle_label)
-
+        self._buttons = {}
         items = [
             ("home", "Home"),
             ("report", "Report"),
             ("settings", "Settings"),
             ("vision", "Vision"),
         ]
-        for row, (key, label) in enumerate(items, start=2):
-            button = ctk.CTkButton(
-                self,
-                text=label,
-                height=42,
-                anchor="w",
-                corner_radius=8,
-                border_width=0,
-                font=font(14, "bold"),
-                command=lambda selected=key: self._select(selected),
-            )
-            button.grid(row=row, column=0, sticky="ew", padx=12, pady=5)
-            self._buttons[key] = button
 
-        self.theme_button = ctk.CTkButton(
-            self,
-            text="Dark Mode",
-            height=38,
-            corner_radius=8,
-            border_width=0,
-            font=font(13, "bold"),
-            command=self._on_toggle_theme,
-        )
-        self.theme_button.grid(row=9, column=0, sticky="ew", padx=12, pady=(10, 18))
-        self.apply_theme()
+        for key, label in items:
+            btn = QPushButton(label)
+            btn.setFont(font(13, bold=True))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda checked, k=key: self._on_click(k))
+            layout.addWidget(btn)
+            self._buttons[key] = btn
 
-    def set_active(self, key: str) -> None:
-        self._active_key = key if key in self._buttons else "home"
+        layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+
+        self.theme_btn = QPushButton("Dark Mode")
+        self.theme_btn.setFont(font(13, bold=True))
+        self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_btn.clicked.connect(self.on_toggle_theme)
+        layout.addWidget(self.theme_btn)
+
+        self.set_active("home")
+
+    def _on_click(self, key: str) -> None:
+        self.set_active(key)
+        self.route_selected.emit(key)
+
+    def set_active(self, active_key: str) -> None:
+        self.active_key = active_key
         self.apply_theme()
 
     def apply_theme(self) -> None:
-        palette = self.theme.palette()
-        self.configure(fg_color=palette["bg_sidebar"])
-        self.logo_label.configure(text_color=palette["text_primary"])
-        self.subtitle_label.configure(text_color=palette["text_secondary"])
-
-        for key, button in self._buttons.items():
-            is_active = key == self._active_key
-            button.configure(
-                fg_color=palette["accent_focus"] if is_active else "transparent",
-                hover_color=palette["accent_focus"] if is_active else palette["sidebar_hover"],
-                text_color="#FFFFFF" if is_active else palette["text_primary"],
-            )
-
-        self.theme_button.configure(
-            text="Light Mode" if self.theme.mode == "Dark" else "Dark Mode",
-            fg_color=palette["btn_neutral"],
-            hover_color=palette["btn_neutral_hover"],
-            text_color=palette["text_primary"],
-        )
-
-    def _select(self, key: str) -> None:
-        self.set_active(key)
-        self._on_select(key)
+        p = self.theme.palette()
+        self.setStyleSheet(f"""
+            QFrame#bg_sidebar {{
+                background-color: {p['bg_sidebar']};
+                border-right: 1px solid {p['border']};
+            }}
+        """)
+        self.logo.setStyleSheet(f"color: {p['text_primary']};")
+        self.subtitle.setStyleSheet(f"color: {p['text_secondary']};")
+        
+        for key, btn in self._buttons.items():
+            if key == self.active_key:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {p['accent_focus']};
+                        color: white;
+                        text-align: left;
+                        padding-left: 16px;
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        color: {p['text_primary']};
+                        text-align: left;
+                        padding-left: 16px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {p['sidebar_hover']};
+                    }}
+                """)
+        
+        self.theme_btn.setText("Light Mode" if self.theme.mode == "Dark" else "Dark Mode")
+        self.theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {p['btn_neutral']};
+                color: {p['text_primary']};
+            }}
+            QPushButton:hover {{
+                background-color: {p['btn_neutral_hover']};
+            }}
+        """)

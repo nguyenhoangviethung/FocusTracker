@@ -1,8 +1,9 @@
 {
   "session_minutes": 5,
   "camera_index": 0,
-  "theme_mode": "Light",
+  "theme_mode": "Dark",
   "show_landmarks": true,
+  "camera_distance_scale": 0.2,
   "hardcore_enabled": false,
   "hardcore_countdown_seconds": 30,
   "mentor_report_enabled": false,
