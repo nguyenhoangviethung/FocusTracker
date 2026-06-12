@@ -8,15 +8,23 @@ def test_session_inference_and_completion(monkeypatch) -> None:
     monkeypatch.setenv("FOCUSFLOW_ENV", "development")
     monkeypatch.setenv("FOCUSFLOW_REPOSITORY", "memory")
     monkeypatch.setenv("FOCUSFLOW_EVENT_BACKEND", "logging")
-    monkeypatch.delenv("FOCUSFLOW_API_KEY", raising=False)
+    monkeypatch.setenv("FOCUSFLOW_API_KEY", "test-secret")
 
     with TestClient(create_app()) as client:
-        health = client.get("/healthz")
+        headers = {"X-API-Key": "test-secret"}
+
+        health = client.get("/health")
         assert health.status_code == 200
+        assert health.json() == {"status": "ok"}
+
+        root = client.get("/")
+        assert root.status_code == 200
+        assert root.json() == {"status": "ok"}
 
         created = client.post(
             "/v1/sessions",
             json={"device_id": "device-1", "duration_seconds": 1500},
+            headers=headers,
         )
         assert created.status_code == 201
         session_id = created.json()["session_id"]
@@ -31,12 +39,14 @@ def test_session_inference_and_completion(monkeypatch) -> None:
                 "raw_feature_sequence": rng.random((30, 30), dtype=np.float32).tolist(),
                 "face_found": True,
             },
+            headers=headers,
         )
         assert inferred.status_code == 200
         assert set(inferred.json()["components"]) == {"gru", "tcn", "xgboost"}
 
         with client.websocket_connect(
-            f"/v1/ws/sessions/{session_id}?device_id=device-1"
+            f"/v1/ws/sessions/{session_id}?device_id=device-1",
+            headers=headers,
         ) as websocket:
             websocket.send_json(
                 {
@@ -65,6 +75,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
                 "completed": False,
                 "minute_focus_scores": [0.70, 0.80],
             },
+            headers=headers,
         )
         assert completed.status_code == 200
         assert completed.json()["status"] == "cancelled"
@@ -80,6 +91,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
                 "focus_streak_seconds": 0,
                 "completed": True,
             },
+            headers=headers,
         )
         assert repeated.status_code == 200
         assert repeated.json()["ended_at"] == completed.json()["ended_at"]

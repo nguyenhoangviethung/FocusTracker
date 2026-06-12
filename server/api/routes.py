@@ -48,8 +48,13 @@ def _verify_api_key(settings: ServerSettings, supplied: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-@router.get("/healthz")
-async def healthz() -> dict[str, str]:
+@router.get("/")
+async def root() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@router.get("/health")
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 

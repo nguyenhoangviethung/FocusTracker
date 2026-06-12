@@ -82,13 +82,15 @@ uvicorn server.app:app --host 127.0.0.1 --port 8080
 Terminal 2:
 
 ```bash
-curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/
+curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/readyz
 ```
 
 Kết quả:
 
 ```json
+{"status":"ok"}
 {"status":"ok"}
 {"status":"ready"}
 ```

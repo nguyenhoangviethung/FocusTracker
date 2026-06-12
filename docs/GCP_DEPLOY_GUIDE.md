@@ -210,13 +210,15 @@ service-account key. Application layer vẫn yêu cầu `X-API-Key`.
 Copy API URL và chạy:
 
 ```bash
-curl https://YOUR_API_URL/healthz
+curl https://YOUR_API_URL/
+curl https://YOUR_API_URL/health
 curl https://YOUR_API_URL/readyz
 ```
 
 Mong đợi:
 
 ```json
+{"status":"ok"}
 {"status":"ok"}
 {"status":"ready"}
 ```

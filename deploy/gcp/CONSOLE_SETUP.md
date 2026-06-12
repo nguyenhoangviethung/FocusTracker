@@ -121,7 +121,7 @@ After deployment:
    - Request timeout: 3600 seconds
    - Service account: `focusflow-api`
    - Secret mapping: `FOCUSFLOW_API_KEY`
-3. Open the service URL plus `/healthz`.
+3. Open the service URL plus `/health`.
 4. Expected response: `{"status":"ok"}`.
 5. Check **Logs** for model initialization errors.
 
