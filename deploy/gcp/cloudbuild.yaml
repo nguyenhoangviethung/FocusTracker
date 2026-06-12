@@ -36,10 +36,10 @@ steps:
       - --allow-unauthenticated
       - --cpu=2
       - --memory=2Gi
-      - --concurrency=4
+      - --concurrency=8
       - --timeout=3600
-      - --min-instances=0
-      - --max-instances=10
+      - --min-instances=1
+      - --max-instances=16
       - --set-env-vars=FOCUSFLOW_ENV=production,FOCUSFLOW_REPOSITORY=firestore,FOCUSFLOW_EVENT_BACKEND=pubsub,FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events
       - --set-secrets=FOCUSFLOW_API_KEY=focusflow-api-key:latest
 

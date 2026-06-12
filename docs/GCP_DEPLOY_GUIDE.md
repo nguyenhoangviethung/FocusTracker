@@ -195,12 +195,16 @@ Mở `focusflow-api` và xác nhận:
 Region:       asia-southeast1
 CPU:          2
 Memory:       2 GiB
-Concurrency:  4
+Concurrency:  8
 Timeout:      3600 seconds
-Min:          0
-Max:          10
+Min:          1
+Max:          16
 Service acct: focusflow-api
 ```
+
+Profile này cung cấp tối đa danh nghĩa `8 * 16 = 128` request/WebSocket đồng
+thời, đủ khoảng dự phòng để benchmark 100 virtual clients. Năng lực inference
+thực tế vẫn phải được xác nhận bằng staircase load test và Cloud Monitoring.
 
 API service được public ở Cloud Run IAM layer để desktop không cần Google
 service-account key. Application layer vẫn yêu cầu `X-API-Key`.
