@@ -164,8 +164,7 @@ Nếu đã cấu hình Google login:
 1. Bấm Sign in with Google ở màn đăng nhập.
 2. Xác nhận `user_id` và email hiển thị trên header.
 3. Đóng app, mở lại, kiểm tra session vẫn tạo được khi login thành công.
-4. Trong Firestore, kiểm tra `focusflow_users` và
-   `focusflow_google_identities`.
+4. Trong Firestore, kiểm tra `focusflow_users`.
 
 Firestore chỉ hiển thị collection sau lần ghi đầu tiên. Nếu Cloud Run trả
 `404` cho `POST /v1/auth/google`, revision hiện tại chưa chứa code auth mới và

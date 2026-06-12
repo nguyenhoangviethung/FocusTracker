@@ -58,3 +58,4 @@ def test_password_register_login_and_google_login(monkeypatch) -> None:
         assert google_login.status_code == 200
         assert google_login.json()["auth_provider"] == "google"
         assert google_login.json()["email"] == "person@example.edu"
+        assert google_login.json()["username"] == "person@example.edu"

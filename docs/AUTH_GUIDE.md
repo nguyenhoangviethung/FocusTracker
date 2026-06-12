@@ -47,29 +47,29 @@ FOCUSFLOW_GOOGLE_OAUTH_SCOPES="openid https://www.googleapis.com/auth/userinfo.e
 ## 4. Firestore collections
 
 Cloud Run tạo collection khi có lần ghi đầu tiên; Firestore không hiển thị
-collection rỗng. Sau một lần Google login thành công trên revision có auth,
-Console sẽ có:
+collection rỗng. Với thiết kế hiện tại, user identity chỉ cần một collection:
 
 ```text
 focusflow_users/{user_id}
-focusflow_google_identities/{google_subject}
-```
-
-Username/password tạo:
-
-```text
-focusflow_users/{user_id}
-focusflow_usernames/{username}
 ```
 
 Document mới dùng ID dễ đọc và ổn định:
 
 ```text
 focusflow_users/user_google_student@example.edu
-focusflow_google_identities/google_subject_113326427935116102578
 focusflow_users/user_password_student01
-focusflow_usernames/username_student01
 ```
+
+Khi đăng nhập Google, document `focusflow_users` lưu:
+
+- `auth_provider = "google"`
+- `user_id`
+- `username` = email nếu có, hoặc subject fallback
+- `email`
+- `display_name`
+- `google_subject`
+- `created_at`
+- `last_login_at`
 
 Email, username và Google subject đã nằm trong hồ sơ định danh Firestore; không
 được đưa các đường dẫn này vào log public hoặc public download bucket.

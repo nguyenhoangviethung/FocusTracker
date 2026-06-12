@@ -179,6 +179,10 @@ FocusTracker/
 Legacy `tracking/os_tracker.py`, `tracking/hardcore.py`, and
 `server/core/fusion.py` must not exist.
 
+For user identity storage, keep `focusflow_users` as the single source of truth.
+Do not add a separate `focusflow_usernames` collection. Google sign-in and
+username/password records both belong in `focusflow_users`.
+
 ## 5. Protocol V1
 
 Contracts live in `shared/contracts.py`. Contract changes require either
@@ -286,6 +290,8 @@ username_{normalized username}
 
 Do not add random Firestore auto IDs. Existing legacy documents do not need
 automatic migration; they may be deleted manually during thesis development.
+Do not keep a separate `focusflow_usernames` collection; use `focusflow_users`
+as the single source of truth for user identity documents.
 
 Do not persist every 30 FPS feature sequence in Firestore. Realtime telemetry is
 processed in flight. Persist only sampled metrics later if a measured research

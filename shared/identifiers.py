@@ -25,11 +25,3 @@ def new_password_user_id(username: str) -> str:
 def new_google_user_id(email: str | None, subject: str) -> str:
     identity = email or subject
     return f"user_google_{_document_part(identity, 'unknown-user')}"
-
-
-def username_document_id(username: str) -> str:
-    return f"username_{_document_part(username, 'unknown-user')}"
-
-
-def google_subject_document_id(subject: str) -> str:
-    return f"google_subject_{_document_part(subject, 'unknown-subject')}"
