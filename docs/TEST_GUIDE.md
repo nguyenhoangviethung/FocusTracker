@@ -249,6 +249,49 @@ python -m demo.run_scale --manifest /tmp/focusflow-video-manifest.json
 Nếu mạng chập chờn, dùng `--limit` nhỏ trước để xác nhận pipeline rồi mới
 tăng số lượng.
 
+### Chạy 100 client trên GCP, không dùng máy local
+
+Nếu mục tiêu là không để laptop xử lý tải, hãy chạy load generator từ **Google
+Cloud Shell** hoặc một **GCE VM** nhỏ. Khi đó máy của bạn chỉ mở dashboard và
+quan sát, còn 100 client ảo chạy trong môi trường GCP.
+
+#### Cách 1: Cloud Shell
+
+1. Mở Cloud Shell trong Google Cloud Console.
+2. Clone repo hoặc mở workspace đã có code.
+3. Kéo `.env` hoặc export trực tiếp các biến cần thiết:
+
+```bash
+export FOCUSFLOW_CLOUD_API_URL=https://YOUR_API_URL
+export FOCUSFLOW_CLOUD_API_KEY=<your-cloud-api-key>
+```
+
+4. Nếu đã có feature fixtures, chạy:
+
+```bash
+python -m demo.run_scale \
+  --manifest /tmp/focusflow-video-manifest.json \
+  --features demo/features \
+  --api-url "$FOCUSFLOW_CLOUD_API_URL" \
+  --api-key "$FOCUSFLOW_CLOUD_API_KEY"
+```
+
+5. Nếu chưa có `demo/features`, tạo chúng trước trên Cloud Shell hoặc copy từ
+   một lần chạy feature extraction khác.
+
+#### Cách 2: GCE VM nhỏ
+
+1. Tạo một VM nhỏ ở `asia-southeast1`.
+2. Cài Python và dependencies.
+3. Chạy đúng lệnh `demo.run_scale` như trên.
+
+#### Lưu ý quan trọng
+
+- Laptop của bạn không còn là máy phát tải nữa.
+- Dashboard nên mở trên Cloud Run.
+- Nếu dùng Cloud Shell, nhớ giữ tab còn mở cho tới khi benchmark xong.
+- Nếu muốn an toàn hơn nữa, hãy dùng VM thay vì Cloud Shell.
+
 Nếu bạn chỉ muốn kiểm tra phần local trước khi lên cloud:
 
 1. Chạy `python -m demo.validate_videos --input demo/Data --limit 10`.
