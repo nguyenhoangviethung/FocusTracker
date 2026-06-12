@@ -51,6 +51,28 @@ python main.py
 
 API key không được lưu trong `settings.json`.
 
+## 2.1. Cấu hình Google sign-in
+
+Google login chỉ dùng để định danh user, không thay thế API key của Cloud Run.
+Username/password login cũng chỉ dùng để định danh và vẫn cần API key app.
+
+Trong `.env` local:
+
+```text
+FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
+FOCUSFLOW_GOOGLE_OAUTH_SECRET=<copy from Google Cloud OAuth client>
+FOCUSFLOW_GOOGLE_OAUTH_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FOCUSFLOW_GOOGLE_OAUTH_TOKEN_URI=https://oauth2.googleapis.com/token
+FOCUSFLOW_GOOGLE_OAUTH_REDIRECT_URIS=http://localhost
+FOCUSFLOW_GOOGLE_OAUTH_SCOPES=openid email
+```
+
+Sau khi đăng nhập:
+
+- `user_id` của session lấy từ Google subject hoặc email;
+- user chip hiển thị trên desktop;
+- nếu login fail, vẫn có thể chạy `local` hoặc `hybrid`.
+
 ## 3. Luồng UI khi chạy cloud
 
 Sau Start Session:
@@ -62,6 +84,31 @@ Sau Start Session:
 5. Sequence gửi lên cloud.
 6. UI source chuyển thành `CLOUD`.
 7. Component card hiển thị GRU/TCN/XGBoost.
+8. Header hiển thị Google account đã đăng nhập.
+
+## 4. Server dashboard
+
+Khi bạn muốn xem server có đang nhận session hay không, mở dashboard web:
+
+```text
+http://127.0.0.1:8080/dashboard
+```
+
+Nếu đã deploy lên Cloud Run:
+
+```text
+https://YOUR_API_URL/dashboard
+```
+
+Dashboard hiển thị:
+
+- trạng thái ready;
+- repository backend;
+- số session gần nhất;
+- active/completed count;
+- session gần đây;
+- device_id và user_id;
+- report status.
 
 Nếu network lỗi:
 
@@ -70,7 +117,7 @@ Nếu network lỗi:
 - `hybrid` tiếp tục dùng local model;
 - sample queue chỉ giữ dữ liệu mới, không tăng RAM vô hạn.
 
-## 4. Pause và Resume
+## 5. Pause và Resume
 
 Pause:
 
@@ -85,7 +132,7 @@ Resume:
 - thu lại đủ 30 frames;
 - tiếp tục cloud session hiện tại nếu socket reconnect được.
 
-## 5. End Session
+## 6. End Session
 
 Khi End:
 
@@ -98,7 +145,7 @@ Khi End:
 Nếu cloud session chưa từng tạo được, local/hybrid vẫn chỉ hoàn tất summary và
 report metadata trên desktop.
 
-## 6. Demo checklist
+## 7. Demo checklist
 
 Trước buổi bảo vệ:
 
@@ -126,7 +173,7 @@ Kịch bản demo:
 8. Mở Firestore summary.
 9. Mở report completion metadata trong Firestore/report.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 ### Cloud status disabled
 

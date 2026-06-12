@@ -27,6 +27,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "demo_video_path": "",
     "engagement_threshold": 0.54,
     "smoothing_window": 5,
+    "auth_user_id": "",
+    "auth_provider": "",
+    "auth_username": "",
+    "auth_email": "",
+    "auth_display_name": "",
+    "auth_last_login_at": "",
 }
 
 
@@ -70,8 +76,8 @@ def normalize_settings(payload: dict[str, Any] | None) -> dict[str, Any]:
         inference_mode if inference_mode in {"local", "cloud", "hybrid"} else "local"
     )
     normalized["cloud_api_url"] = str(
-        source.get("cloud_api_url")
-        or os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
+        os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
+        or source.get("cloud_api_url")
     ).strip().rstrip("/")
     normalized["device_id"] = str(
         source.get("device_id")
@@ -84,6 +90,12 @@ def normalize_settings(payload: dict[str, Any] | None) -> dict[str, Any]:
         3,
     )
     normalized["smoothing_window"] = max(3, min(5, _to_int(source.get("smoothing_window"), 5)))
+    normalized["auth_user_id"] = str(source.get("auth_user_id") or "").strip()
+    normalized["auth_provider"] = str(source.get("auth_provider") or "").strip()
+    normalized["auth_username"] = str(source.get("auth_username") or "").strip()
+    normalized["auth_email"] = str(source.get("auth_email") or "").strip()
+    normalized["auth_display_name"] = str(source.get("auth_display_name") or "").strip()
+    normalized["auth_last_login_at"] = str(source.get("auth_last_login_at") or "").strip()
     return normalized
 
 

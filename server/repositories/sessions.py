@@ -13,6 +13,8 @@ class SessionRepository(Protocol):
 
     def get(self, session_id: str) -> dict[str, Any] | None: ...
 
+    def list_recent(self, limit: int = 20) -> list[dict[str, Any]]: ...
+
     def touch(self, session_id: str) -> None: ...
 
     def complete(self, session_id: str, summary: SessionSummary) -> dict[str, Any] | None: ...
@@ -35,6 +37,15 @@ class InMemorySessionRepository:
         with self._lock:
             record = self._records.get(session_id)
             return dict(record) if record else None
+
+    def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._lock:
+            records = sorted(
+                self._records.values(),
+                key=lambda record: str(record.get("started_at", "")),
+                reverse=True,
+            )
+            return [dict(record) for record in records[:limit]]
 
     def touch(self, session_id: str) -> None:
         with self._lock:
@@ -81,6 +92,7 @@ class FirestoreSessionRepository:
             ) from exc
 
         self._client = firestore.Client(project=project_id or None)
+        self._firestore = firestore
         self._collection = self._client.collection(collection_name)
 
     def create(self, payload: SessionCreate) -> SessionRecord:
@@ -91,6 +103,13 @@ class FirestoreSessionRepository:
     def get(self, session_id: str) -> dict[str, Any] | None:
         snapshot = self._collection.document(session_id).get()
         return snapshot.to_dict() if snapshot.exists else None
+
+    def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
+        query = self._collection.order_by(
+            "started_at",
+            direction=self._firestore.Query.DESCENDING,
+        ).limit(limit)
+        return [doc.to_dict() for doc in query.stream() if doc.exists and doc.to_dict()]
 
     def touch(self, session_id: str) -> None:
         self._collection.document(session_id).update(

@@ -16,6 +16,10 @@ class ServerSettings:
     event_backend: str
     pubsub_session_events_topic: str
     cors_origins: tuple[str, ...]
+    google_oauth_client_id: str
+    firestore_users_collection: str
+    firestore_usernames_collection: str
+    firestore_google_identities_collection: str
 
     @classmethod
     def from_env(cls) -> "ServerSettings":
@@ -40,4 +44,20 @@ class ServerSettings:
                 "focusflow-session-events",
             ).strip(),
             cors_origins=origins,
+            google_oauth_client_id=os.getenv(
+                "FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID",
+                "",
+            ).strip(),
+            firestore_users_collection=os.getenv(
+                "FOCUSFLOW_FIRESTORE_USERS_COLLECTION",
+                "focusflow_users",
+            ).strip(),
+            firestore_usernames_collection=os.getenv(
+                "FOCUSFLOW_FIRESTORE_USERNAMES_COLLECTION",
+                "focusflow_usernames",
+            ).strip(),
+            firestore_google_identities_collection=os.getenv(
+                "FOCUSFLOW_FIRESTORE_GOOGLE_IDENTITIES_COLLECTION",
+                "focusflow_google_identities",
+            ).strip(),
         )

@@ -38,6 +38,7 @@ class TrackerConfig:
     cloud_api_url: str = ""
     cloud_api_key: str = ""
     device_id: str = ""
+    user_id: str = ""
     session_duration_seconds: int = 25 * 60
 
     @classmethod
@@ -54,16 +55,21 @@ class TrackerConfig:
             smoothing_window=max(3, min(5, _to_int(payload.get("smoothing_window"), 5))),
             inference_mode=inference_mode,
             cloud_api_url=str(
-                payload.get("cloud_api_url")
-                or os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
+                os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
+                or payload.get("cloud_api_url")
             ).strip(),
             cloud_api_key=str(
-                payload.get("cloud_api_key")
-                or os.getenv("FOCUSFLOW_CLOUD_API_KEY", "")
+                os.getenv("FOCUSFLOW_CLOUD_API_KEY", "")
+                or payload.get("cloud_api_key")
             ).strip(),
             device_id=str(
                 payload.get("device_id")
                 or os.getenv("FOCUSFLOW_DEVICE_ID", "")
+            ).strip(),
+            user_id=str(
+                payload.get("auth_user_id")
+                or payload.get("user_id")
+                or ""
             ).strip(),
             session_duration_seconds=max(
                 1,
@@ -328,6 +334,7 @@ class FocusSessionTracker:
                 record = client.create_session(
                     SessionCreate(
                         device_id=self.config.device_id,
+                        user_id=self.config.user_id or None,
                         duration_seconds=self.config.session_duration_seconds,
                     )
                 )

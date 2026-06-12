@@ -94,6 +94,35 @@ Navigation rules:
 - `Report` proves session lifecycle and persistence.
 - `Settings` switches `local`, `cloud`, or `hybrid`.
 
+## 4.1 Client sign-in
+
+Vì client cần định danh người dùng trước khi tạo session, thêm một màn đăng
+nhập Google trước `Home`.
+
+```text
++------------------------------------------------------------------------------+
+| FocusFlow AI                                                                 |
+| Sign in with Google to tag sessions to a stable user identity.              |
++------------------------------------------------------------------------------+
+| Google account                                                               |
+| [ user@domain.edu                                                     ]      |
+|                                                                              |
+| [ Sign in with Google ]   [ Continue offline ]                               |
+|                                                                              |
+| Privacy: Google sign-in only returns user identity metadata.                 |
+| Raw video never leaves the desktop.                                          |
++------------------------------------------------------------------------------+
+```
+
+Sau khi đăng nhập thành công, header toàn app hiển thị:
+
+```text
+Signed in as user@domain.edu  |  role=student  |  user_id=google-subject-id
+```
+
+`user_id` được đính vào session metadata và report, còn `X-API-Key` vẫn là
+khóa ứng dụng dùng để gọi Cloud Run.
+
 ## 5. Client screen: Home
 
 ```text
@@ -254,32 +283,65 @@ Video frame -> MediaPipe -> 30 numbers/frame -> frame discarded
 +------------------------------------------------------------------------------+
 ```
 
-## 11. Server dashboard concept
+## 11. Server dashboard
 
-Dashboard server là màn hình quan sát dành cho demo scale. Đây là hạng mục cần
-triển khai riêng; hiện backend FastAPI chưa có route dashboard tổng hợp.
+Dashboard server là màn hình quan sát dành cho demo scale. Nó chỉ hiển thị
+telemetry, session state và số liệu quan sát được, không hiển thị raw video.
 
 ```text
-+------------------------------------------------------------------------------+
-| FOCUSFLOW CLOUD CONTROL ROOM                         LIVE | last 60 seconds   |
-+------------------+------------------+------------------+----------------------+
-| Active clients   | Requests/sec     | p95 latency      | Error rate           |
-| 100              | 96.8             | 142 ms           | 0.2%                 |
-+------------------+------------------+------------------+----------------------+
-| CLOUD RUN INSTANCES                    | CLIENT STATES                        |
-|                                        |                                      |
-|  8 |                         ___        | Focused       71                     |
-|  6 |                  ______/           | Distracted    23                     |
-|  4 |          _______/                  | No face        6                     |
-|  2 |  _______/                          | Reconnecting   0                     |
-|  0 +-------------------------- time     |                                      |
-+----------------------------------------+--------------------------------------+
-| LATENCY DISTRIBUTION                   | THROUGHPUT                           |
-| p50  73 ms                             | Sent       1,000 packets              |
-| p95 142 ms                             | Success       998 packets              |
-| p99 221 ms                             | Failed          2 packets              |
-+----------------------------------------+--------------------------------------+
++------------------------------------------------------------------------------------------------+
+| FOCUSFLOW CLOUD CONTROL ROOM                         LIVE | last 60 seconds                    |
++------------------+------------------+------------------+----------------------+----------------+
+| Active clients   | Requests/sec     | p95 latency      | Error rate           | Face-found %    |
+| 100              | 96.8             | 142 ms           | 0.2%                 | 91.5%           |
++------------------+------------------+------------------+----------------------+----------------+
+| CLOUD RUN INSTANCES                    | CLIENT STATES                        | SESSION STATES |
+|  8 |                         ___        | Focused       71                     | Active   100   |
+|  6 |                  _______/           | Distracted    23                     | Ended     12   |
+|  4 |          _______/                  | No face        6                     | Reconn     3   |
+|  2 |  _______/                          | Reconnecting   0                     | Invalid    0   |
+|  0 +-------------------------- time     |                                      |                |
++----------------------------------------+--------------------------------------+----------------+
+| LATENCY DISTRIBUTION                   | THROUGHPUT                           | CLOUD HEALTH  |
+| p50  73 ms                             | Sent       1,000 packets              | Ready   yes   |
+| p95 142 ms                             | Success       998 packets              | API key yes   |
+| p99 221 ms                             | Failed          2 packets              | Pub/Sub ok    |
++----------------------------------------+--------------------------------------+----------------+
 ```
+
+### 11.1 100-camera wall
+
+Đây là khu vực quan trọng nhất khi demo scale. Mỗi ô đại diện cho một camera
+ảo hoặc một session replay, chỉ chứa thông số, không chứa hình ảnh:
+
+```text
++------------------------------------------------------------------------------------------------+
+| 100 CAMERA WALL | each tile = device_id + fps + latency + face + state + queue                |
++------------------------------------------------------------------------------------------------+
+| [001] FOC 28.9fps  81ms face=Y q=0 | [002] DIS 27.4fps  98ms face=Y q=0 | [003] FOC 29.1fps 76ms|
+| [004] FOC 28.2fps  84ms face=Y q=0 | [005] NOF  0.0fps   -- face=N q=0 | [006] REC  1.0fps 130ms|
+| [007] FOC 29.5fps  73ms face=Y q=0 | [008] DIS 26.7fps 101ms face=Y q=1 | [009] FOC 28.8fps 79ms|
+| ... 91 tiles nữa theo cùng layout ...                                                         |
+| [100] FOC 29.0fps  77ms face=Y q=0                                                            |
++------------------------------------------------------------------------------------------------+
+```
+
+Trong bản demo, dashboard có thể chuyển giữa:
+
+```text
+1. Overview
+2. 100-camera wall
+3. Instance / latency charts
+4. Session completion table
+```
+
+Mỗi tile nên có màu:
+
+- xanh lá: `FOCUSED`
+- đỏ: `DISTRACTED`
+- vàng: `NO_FACE`
+- xanh dương: `RECONNECTING`
+- xám: `IDLE`
 
 ## 12. Kiến trúc demo 100 virtual clients
 

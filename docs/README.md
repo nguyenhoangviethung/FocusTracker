@@ -9,6 +9,7 @@
    và deploy API.
 4. [DESKTOP_CLOUD_GUIDE.md](DESKTOP_CLOUD_GUIDE.md): kết nối desktop với
    Cloud Run và chạy demo end-to-end.
+5. [AUTH_GUIDE.md](AUTH_GUIDE.md): cấu hình Google sign-in cho desktop client.
 
 Tài liệu nguồn kiến trúc bắt buộc vẫn là
 [AGENTS.md](../AGENTS.md). Guide giải thích cách vận hành, không thay đổi các

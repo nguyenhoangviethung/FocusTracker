@@ -4,13 +4,16 @@
   "theme_mode": "Dark",
   "show_landmarks": true,
   "camera_distance_scale": 0.2,
-  "hardcore_enabled": false,
-  "hardcore_countdown_seconds": 30,
+  "inference_mode": "local",
+  "cloud_api_url": "https://focusflow-api-smp7iybg5q-as.a.run.app",
+  "device_id": "ff86ba77-26c6-4e2a-9d7e-449beb712e1a",
   "demo_video_path": "",
-  "productive_keywords": "vscode, github, pdf, docx, figma",
-  "distracting_keywords": "facebook, netflix, lol, tiktok",
   "engagement_threshold": 0.54,
   "smoothing_window": 5,
-  "os_ai_threshold": 0.45,
-  "os_override_threshold": 0.6
+  "auth_user_id": "",
+  "auth_provider": "",
+  "auth_username": "",
+  "auth_email": "",
+  "auth_display_name": "",
+  "auth_last_login_at": ""
 }

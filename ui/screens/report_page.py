@@ -1,5 +1,14 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QScrollArea, QWidget, QPushButton
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTextEdit,
+    QScrollArea,
+    QWidget,
+    QPushButton,
+    QSizePolicy,
+)
 from PyQt6.QtCore import Qt
 
 from ui.screens.base import ThemedPage, PageTitle, Card
@@ -24,12 +33,18 @@ class ReportPage(ThemedPage):
         self.focus_val = self._metric_card(metrics_layout, "Focus Score", "0.0%")
         self.dur_val = self._metric_card(metrics_layout, "Duration", "0 mins")
         self.dist_val = self._metric_card(metrics_layout, "Distractions", "0 times")
+        metrics_layout.setStretch(0, 1)
+        metrics_layout.setStretch(1, 1)
+        metrics_layout.setStretch(2, 1)
         
         body_layout = QHBoxLayout()
         body_layout.setSpacing(18)
         layout.addLayout(body_layout)
+        body_layout.setStretch(0, 2)
+        body_layout.setStretch(1, 1)
         
         self.details_card = Card()
+        self.details_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         body_layout.addWidget(self.details_card, stretch=2)
         
         self.status_label = QLabel("No session data available.")
@@ -39,12 +54,14 @@ class ReportPage(ThemedPage):
         self.summary = QTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setMinimumHeight(260)
+        self.summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         self.details_card.layout.addWidget(self.status_label)
         self.details_card.layout.addWidget(self.report_label)
         self.details_card.layout.addWidget(self.summary)
         
         self.history_card = Card()
+        self.history_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         body_layout.addWidget(self.history_card, stretch=1)
         
         h_title = QLabel("Recent History")
@@ -71,6 +88,7 @@ class ReportPage(ThemedPage):
 
     def _metric_card(self, parent_layout, title, value) -> QLabel:
         card = Card()
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         parent_layout.addWidget(card)
         t = QLabel(title)
         t.setFont(font(13))

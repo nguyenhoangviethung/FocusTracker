@@ -6,8 +6,8 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 class ThemeManager:
     _PALETTES = {
         "Light": {
-            "bg_app": "#E5E7EB",
-            "bg_sidebar": "#F9FAFB",
+            "bg_app": "#F3F4F6",
+            "bg_sidebar": "#FFFFFF",
             "bg_card": "#FFFFFF",
             "text_primary": "#111827",
             "text_secondary": "#4B5563",
@@ -78,7 +78,7 @@ class ThemeManager:
             #bg_card {{
                 background-color: {p['bg_card']};
                 border-radius: 12px;
-                border: 1px solid {p['border']};
+                border: none;
             }}
             QPushButton {{
                 background-color: {p['btn_neutral']};

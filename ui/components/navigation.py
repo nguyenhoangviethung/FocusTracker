@@ -23,17 +23,22 @@ class SidebarNavigation(QFrame):
         
         self.subtitle = QLabel("AI Pomodoro")
         self.subtitle.setFont(font(12))
+        self.user_label = QLabel("Not signed in")
+        self.user_label.setWordWrap(True)
+        self.user_label.setFont(font(11))
         
         layout.addWidget(self.logo)
         layout.addWidget(self.subtitle)
+        layout.addWidget(self.user_label)
         layout.addSpacing(24)
 
         self._buttons = {}
         items = [
             ("home", "Home"),
+            ("active_session", "Active"),
+            ("vision", "Vision"),
             ("report", "Report"),
             ("settings", "Settings"),
-            ("vision", "Vision"),
         ]
 
         for key, label in items:
@@ -72,6 +77,7 @@ class SidebarNavigation(QFrame):
         """)
         self.logo.setStyleSheet(f"color: {p['text_primary']};")
         self.subtitle.setStyleSheet(f"color: {p['text_secondary']};")
+        self.user_label.setStyleSheet(f"color: {p['text_secondary']};")
         
         for key, btn in self._buttons.items():
             if key == self.active_key:
@@ -106,3 +112,10 @@ class SidebarNavigation(QFrame):
                 background-color: {p['btn_neutral_hover']};
             }}
         """)
+
+    def set_user_identity(self, display_name: str | None, username: str | None, provider: str | None) -> None:
+        parts = [part for part in [display_name or username, provider] if part]
+        if not parts:
+            self.user_label.setText("Not signed in")
+            return
+        self.user_label.setText(" | ".join(parts))

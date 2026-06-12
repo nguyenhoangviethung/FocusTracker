@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FocusFlow AI | Download Portal</title>
+    <meta
+      name="description"
+      content="Public download portal for FocusFlow AI desktop builds and demo resources."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">FocusFlow AI</p>
+        <h1>Download the desktop app by operating system</h1>
+        <p class="lede">
+          A public static portal for demo distribution. The cloud backend stays
+          on Cloud Run, while release builds are stored in Cloud Storage.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="downloads/windows/FocusFlowAI-Windows.exe">
+            Download for Windows
+          </a>
+          <a class="button" href="downloads/macos/FocusFlowAI-macOS.dmg">
+            Download for macOS
+          </a>
+          <a class="button" href="downloads/linux/FocusFlowAI-Linux.AppImage">
+            Download for Linux
+          </a>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Product scope</h2>
+          <p>
+            Vision-only focus monitoring with PyQt6 desktop client, cloud
+            inference, and late-fusion model deployment.
+          </p>
+        </article>
+        <article class="card">
+          <h2>Demo package</h2>
+          <p>
+            Public artifacts can include installer binaries, checksums, release
+            notes, and a quick start guide.
+          </p>
+        </article>
+        <article class="card">
+          <h2>Backend</h2>
+          <p>
+            Cloud Run serves the API and telemetry endpoints. Static downloads
+            stay separate in Cloud Storage.
+          </p>
+        </article>
+      </section>
+
+      <section class="releases card">
+        <h2>Release map</h2>
+        <ul>
+          <li><code>downloads/windows/FocusFlowAI-Windows.exe</code></li>
+          <li><code>downloads/macos/FocusFlowAI-macOS.dmg</code></li>
+          <li><code>downloads/linux/FocusFlowAI-Linux.AppImage</code></li>
+          <li><code>docs/QuickStart.pdf</code></li>
+          <li><code>docs/Checksums.txt</code></li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

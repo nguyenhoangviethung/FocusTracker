@@ -9,3 +9,4 @@ pillow
 pydantic>=2.12,<3
 websockets>=14,<17
 python-dotenv>=1.0,<2
+google-auth-oauthlib>=1.2,<2

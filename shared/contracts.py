@@ -77,3 +77,28 @@ class SessionSummary(ContractModel):
     focus_streak_seconds: float = Field(ge=0.0)
     completed: bool
     minute_focus_scores: list[float] = Field(default_factory=list)
+
+
+class AuthPasswordRegister(ContractModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=256)
+    display_name: str | None = Field(default=None, max_length=128)
+
+
+class AuthPasswordLogin(ContractModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class AuthGoogleLogin(ContractModel):
+    id_token: str = Field(min_length=1)
+
+
+class AuthProfile(ContractModel):
+    user_id: str
+    auth_provider: str
+    username: str | None = None
+    email: str | None = None
+    display_name: str | None = None
+    created_at: datetime
+    last_login_at: datetime

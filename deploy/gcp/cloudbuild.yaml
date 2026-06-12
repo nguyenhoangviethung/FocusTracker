@@ -4,6 +4,7 @@ substitutions:
   _SERVICE: focusflow-api
   _IMAGE: focusflow-api
   _SERVICE_ACCOUNT: focusflow-api
+  _GOOGLE_OAUTH_CLIENT_ID: 1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
 
 steps:
   - id: build
@@ -32,6 +33,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
       - --region=${_REGION}
       - --platform=managed
+      - --ingress=all
       - --service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com
       - --allow-unauthenticated
       - --cpu=2
@@ -40,7 +42,7 @@ steps:
       - --timeout=3600
       - --min-instances=1
       - --max-instances=16
-      - --set-env-vars=FOCUSFLOW_ENV=production,FOCUSFLOW_REPOSITORY=firestore,FOCUSFLOW_EVENT_BACKEND=pubsub,FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events
+      - --set-env-vars=FOCUSFLOW_ENV=production,FOCUSFLOW_REPOSITORY=firestore,FOCUSFLOW_EVENT_BACKEND=pubsub,FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events,FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions,FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users,FOCUSFLOW_FIRESTORE_USERNAMES_COLLECTION=focusflow_usernames,FOCUSFLOW_FIRESTORE_GOOGLE_IDENTITIES_COLLECTION=focusflow_google_identities,FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID},GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
       - --set-secrets=FOCUSFLOW_API_KEY=focusflow-api-key:latest
 
 images:

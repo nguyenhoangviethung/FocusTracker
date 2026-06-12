@@ -1,7 +1,15 @@
 from __future__ import annotations
 import queue
 import cv2
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QWidget, QPushButton
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QWidget,
+    QPushButton,
+    QProgressBar,
+    QSizePolicy,
+)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -24,33 +32,44 @@ class AIVisionPage(ThemedPage):
         layout.addLayout(h_layout)
         
         self.camera_card = Card()
+        self.camera_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.camera_card)
         c_title = QLabel("CAMERA FEED")
         c_title.setFont(font(16, bold=True))
         self.camera_preview = QLabel("Camera Offline")
         self.camera_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.camera_preview.setMinimumHeight(300)
+        self.camera_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
         self.camera_card.layout.addWidget(c_title)
         self.camera_card.layout.addWidget(self.camera_preview)
         
         self.telemetry_card = Card()
+        self.telemetry_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.telemetry_card)
         t_title = QLabel("TELEMETRY")
         t_title.setFont(font(16, bold=True))
         self.telemetry_labels = {
-            "fps": QLabel("FPS: 0.0"),
+            "fps": QLabel("Throughput: 0.0 FPS"),
             "latency": QLabel("E2E Latency: 0 ms"),
-            "ear": QLabel("EAR: 0.00"),
-            "mar": QLabel("MAR: 0.00"),
-            "pose": QLabel("Pitch: 0 | Yaw: 0"),
+            "pose": QLabel("Pitch: 0.0° | Yaw: 0.0°"),
         }
+        self.ear_bar = QProgressBar()
+        self.mar_bar = QProgressBar()
+        self.confidence_bar = QProgressBar()
         self.telemetry_card.layout.addWidget(t_title)
         for label in self.telemetry_labels.values():
             self.telemetry_card.layout.addWidget(label)
+        self.telemetry_card.layout.addWidget(QLabel("EAR"))
+        self.telemetry_card.layout.addWidget(self.ear_bar)
+        self.telemetry_card.layout.addWidget(QLabel("MAR"))
+        self.telemetry_card.layout.addWidget(self.mar_bar)
+        self.telemetry_card.layout.addWidget(QLabel("Confidence"))
+        self.telemetry_card.layout.addWidget(self.confidence_bar)
         self.telemetry_card.layout.addStretch()
         
         self.model_card = Card()
+        self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.model_card)
         m_title = QLabel("LATE-FUSION MODEL OUTPUT")
         m_title.setFont(font(16, bold=True))
@@ -75,6 +94,8 @@ class AIVisionPage(ThemedPage):
         ctrl_layout.addWidget(self.stop_btn)
         ctrl_layout.addStretch()
         layout.addLayout(ctrl_layout)
+        h_layout.setStretch(0, 1)
+        h_layout.setStretch(1, 2)
         
         self.queue_timer = QTimer(self)
         self.queue_timer.timeout.connect(self._poll_tracker_queue)
@@ -116,16 +137,22 @@ class AIVisionPage(ThemedPage):
             self._render_frame(payload["frame"])
             
         fps = payload.get("fps", 0.0)
-        self.telemetry_labels["fps"].setText(f"Throughput : {fps:.1f} FPS")
+        self.telemetry_labels["fps"].setText(f"Throughput: {fps:.1f} FPS")
         self.telemetry_labels["latency"].setText(f"E2E Latency: {int(1000/fps) if fps > 0 else 0} ms")
-        
-        features = payload.get("features", {})
-        self.telemetry_labels["ear"].setText(f"EAR : {features.get('ear', 0.0):.2f}")
-        self.telemetry_labels["mar"].setText(f"MAR : {features.get('mar', 0.0):.2f}")
-        self.telemetry_labels["pose"].setText(f"Pitch: {features.get('pitch', 0.0):.1f}° | Yaw: {features.get('yaw', 0.0):.1f}°")
-        
+        feature_values = payload.get("feature") or []
+        if not isinstance(feature_values, (list, tuple)):
+            feature_values = []
+        ear = float(feature_values[0]) if len(feature_values) > 0 else 0.0
+        mar = float(feature_values[2]) if len(feature_values) > 2 else 0.0
+        pitch = float(feature_values[3]) if len(feature_values) > 3 else 0.0
+        yaw = float(feature_values[4]) if len(feature_values) > 4 else 0.0
+        self.telemetry_labels["pose"].setText(f"Pitch: {pitch:.1f}° | Yaw: {yaw:.1f}°")
+        self._set_bar(self.ear_bar, ear)
+        self._set_bar(self.mar_bar, mar)
+
         score = payload.get("focus_score", 0.0)
         state = payload.get("state", "DISTRACTED")
+        self._set_bar(self.confidence_bar, float(score))
         self.conf_label.setText(f"Confidence: {score*100:.1f}%")
         self.vote_label.setText(f"VOTE: {state}")
         self.vote_label.setStyleSheet(f"color: {self.theme.color('accent_focus') if state == 'FOCUSED' else self.theme.color('accent_warn')};")
@@ -143,3 +170,8 @@ class AIVisionPage(ThemedPage):
             self.camera_preview.setStyleSheet("")
         except Exception as e:
             pass
+
+    @staticmethod
+    def _set_bar(bar: QProgressBar, value: float) -> None:
+        bar.setRange(0, 1000)
+        bar.setValue(max(0, min(1000, int(round(max(0.0, min(1.0, value)) * 1000)))))

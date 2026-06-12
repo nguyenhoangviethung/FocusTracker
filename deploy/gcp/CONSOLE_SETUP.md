@@ -108,7 +108,44 @@ Cloud Build trigger.
 5. Location: `deploy/gcp/cloudbuild.yaml`.
 6. Run the trigger manually once.
 
-## 9. Verify Cloud Run
+## 9. Create Public Download Portal Bucket
+
+For thesis demo distribution, create a public Cloud Storage bucket for the
+static landing page and release artifacts.
+
+1. Open **Cloud Storage > Buckets**.
+2. Create a bucket in `asia-southeast1`.
+3. Name it something like `focusflow-downloads`.
+4. Keep object access public for demo builds only.
+5. Upload the contents of `deploy/gcp/static-site/`.
+6. Upload OS release files under:
+   - `downloads/windows/`
+   - `downloads/macos/`
+   - `downloads/linux/`
+7. Upload release notes and checksums under `docs/`.
+8. If you use static website hosting, set:
+   - Main page suffix: `index.html`
+   - 404 page: `404.html`
+
+## 10. Desktop Google Sign-in OAuth
+
+Google sign-in cho desktop client dùng các biến env OAuth. Không cần giữ file
+JSON trong repo local nữa.
+
+Current values:
+
+```text
+client id:   1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
+redirect:    http://localhost
+scopes:      openid email
+```
+
+Nếu bạn muốn thay OAuth client khác, cập nhật lại các biến
+`FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID`, `FOCUSFLOW_GOOGLE_OAUTH_SECRET`,
+`FOCUSFLOW_GOOGLE_OAUTH_AUTH_URI`, `FOCUSFLOW_GOOGLE_OAUTH_TOKEN_URI`, và
+`FOCUSFLOW_GOOGLE_OAUTH_REDIRECT_URIS`.
+
+## 11. Verify Cloud Run
 
 After deployment:
 

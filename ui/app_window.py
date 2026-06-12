@@ -33,20 +33,23 @@ class FocusFlowApp(QMainWindow):
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        layout.setStretch(0, 0)
+        layout.setStretch(1, 1)
 
         self.sidebar = SidebarNavigation(self.theme, self.theme.toggle)
         self.sidebar.route_selected.connect(self.navigate)
         layout.addWidget(self.sidebar)
 
         self.stack = QStackedWidget()
+        self.stack.setSizePolicy(self.stack.sizePolicy().horizontalPolicy(), self.stack.sizePolicy().verticalPolicy())
         layout.addWidget(self.stack)
 
         self.pages = {
             "home": HomePage(self.theme),
+            "active_session": ActiveSessionPage(self.theme),
+            "vision": AIVisionPage(self.theme),
             "report": ReportPage(self.theme),
             "settings": SettingsPage(self.theme),
-            "vision": AIVisionPage(self.theme),
-            "active_session": ActiveSessionPage(self.theme),
         }
 
         for page in self.pages.values():
@@ -56,6 +59,7 @@ class FocusFlowApp(QMainWindow):
         self.report_completed.connect(self._show_completed_report)
         self._apply_settings_to_pages()
         self.apply_theme()
+        self._update_user_identity()
         self.navigate("home")
 
     def navigate(self, route: str) -> None:
@@ -86,10 +90,12 @@ class FocusFlowApp(QMainWindow):
     def update_settings(self, payload: dict) -> None:
         self.settings = save_settings({**self.settings, **payload, "theme_mode": self.theme.mode})
         self._apply_settings_to_pages()
+        self._update_user_identity()
 
     def set_theme(self, mode: str) -> None:
         self.theme.set_mode(mode)
         self.settings = save_settings({**self.settings, "theme_mode": self.theme.mode})
+        self._update_user_identity()
 
     def finish_session(self, summary: dict) -> None:
         record = save_session_statistics(
@@ -139,6 +145,13 @@ class FocusFlowApp(QMainWindow):
         for page in self.pages.values():
             if hasattr(page, "apply_settings"):
                 page.apply_settings(self.settings)
+
+    def _update_user_identity(self) -> None:
+        self.sidebar.set_user_identity(
+            self.settings.get("auth_display_name") or None,
+            self.settings.get("auth_username") or None,
+            self.settings.get("auth_provider") or None,
+        )
 
     def apply_theme(self) -> None:
         self.setStyleSheet(self.theme.get_stylesheet())

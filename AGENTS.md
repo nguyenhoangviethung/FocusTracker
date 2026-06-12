@@ -92,6 +92,11 @@ runtime:                  CPU, ONNXRuntime, XGBoost
 │                                                                     │
 │ Artifact Registry + Cloud Build                                     │
 │   └── build and deploy immutable container revisions                │
+│                                                                     │
+│ Cloud Storage public site                                           │
+│   ├── static landing page for product/demo                          │
+│   ├── public release artifacts by OS                                │
+│   └── direct download links for Windows/macOS/Linux                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -114,6 +119,20 @@ change when that split happens.
 - Blocking inference runs outside the asyncio event loop.
 - Configure CPU to remain allocated while handling a connected request.
 - Start with concurrency `4`; tune only from measured latency and memory data.
+
+### Public release portal
+
+For thesis/demo distribution, a public static website in Cloud Storage is
+allowed and preferred over custom download auth when the goal is simplicity.
+
+- Host the landing page as a static site in Cloud Storage.
+- Place release binaries in a public bucket or public object path.
+- Use Cloud Run only for the API and operational backend.
+- Keep the landing page limited to product overview, version notes, and OS
+  download links.
+- Never place secrets, API keys, service-account files, or internal logs in the
+  public bucket.
+- Public artifacts may include only release builds, checksums, and demo docs.
 
 ## 4. Repository Structure
 
@@ -220,6 +239,11 @@ activity in any protocol.
   Never claim that they are anonymous or impossible to reconstruct.
 - Use TLS only (`https`/`wss`) outside local development.
 - Authenticate desktop requests using an API key during the thesis phase.
+- Support two desktop identity flows for demo tracking: username/password and
+  Google OAuth2. Both flows may set `user_id`, but neither replaces
+  `X-API-Key`.
+- Store password hashes with a strong salted hash and keep OAuth identities in
+  Firestore via transactions.
 - Store the API key in Secret Manager for cloud services and secure local
   configuration for the desktop client.
 - Do not commit `.env`, credentials, service-account keys, or legacy report-workflow secrets.
@@ -295,6 +319,10 @@ an unrelated shared project.
 All deployable resources must be reproducible from checked-in Docker,
 Cloud Build, and documented Console settings. Manual Console changes must be
 recorded in `deploy/gcp/CONSOLE_SETUP.md`.
+
+For public client distribution, use Cloud Storage static website hosting as the
+download portal and keep the landing page in source control under
+`deploy/gcp/static-site/`.
 
 ## 10. Implementation Phases
 

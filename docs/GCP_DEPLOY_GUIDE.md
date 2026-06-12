@@ -229,6 +229,18 @@ Mong đợi:
 
 Nếu `/readyz` fail, mở Cloud Run Logs và tìm model artifact/loading error.
 
+Kiểm tra revision đã có endpoint đăng nhập:
+
+```bash
+curl -i -X POST https://YOUR_API_URL/v1/auth/google \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $FOCUSFLOW_CLOUD_API_KEY" \
+  -d '{"id_token":"check"}'
+```
+
+Kết quả `401 Invalid Google token` là đúng cho payload kiểm tra này. Nếu nhận
+`404`, Cloud Run vẫn đang chạy image trước khi phần auth được implement.
+
 Sau khi deploy, lấy URL mà không thay đổi cấu hình:
 
 ```bash
@@ -240,9 +252,26 @@ gcloud run services describe focusflow-api \
 
 Điền output vào `FOCUSFLOW_CLOUD_API_URL` trong `.env`.
 
+### Step 16: Public download portal
+
+Nếu muốn demo tải app ngay từ browser mà không cần auth tải xuống, tạo thêm
+bucket Cloud Storage public cho landing page và release artifacts.
+
+1. Tạo bucket public, ví dụ `focusflow-downloads`.
+2. Upload `deploy/gcp/static-site/index.html`, `404.html`, `style.css`.
+3. Upload file build theo OS:
+   - `downloads/windows/FocusFlowAI-Windows.exe`
+   - `downloads/macos/FocusFlowAI-macOS.dmg`
+   - `downloads/linux/FocusFlowAI-Linux.AppImage`
+4. Upload `docs/QuickStart.pdf` và `docs/Checksums.txt` nếu có.
+5. Bật static website hosting cho bucket và set:
+   - Main page suffix: `index.html`
+   - 404 page: `404.html`
+6. Dùng link public của bucket hoặc custom domain cho trang download.
+
 ## Phase I: End-to-end verification
 
-### Step 16: Cấu hình desktop
+### Step 17: Cấu hình desktop
 
 Local terminal:
 

@@ -6,3 +6,4 @@ onnxruntime
 xgboost-cpu==3.2.0
 google-cloud-firestore>=2.20,<3
 google-cloud-pubsub>=2.29,<3
+google-auth>=2.0,<3

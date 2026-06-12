@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QSizePolicy
 from PyQt6.QtCore import Qt
 from ui.theme import ThemeManager, font
 
@@ -29,6 +29,7 @@ class Card(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("bg_card")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(24, 24, 24, 24)
         self.layout.setSpacing(16)

@@ -1,5 +1,16 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QFileDialog
+
+from pathlib import Path
+
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QComboBox,
+    QFileDialog,
+    QSizePolicy,
+)
 
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.theme import ThemeManager, font
@@ -46,6 +57,14 @@ class HomePage(ThemedPage):
         vid_layout.addStretch()
         vid_layout.addWidget(self.vid_btn)
         self.setup_card.layout.addLayout(vid_layout)
+
+        self.source_label = QLabel("Selected source: local webcam")
+        self.mode_label = QLabel("Inference mode: hybrid")
+        self.source_label.setWordWrap(True)
+        self.mode_label.setWordWrap(True)
+        self.setup_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setup_card.layout.addWidget(self.source_label)
+        self.setup_card.layout.addWidget(self.mode_label)
         
         # Start button
         self.start_btn = QPushButton("START SESSION")
@@ -62,7 +81,8 @@ class HomePage(ThemedPage):
         file, _ = QFileDialog.getOpenFileName(self, "Select Video", "", "Video Files (*.mp4 *.avi)")
         if file:
             self.vid_path = file
-            self.vid_btn.setText(file.split('/')[-1])
+            self.vid_btn.setText(Path(file).name)
+            self.source_label.setText(f"Selected source: {Path(file).name}")
 
     def _on_start(self):
         val = self.dur_combo.currentText().split()[0]
@@ -75,7 +95,7 @@ class HomePage(ThemedPage):
             app.start_session(config)
             
     def apply_settings(self, settings: dict) -> None:
-        return
+        self.mode_label.setText(f"Inference mode: {settings.get('inference_mode', 'local')}")
 
     def apply_theme(self) -> None:
         super().apply_theme()

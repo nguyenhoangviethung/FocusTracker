@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import secrets
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 from server.config import ServerSettings
 from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import SessionRepository
+from server.repositories.users import UserRepository
 from server.services.event_publisher import EventPublisher
+from server.services.auth_service import extract_google_profile, hash_password, profile_from_record, verify_password
 from shared.contracts import (
+    AuthGoogleLogin,
+    AuthPasswordLogin,
+    AuthPasswordRegister,
+    AuthProfile,
     InferenceResponse,
     SessionCreate,
     SessionRecord,
@@ -23,17 +31,205 @@ from shared.contracts import (
 router = APIRouter()
 
 
+def _dashboard_snapshot(request: Request) -> dict[str, Any]:
+    settings, repository, _, engine, _ = _services(request)
+    recent = repository.list_recent(100)
+    status_counts = Counter(str(record.get("status") or "unknown") for record in recent)
+    active_sessions = sum(1 for record in recent if not record.get("ended_at"))
+    latest = recent[0] if recent else None
+    return {
+        "environment": settings.environment,
+        "repository_backend": settings.repository_backend,
+        "event_backend": settings.event_backend,
+        "api_key_configured": bool(settings.api_key),
+        "ready": engine is not None and repository is not None,
+        "recent_count": len(recent),
+        "active_sessions": active_sessions,
+        "status_counts": dict(status_counts),
+        "latest_session": latest,
+        "recent_sessions": recent,
+    }
+
+
+def _dashboard_html() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FocusFlow AI Dashboard</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f0f0f; --panel:#1a1a1a; --panel2:#141414; --text:#f5f5f5; --muted:#a1a1aa; --accent:#2ecc71; --border:#2b2b2b; --warn:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Inter, Segoe UI, Arial, sans-serif; background: linear-gradient(180deg,#111 0%, #0b0b0b 100%); color:var(--text); }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    header { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:20px; }
+    h1 { margin:0; font-size: 2rem; }
+    .muted { color: var(--muted); }
+    .grid { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:16px; margin-bottom:16px; }
+    .card { background: var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; }
+    .kpi { font-size: 2rem; font-weight: 800; margin: 8px 0 0; }
+    .sub { color: var(--muted); font-size: .92rem; }
+    .two { display:grid; grid-template-columns: 1.3fr .7fr; gap:16px; }
+    .wall { display:grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap:8px; margin-top:16px; }
+    .tile { background:#0f172a; border:1px solid #243041; border-radius:12px; padding:10px; min-height:90px; }
+    .tile strong { display:block; font-size:.88rem; margin-bottom:4px; }
+    .tile .tiny { color: var(--muted); font-size: .78rem; line-height: 1.4; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight:600; font-size:.85rem; text-transform: uppercase; letter-spacing:.06em; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background: #1f2937; border:1px solid #334155; }
+    .pill.ok { background: rgba(46, 204, 113, .14); border-color: rgba(46, 204, 113, .32); color: #7ef0a9; }
+    .pill.warn { background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .28); color: #fca5a5; }
+    .row { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+    code { background:#0b1220; padding:2px 6px; border-radius:8px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width: 1100px) { .grid, .two { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 760px) { .grid, .two { grid-template-columns: 1fr; } header { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>FocusFlow AI Server Dashboard</h1>
+        <div class="muted">Live view of sessions, inference traffic, and backend status.</div>
+      </div>
+      <div class="row">
+        <span id="ready-pill" class="pill">loading</span>
+        <span id="repo-pill" class="pill"></span>
+        <span id="event-pill" class="pill"></span>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="card"><div class="sub">Recent sessions shown</div><div id="recent-count" class="kpi">0</div></div>
+      <div class="card"><div class="sub">Active sessions</div><div id="active-count" class="kpi">0</div></div>
+      <div class="card"><div class="sub">Completed</div><div id="completed-count" class="kpi">0</div></div>
+      <div class="card"><div class="sub">API key configured</div><div id="api-key" class="kpi">No</div></div>
+    </section>
+
+    <section class="two">
+      <div class="card">
+        <h2 style="margin-top:0;">Recent sessions</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Device</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Ended</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody id="session-rows">
+            <tr><td colspan="6" class="muted">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0;">Latest session</h2>
+        <div id="latest-card" class="muted">No sessions yet.</div>
+        <h2>Server notes</h2>
+        <div class="muted">
+          Open <code>/docs</code> for the API and use the desktop client to create sessions.
+          This dashboard refreshes every 3 seconds.
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2 style="margin-top:0;">100-camera wall</h2>
+      <div class="muted">
+        Each tile represents one client/session. Only numerical stats are shown.
+      </div>
+      <div id="camera-wall" class="wall"></div>
+    </section>
+  </div>
+<script>
+async function refreshDashboard() {
+  const response = await fetch('/dashboard/api/summary', { cache: 'no-store' });
+  const data = await response.json();
+  document.getElementById('ready-pill').textContent = data.ready ? 'READY' : 'NOT READY';
+  document.getElementById('ready-pill').className = 'pill ' + (data.ready ? 'ok' : 'warn');
+  document.getElementById('repo-pill').textContent = 'repo: ' + data.repository_backend;
+  document.getElementById('event-pill').textContent = 'events: ' + data.event_backend;
+  document.getElementById('recent-count').textContent = data.recent_count ?? 0;
+  document.getElementById('active-count').textContent = data.active_sessions ?? 0;
+  document.getElementById('completed-count').textContent = data.status_counts?.completed ?? 0;
+  document.getElementById('api-key').textContent = data.api_key_configured ? 'Yes' : 'No';
+
+  const latest = data.latest_session;
+  if (latest) {
+    const summary = latest.summary || {};
+    document.getElementById('latest-card').innerHTML = `
+      <div><strong>Session:</strong> <span class="mono">${latest.session_id || ''}</span></div>
+      <div><strong>Device:</strong> <span class="mono">${latest.device_id || ''}</span></div>
+      <div><strong>Status:</strong> ${latest.status || 'unknown'}</div>
+      <div><strong>User:</strong> ${latest.user_id || '-'}</div>
+      <div><strong>Average focus:</strong> ${((summary.average_focus || 0) * 100).toFixed(1)}%</div>
+      <div><strong>Report:</strong> ${latest.report_status || 'n/a'}</div>
+    `;
+  } else {
+    document.getElementById('latest-card').textContent = 'No sessions yet.';
+  }
+
+  const rows = (data.recent_sessions || []).map(record => {
+    const summary = record.summary || {};
+    return `
+      <tr>
+        <td class="mono">${record.session_id || ''}</td>
+        <td class="mono">${record.device_id || ''}</td>
+        <td>${record.status || 'unknown'}</td>
+        <td class="mono">${(record.started_at || '').replace('T', ' ').slice(0, 19)}</td>
+        <td class="mono">${(record.ended_at || '').replace('T', ' ').slice(0, 19) || '-'}</td>
+        <td>${summary.completed ? 'completed' : (summary.average_focus != null ? ((summary.average_focus * 100).toFixed(1) + '% focus') : '-')}</td>
+      </tr>
+    `;
+  }).join('');
+  document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="6" class="muted">No sessions yet.</td></tr>';
+
+  const tiles = (data.recent_sessions || []).slice(0, 100).map((record, index) => {
+    const summary = record.summary || {};
+    const focus = summary.average_focus != null ? (summary.average_focus * 100).toFixed(1) + '%' : '-';
+    const status = (record.status || 'unknown').toUpperCase();
+    const user = record.user_id || '-';
+    return `
+      <div class="tile">
+        <strong>${String(index + 1).padStart(3, '0')} | ${status}</strong>
+        <div class="tiny mono">${(record.device_id || '').slice(0, 16)}</div>
+        <div class="tiny">focus: ${focus}</div>
+        <div class="tiny">user: ${String(user).slice(0, 16)}</div>
+        <div class="tiny">report: ${record.report_status || '-'}</div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('camera-wall').innerHTML = tiles || '<div class="muted">No sessions yet.</div>';
+}
+refreshDashboard().catch(err => {
+  document.getElementById('session-rows').innerHTML = '<tr><td colspan="6" class="muted">Dashboard load failed.</td></tr>';
+  console.error(err);
+});
+setInterval(() => refreshDashboard().catch(console.error), 3000);
+</script>
+</body>
+</html>"""
+
+
 def _services(
     request: Request,
 ) -> tuple[
     ServerSettings,
     SessionRepository,
+    UserRepository,
     CloudInferenceEngine,
     EventPublisher,
 ]:
     return (
         request.app.state.settings,
         request.app.state.session_repository,
+        request.app.state.user_repository,
         request.app.state.inference_engine,
         request.app.state.event_publisher,
     )
@@ -53,6 +249,16 @@ async def root() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard() -> HTMLResponse:
+    return HTMLResponse(_dashboard_html())
+
+
+@router.get("/dashboard/api/summary")
+async def dashboard_summary(request: Request) -> dict[str, Any]:
+    return _dashboard_snapshot(request)
+
+
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -67,13 +273,83 @@ async def readyz(request: Request) -> dict[str, str]:
     return {"status": "ready"}
 
 
+@router.post("/v1/auth/password/register", response_model=AuthProfile, status_code=201)
+async def register_password_user(
+    payload: AuthPasswordRegister,
+    request: Request,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> AuthProfile:
+    settings, _, user_repository, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    password_hash, password_salt, iterations = hash_password(payload.password)
+    record = await asyncio.to_thread(
+        user_repository.create_password_user,
+        payload.username,
+        password_hash,
+        password_salt,
+        payload.display_name,
+    )
+    record["password_iterations"] = iterations
+    return profile_from_record(record)
+
+
+@router.post("/v1/auth/password/login", response_model=AuthProfile)
+async def login_password_user(
+    payload: AuthPasswordLogin,
+    request: Request,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> AuthProfile:
+    settings, _, user_repository, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    record = await asyncio.to_thread(user_repository.get_by_username, payload.username)
+    if record is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(
+        payload.password,
+        str(record.get("password_hash") or ""),
+        str(record.get("password_salt") or ""),
+        int(record.get("password_iterations") or 390000),
+    ):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    updated = await asyncio.to_thread(user_repository.login_password_user, payload.username)
+    return profile_from_record(updated or record)
+
+
+@router.post("/v1/auth/google", response_model=AuthProfile)
+async def login_google_user(
+    payload: AuthGoogleLogin,
+    request: Request,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> AuthProfile:
+    settings, _, user_repository, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    if not settings.google_oauth_client_id:
+        raise HTTPException(status_code=503, detail="Google OAuth client is not configured")
+    try:
+        claims = await asyncio.to_thread(extract_google_profile, payload.id_token, settings.google_oauth_client_id)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid Google token") from exc
+
+    subject = str(claims.get("sub") or "").strip()
+    if not subject:
+        raise HTTPException(status_code=401, detail="Google token missing subject")
+    record = await asyncio.to_thread(
+        user_repository.upsert_google_user,
+        subject,
+        str(claims.get("email") or "") or None,
+        str(claims.get("name") or "") or None,
+        str(claims.get("jti") or "") or None,
+    )
+    return profile_from_record(record)
+
+
 @router.post("/v1/sessions", response_model=SessionRecord, status_code=201)
 async def create_session(
     payload: SessionCreate,
     request: Request,
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> SessionRecord:
-    settings, repository, _, _ = _services(request)
+    settings, repository, _, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
     return await asyncio.to_thread(repository.create, payload)
 
@@ -84,7 +360,7 @@ async def get_session(
     request: Request,
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
-    settings, repository, _, _ = _services(request)
+    settings, repository, _, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
     record = await asyncio.to_thread(repository.get, session_id)
     if record is None:
@@ -99,7 +375,7 @@ async def complete_session(
     request: Request,
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
-    settings, repository, _, publisher = _services(request)
+    settings, repository, _, _, publisher = _services(request)
     _verify_api_key(settings, x_api_key)
     existing = await asyncio.to_thread(repository.get, session_id)
     if existing is None:
@@ -127,7 +403,7 @@ async def run_inference(
     request: Request,
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> InferenceResponse:
-    settings, repository, engine, _ = _services(request)
+    settings, repository, _, engine, _ = _services(request)
     _verify_api_key(settings, x_api_key)
     session = await asyncio.to_thread(repository.get, packet.session_id)
     if session is None:

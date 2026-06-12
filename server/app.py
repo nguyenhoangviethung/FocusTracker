@@ -9,6 +9,7 @@ from server.api.routes import router
 from server.config import ServerSettings
 from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import create_session_repository
+from server.repositories.users import create_user_repository
 from server.services.event_publisher import create_event_publisher
 
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     settings = ServerSettings.from_env()
     app.state.settings = settings
     app.state.session_repository = create_session_repository(settings)
+    app.state.user_repository = create_user_repository(settings)
     app.state.event_publisher = create_event_publisher(settings)
     app.state.inference_engine = CloudInferenceEngine()
     yield

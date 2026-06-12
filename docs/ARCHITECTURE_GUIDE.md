@@ -118,7 +118,29 @@ version mới thay vì sửa âm thầm.
 8. Server publish `session.completed`.
 9. Server ghi report completion metadata.
 
-## 7. Dữ liệu được và không được lưu
+## 6.1. Identity and auth
+
+- Desktop có 2 cách đăng nhập: username/password và Google OAuth.
+- Password được hash bằng PBKDF2-SHA256 trước khi lưu.
+- Google login dùng installed-app OAuth, desktop nhận `id_token` rồi gửi lên
+  server để xác minh và upsert user profile.
+- User profile được lưu vào Firestore trong transaction, cùng các index
+  username / Google subject để tránh trùng lặp.
+- Login chỉ tạo danh tính người dùng; API key vẫn là lớp bảo vệ cho Cloud Run
+  trong giai đoạn thesis.
+
+## 7. Identity
+
+FocusFlow dùng Google OAuth2 ở desktop chỉ để định danh người dùng, không phải
+để thay thế `X-API-Key` của ứng dụng.
+
+- Google sign-in là luồng installed-app / loopback redirect.
+- `user_id` trong session có thể lấy từ Google subject hoặc email.
+- Nếu login chưa sẵn sàng hoặc mạng lỗi, desktop vẫn có thể chạy local hoặc
+  hybrid mà không cần identity hoàn chỉnh.
+- Không dùng service-account key trên desktop.
+
+## 8. Dữ liệu được và không được lưu
 
 Được lưu:
 
@@ -140,7 +162,7 @@ Không lưu:
 - mọi raw feature sequence theo từng frame;
 - window title, PID, keystroke hoặc mouse activity.
 
-## 8. Nguyên tắc scale
+## 9. Nguyên tắc scale
 
 - Cloud Run instance stateless.
 - Firestore là durable session state.

@@ -2,7 +2,7 @@ from __future__ import annotations
 import queue
 from typing import Any
 import cv2
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget, QSizePolicy
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -44,6 +44,7 @@ class ActiveSessionPage(ThemedPage):
         layout.setSpacing(18)
         
         self.timer_card = Card()
+        self.timer_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.timer_card)
         self.timer_label = QLabel("25:00")
         self.timer_label.setFont(font(62, bold=True))
@@ -59,12 +60,14 @@ class ActiveSessionPage(ThemedPage):
         layout.addLayout(h_layout)
         
         self.camera_card = Card()
+        self.camera_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.camera_card)
         c_title = QLabel("AI CAMERA")
         c_title.setFont(font(16, bold=True))
         self.camera_preview = QLabel("Camera will open when session starts")
         self.camera_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.camera_preview.setMinimumHeight(240)
+        self.camera_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
         self.camera_signal = QLabel("Signal: Waiting for Phase 2")
         self.camera_state = QLabel("State : FOCUSED")
@@ -74,6 +77,7 @@ class ActiveSessionPage(ThemedPage):
         self.camera_card.layout.addWidget(self.camera_state)
         
         self.model_card = Card()
+        self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.model_card)
         model_title = QLabel("LATE-FUSION MODEL")
         model_title.setFont(font(16, bold=True))
@@ -106,6 +110,8 @@ class ActiveSessionPage(ThemedPage):
         ctrl_layout.addWidget(self.end_button)
         ctrl_layout.addStretch()
         layout.addLayout(ctrl_layout)
+        h_layout.setStretch(0, 1)
+        h_layout.setStretch(1, 1)
 
     def begin(self, config: dict) -> None:
         self.stop_timer()

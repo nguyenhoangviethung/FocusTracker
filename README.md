@@ -9,6 +9,8 @@ MediaPipe và ensemble GRU + TCN + XGBoost.
 - `docs/TEST_GUIDE.md`
 - `docs/GCP_DEPLOY_GUIDE.md`
 - `docs/DESKTOP_CLOUD_GUIDE.md`
+- `docs/AUTH_GUIDE.md`
+- `deploy/gcp/static-site/`: landing page public cho tải app theo hệ điều hành.
 
 Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Workspace/Thesis20252/FocusTracker/.env.example).
 
@@ -60,6 +62,18 @@ python tests/manual/test_tracker.py --model models/late_fusion/engagement_gru.on
 ```bash
 pyinstaller focusflow_app.spec --clean
 ```
+
+## Public download portal
+
+For demo distribution, the repository includes a static landing page designed
+for Google Cloud Storage static website hosting.
+
+- Put the built release artifacts in a public Cloud Storage bucket.
+- Publish the landing page from `deploy/gcp/static-site/`.
+- Link each OS download button directly to the public object URL.
+
+This keeps the cloud backend focused on API, inference, and session storage
+while the download portal stays simple and easy to maintain.
 
 ## Ghi chú
 

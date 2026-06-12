@@ -21,4 +21,6 @@ COPY tracking/ tracking/
 COPY utils/ utils/
 COPY models/late_fusion/ models/late_fusion/
 
+EXPOSE 8080
+
 CMD ["sh", "-c", "uvicorn server.app:app --host 0.0.0.0 --port ${PORT} --workers 1"]
