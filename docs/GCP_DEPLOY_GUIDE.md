@@ -31,7 +31,6 @@ Chưa tồn tại:
 
 - Cloud Run service `focusflow-api`;
 - image trong Artifact Registry repository;
-- service account `focusflow-api@my-thesis-496702.iam.gserviceaccount.com`;
 - Cloud Build trigger.
 
 Cloud Build hiện báo default service account là:
@@ -40,8 +39,8 @@ Cloud Build hiện báo default service account là:
 1093941638042-compute@developer.gserviceaccount.com
 ```
 
-Account này chưa có các role deploy được yêu cầu trong guide. Hãy cấu hình IAM
-thủ công ở Phase F trước khi chạy trigger.
+Account này đã được cấp quyền build/deploy cần thiết và có `Service Account
+User` trên `focusflow-api@my-thesis-496702.iam.gserviceaccount.com`.
 
 ## Phase A: Chuẩn bị project
 
