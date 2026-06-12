@@ -3,8 +3,9 @@ opencv-python
 mediapipe==0.10.30
 onnxruntime
 xgboost
-openai
 numpy
 pandas
 pillow
-psutil
+pydantic>=2.12,<3
+websockets>=14,<17
+python-dotenv>=1.0,<2

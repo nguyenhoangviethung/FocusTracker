@@ -1,10 +1,9 @@
 from __future__ import annotations
-from typing import Any, Callable
 import threading
+from datetime import datetime, timezone
 from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 from PyQt6.QtCore import pyqtSignal
 
-from core_ai import generate_focus_coaching, send_report_email
 from ui.theme import ThemeManager
 from ui.components.navigation import SidebarNavigation
 from ui.screens.home_page import HomePage
@@ -18,7 +17,7 @@ from utils.session_storage import save_session_statistics, update_session_record
 class FocusFlowApp(QMainWindow):
     report_completed = pyqtSignal(dict)
 
-    def __init__(self, fusion_logic: Callable | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("FocusFlow AI")
         self.resize(1200, 760)
@@ -27,7 +26,6 @@ class FocusFlowApp(QMainWindow):
         self.settings = load_settings()
         self.theme = ThemeManager(str(self.settings.get("theme_mode", "Dark")))
         self.theme.register(self.apply_theme)
-        self.fusion_logic = fusion_logic
         self._current_route = "home"
 
         central = QWidget()
@@ -72,7 +70,7 @@ class FocusFlowApp(QMainWindow):
     def start_session(self, config: dict) -> None:
         settings_config = getattr(self.pages["settings"], "tracker_config", None)
         if callable(settings_config):
-            merged = {**settings_config(), **config}
+            merged = {**self.settings, **settings_config(), **config}
             if not str(config.get("demo_video_path", "")).strip():
                 merged["demo_video_path"] = settings_config().get("demo_video_path", "")
             config = merged
@@ -89,6 +87,10 @@ class FocusFlowApp(QMainWindow):
         self.settings = save_settings({**self.settings, **payload, "theme_mode": self.theme.mode})
         self._apply_settings_to_pages()
 
+    def set_theme(self, mode: str) -> None:
+        self.theme.set_mode(mode)
+        self.settings = save_settings({**self.settings, "theme_mode": self.theme.mode})
+
     def finish_session(self, summary: dict) -> None:
         record = save_session_statistics(
             minute_scores=[float(s) for s in summary.get("minute_scores", [])],
@@ -100,9 +102,8 @@ class FocusFlowApp(QMainWindow):
             focus_streak_seconds=float(summary.get("focus_streak_seconds", 0.0)),
         )
         record.update({
-            "mentor_email": str(summary.get("mentor_email") or ""),
-            "mentor_report_enabled": bool(summary.get("mentor_report_enabled", False)),
-            "hardcore_enabled": bool(summary.get("hardcore_enabled", False)),
+            "inference_mode": str(summary.get("inference_mode") or "local"),
+            "cloud_session_id": str(summary.get("cloud_session_id") or ""),
         })
         
         report_page = self.pages["report"]
@@ -113,18 +114,20 @@ class FocusFlowApp(QMainWindow):
         threading.Thread(target=self._complete_session_report, args=(record,), daemon=True).start()
 
     def _complete_session_report(self, record: dict) -> None:
-        feedback = generate_focus_coaching(record)
-        enriched = {**record, "ai_feedback": feedback}
-        
-        email_status = {"sent": False, "status": "skipped", "message": "Mentor report is disabled."}
-        if record.get("mentor_report_enabled"):
-            email_status = send_report_email(record.get("mentor_email", ""), enriched)
-            
-        updated = update_session_record(record.get("timestamp"), {
-            "ai_feedback": feedback,
-            "email_status": email_status,
-        }) or {**enriched, "email_status": email_status}
-        
+        completed_at = datetime.now(timezone.utc).isoformat()
+        updated = update_session_record(
+            record.get("timestamp"),
+            {
+                "report_status": "completed",
+                "report_started_at": completed_at,
+                "report_completed_at": completed_at,
+            },
+        ) or {
+            **record,
+            "report_status": "completed",
+            "report_started_at": completed_at,
+            "report_completed_at": completed_at,
+        }
         self.report_completed.emit(updated)
 
     def _show_completed_report(self, record: dict) -> None:

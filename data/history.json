@@ -7,13 +7,7 @@
     "average_focus": 0.7066493524426617,
     "distraction_count": 3,
     "focus_streak_seconds": 30.0,
-    "completed": false,
-    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 70.7% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Mentor report is disabled."
-    }
+    "completed": false
   },
   {
     "timestamp": "2026-06-10T04:26:23.361341+00:00",
@@ -23,13 +17,7 @@
     "average_focus": 0.6098985613711583,
     "distraction_count": 3,
     "focus_streak_seconds": 12.0,
-    "completed": false,
-    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 61.0% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Mentor report is disabled."
-    }
+    "completed": false
   },
   {
     "timestamp": "2026-06-09T09:35:02.536756+00:00",
@@ -42,14 +30,7 @@
     "average_focus": 0.5787025021881843,
     "distraction_count": 3,
     "focus_streak_seconds": 24.0,
-    "completed": false,
-    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 57.9% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   },
   {
     "timestamp": "2026-06-09T09:24:03.669357+00:00",
@@ -61,14 +42,7 @@
     "average_focus": 0.4625033947940333,
     "distraction_count": 1,
     "focus_streak_seconds": 15.0,
-    "completed": false,
-    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 46.3% với 1 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   },
   {
     "timestamp": "2026-06-09T09:08:59.245321+00:00",
@@ -80,14 +54,7 @@
     "average_focus": 0.44216951041627456,
     "distraction_count": 3,
     "focus_streak_seconds": 3.0,
-    "completed": false,
-    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 44.2% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   },
   {
     "timestamp": "2026-06-09T08:55:16.242557+00:00",
@@ -99,14 +66,7 @@
     "average_focus": 0.39130992315989416,
     "distraction_count": 3,
     "focus_streak_seconds": 2.0,
-    "completed": false,
-    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 39.1% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   },
   {
     "timestamp": "2026-06-06T08:13:32.810129+00:00",
@@ -118,14 +78,7 @@
     "average_focus": 0.5153702129774127,
     "distraction_count": 2,
     "focus_streak_seconds": 2.0,
-    "completed": false,
-    "ai_feedback": "Bạn đã có một phiên ổn, nhưng vẫn còn vài đoạn bị kéo khỏi luồng làm việc. Điểm tập trung trung bình là 51.5% với 2 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   },
   {
     "timestamp": "2026-06-06T08:12:46.209146+00:00",
@@ -137,13 +90,6 @@
     "average_focus": 0.4549207974821302,
     "distraction_count": 3,
     "focus_streak_seconds": 1.0,
-    "completed": false,
-    "ai_feedback": "Phiên này hơi nhiễu, nhưng dữ liệu đã cho thấy điểm cần cải thiện rõ ràng. Điểm tập trung trung bình là 45.5% với 3 lần xao nhãng. Ở phiên tiếp theo, hãy tắt trước một nguồn gây nhiễu chính và đặt mục tiêu tập trung thêm 5 phút liên tục. Ghi chú hệ thống: Không gọi được OpenAI, đã dùng coaching offline.",
-    "email_status": {
-      "sent": false,
-      "status": "skipped",
-      "message": "Không bật gửi mentor report."
-    },
-    "hardcore_enabled": false
+    "completed": false
   }
 ]

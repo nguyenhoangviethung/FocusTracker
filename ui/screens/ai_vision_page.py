@@ -97,7 +97,7 @@ class AIVisionPage(ThemedPage):
         app = self.property("app_reference")
         config_dict = app.settings if app else {}
         config = TrackerConfig.from_dict(config_dict)
-        self._tracker = FocusSessionTracker(config, self._tracker_queue, fusion_logic=app.fusion_logic if app else None)
+        self._tracker = FocusSessionTracker(config, self._tracker_queue)
         self._tracker.start()
         self.queue_timer.start(33)
 

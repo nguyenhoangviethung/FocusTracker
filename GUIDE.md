@@ -25,7 +25,7 @@ Pipeline app:
 3. Sequence enriched shape `(30, 90)` -> GRU/TCN ONNX + XGBoost tabular features.
 4. GRU/TCN inputs must be normalized with `feature_mean`/`feature_std` from the source `.pt` checkpoints when `normalize_features=true`.
 5. XGBoost uses the raw enriched sequence to build tsfresh-like tabular features, then applies `engagement_xgb.preprocess.npz`.
-6. Late fusion probability -> `fusion_logic` kết hợp OS tracker.
+6. Late fusion probability -> model-only `FOCUSED`/`DISTRACTED` decision.
 
 Shape chuẩn:
 
@@ -59,7 +59,8 @@ p_final = (0.30 * p_gru) + (0.30 * p_tcn) + (0.40 * p_xgb)
 prediction = int(p_final >= 0.54)
 ```
 
-The app then combines `p_final` with OS context in `main.fusion_logic`.
+The app maps the late-fusion result directly to the final focus state. There is
+no OS telemetry or heuristic override.
 
 ## Runtime Code Map
 

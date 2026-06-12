@@ -14,7 +14,7 @@ class ReportPage(ThemedPage):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(18)
         
-        self.header = PageTitle("Session Report", "Session summary, AI Coach and mentor report status.")
+        self.header = PageTitle("Session Report", "Session summary and local history.")
         layout.addWidget(self.header)
         
         metrics_layout = QHBoxLayout()
@@ -34,14 +34,14 @@ class ReportPage(ThemedPage):
         
         self.status_label = QLabel("No session data available.")
         self.status_label.setFont(font(14, bold=True))
-        self.email_label = QLabel("Mentor email: not sent")
+        self.report_label = QLabel("Report status: pending")
         
         self.summary = QTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setMinimumHeight(260)
         
         self.details_card.layout.addWidget(self.status_label)
-        self.details_card.layout.addWidget(self.email_label)
+        self.details_card.layout.addWidget(self.report_label)
         self.details_card.layout.addWidget(self.summary)
         
         self.history_card = Card()
@@ -65,8 +65,7 @@ class ReportPage(ThemedPage):
         
         self._set_summary_text(
             "No new session data.\n\n"
-            "When the session ends, FocusFlow will save history.json, generate coaching using OpenAI "
-            "and send an email if mentor report is enabled."
+            "When the session ends, FocusFlow saves history.json and marks the report as completed."
         )
         self._render_history()
 
@@ -91,24 +90,22 @@ class ReportPage(ThemedPage):
         dist = int(record.get("distraction_count", 0))
         comp = bool(record.get("completed", False))
         m_scores = [float(s) for s in record.get("minute_focus_scores", [])]
-        fb = str(record.get("ai_feedback", "")).strip()
-        estat = record.get("email_status", {})
+        report_status = str(record.get("report_status") or ("completed" if not processing else "processing")).strip()
+        report_completed_at = str(record.get("report_completed_at") or "").strip()
         
         self.focus_val.setText(f"{focus * 100:.1f}%")
         self.dur_val.setText(f"{dur // 60} mins")
         self.dist_val.setText(f"{dist} times")
         
-        stext = "Generating AI Coach..." if processing else "Report is ready"
+        stext = "Finalizing report..." if processing else "Report is ready"
         self.status_label.setText(f"{stext} | {'Completed' if comp else 'Ended early'} | Focused for {foc // 60} mins")
-        
-        if estat:
-            self.email_label.setText(f"Mentor email: {estat.get('message', 'Unknown status')}")
+        if report_completed_at:
+            self.report_label.setText(f"Report status: {report_status} at {report_completed_at[:19].replace('T', ' ')}")
         else:
-            self.email_label.setText("Mentor email: pending" if processing else "Mentor email: disabled")
-            
+            self.report_label.setText(f"Report status: {report_status}")
+
         tl = "\n".join(f"Min {i + 1:02d}: {s * 100:.1f}%" for i, s in enumerate(m_scores)) or "Not enough per-minute data."
-        coach = fb or "AI Coach is generating 3-sentence feedback..."
-        self._set_summary_text(f"AI Coach:\n{coach}\n\nTimeline:\n{tl}")
+        self._set_summary_text(f"Timeline:\n{tl}")
         self._render_history()
 
     def _render_history(self) -> None:
@@ -148,4 +145,4 @@ class ReportPage(ThemedPage):
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)
-        self.email_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
+        self.report_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")

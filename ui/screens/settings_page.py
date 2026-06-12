@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QRadioButton, QButtonGroup, QScrollArea, QWidget
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QRadioButton, QButtonGroup, QScrollArea, QWidget, QComboBox
 from PyQt6.QtCore import Qt
 
 from ui.screens.base import ThemedPage, PageTitle, Card
@@ -13,7 +13,7 @@ class SettingsPage(ThemedPage):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(24)
         
-        self.header = PageTitle("Settings", "Configure tracker sensitivities and keyword heuristics.")
+        self.header = PageTitle("Settings", "Configure appearance and AI vision.")
         layout.addWidget(self.header)
         
         scroll = QScrollArea()
@@ -49,25 +49,26 @@ class SettingsPage(ThemedPage):
         self.rb_light.clicked.connect(lambda: self._set_theme("Light"))
         self.rb_dark.clicked.connect(lambda: self._set_theme("Dark"))
         
-        email_layout = QHBoxLayout()
-        email_layout.addWidget(QLabel("Mentor Email:"))
-        self.email_input = QLineEdit()
-        email_layout.addWidget(self.email_input)
-        self.acc_card.layout.addLayout(email_layout)
-        
-        # Keywords
-        self.kw_card = Card()
-        scroll_layout.addWidget(self.kw_card)
-        t2 = QLabel("OS Tracker Keywords")
-        t2.setFont(font(16, bold=True))
-        self.kw_card.layout.addWidget(t2)
-        
         # New Settings Card for AI Vision Config
         self.ai_card = Card()
         scroll_layout.addWidget(self.ai_card)
         t3 = QLabel("AI Vision Configuration")
         t3.setFont(font(16, bold=True))
         self.ai_card.layout.addWidget(t3)
+
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("Inference Mode:"))
+        self.inference_mode = QComboBox()
+        self.inference_mode.addItems(["local", "cloud", "hybrid"])
+        mode_layout.addWidget(self.inference_mode)
+        self.ai_card.layout.addLayout(mode_layout)
+
+        cloud_url_layout = QHBoxLayout()
+        cloud_url_layout.addWidget(QLabel("Cloud API URL:"))
+        self.cloud_api_url = QLineEdit()
+        self.cloud_api_url.setPlaceholderText("https://focusflow-api-...run.app")
+        cloud_url_layout.addWidget(self.cloud_api_url)
+        self.ai_card.layout.addLayout(cloud_url_layout)
         
         from PyQt6.QtWidgets import QDoubleSpinBox, QPushButton
         scale_layout = QHBoxLayout()
@@ -78,16 +79,6 @@ class SettingsPage(ThemedPage):
         self.scale_spinbox.setDecimals(3)
         scale_layout.addWidget(self.scale_spinbox)
         self.ai_card.layout.addLayout(scale_layout)
-        
-        self.prod_input = QLineEdit()
-        self.prod_input.setPlaceholderText("vscode, github, pdf, docx, figma")
-        self.kw_card.layout.addWidget(QLabel("Productive:"))
-        self.kw_card.layout.addWidget(self.prod_input)
-        
-        self.dist_input = QLineEdit()
-        self.dist_input.setPlaceholderText("facebook, netflix, lol, tiktok")
-        self.kw_card.layout.addWidget(QLabel("Distracting:"))
-        self.kw_card.layout.addWidget(self.dist_input)
         
         # Save Button
         self.save_btn = QPushButton("Save Settings")
@@ -115,17 +106,15 @@ class SettingsPage(ThemedPage):
 
     def tracker_config(self) -> dict:
         return {
-            "mentor_email": self.email_input.text(),
-            "productive_keywords": self.prod_input.text(),
-            "distracting_keywords": self.dist_input.text(),
             "camera_distance_scale": self.scale_spinbox.value(),
+            "inference_mode": self.inference_mode.currentText(),
+            "cloud_api_url": self.cloud_api_url.text().strip(),
         }
 
     def apply_settings(self, settings: dict) -> None:
-        self.email_input.setText(settings.get("mentor_email", ""))
-        self.prod_input.setText(settings.get("productive_keywords", "vscode, github, docx, figma"))
-        self.dist_input.setText(settings.get("distracting_keywords", "facebook, netflix, tiktok, youtube"))
         self.scale_spinbox.setValue(settings.get("camera_distance_scale", 0.18))
+        self.inference_mode.setCurrentText(str(settings.get("inference_mode", "local")))
+        self.cloud_api_url.setText(str(settings.get("cloud_api_url", "")))
         if settings.get("theme_mode") == "Light":
             self.rb_light.setChecked(True)
         else:

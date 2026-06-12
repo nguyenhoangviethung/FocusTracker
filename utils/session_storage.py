@@ -88,10 +88,6 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
     distraction_count = max(0, _safe_int(record.get("distraction_count"), 0))
     focus_streak_seconds = max(0.0, _safe_float(record.get("focus_streak_seconds"), 0.0))
     completed = _safe_bool(record.get("completed"), True)
-    ai_feedback = str(record.get("ai_feedback") or "").strip()
-    email_status = record.get("email_status")
-    if not isinstance(email_status, dict):
-        email_status = {}
 
     normalized = {
         "timestamp": str(record.get("timestamp") or _now_iso()),
@@ -103,14 +99,16 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
         "focus_streak_seconds": focus_streak_seconds,
         "completed": completed,
     }
-    if ai_feedback:
-        normalized["ai_feedback"] = ai_feedback
-    if email_status:
-        normalized["email_status"] = email_status
-    if record.get("mentor_email"):
-        normalized["mentor_email"] = str(record.get("mentor_email") or "").strip()
-    if record.get("hardcore_enabled") is not None:
-        normalized["hardcore_enabled"] = _safe_bool(record.get("hardcore_enabled"), False)
+    if record.get("inference_mode"):
+        normalized["inference_mode"] = str(record.get("inference_mode") or "local")
+    if record.get("cloud_session_id"):
+        normalized["cloud_session_id"] = str(record.get("cloud_session_id") or "")
+    if record.get("report_status"):
+        normalized["report_status"] = str(record.get("report_status") or "").strip()
+    if record.get("report_started_at"):
+        normalized["report_started_at"] = str(record.get("report_started_at") or "").strip()
+    if record.get("report_completed_at"):
+        normalized["report_completed_at"] = str(record.get("report_completed_at") or "").strip()
     return normalized
 
 

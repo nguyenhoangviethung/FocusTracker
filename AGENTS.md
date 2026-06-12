@@ -1,131 +1,356 @@
-# 🚀 PROJECT MASTER SPECIFICATION: FOCUSFLOW AI (V1.0)
+# FOCUSFLOW AI DISTRIBUTED ARCHITECTURE SPECIFICATION
 
-## 1. CONTEXT & ROLE
-You are a Senior Full-Stack Python Developer and UI/UX Expert. We are building "FocusFlow AI", a cross-platform desktop application using Python and `CustomTkinter`.
-The UI stack is intentionally standardized on `CustomTkinter` only. Do not add `ttkbootstrap` unless the team explicitly revisits the decision; mixing Tk theme systems has caused pixelated/inconsistent rendering on Ubuntu.
-It is an advanced Pomodoro timer integrated with a Spatio-Temporal AI model (MediaPipe + late-fusion GRU + TCN + XGBoost) to track user focus via webcam, combined with an OS-level Heuristic Tracker (Window Title parsing).
+## 1. Product Direction
 
-Read this ENTIRE document to understand the architectural vision, UI/UX guidelines, ASCII wireframes, and the 10 Core Use Cases before writing any code.
+FocusFlow AI is a privacy-oriented distributed focus monitoring system.
 
----
+The product has two runtime sides:
 
-## 2. DESIGN SYSTEM & THEMING
-The app must support dynamic Light/Dark mode toggling using `CustomTkinter` (`customtkinter.set_appearance_mode`).
-**Strict Rule:** Do NOT use native borders (`border_width=0`). Rely strictly on color contrast between `Bg_App` and `Bg_Card`.
-**Linux Rendering Rule:** Keep all application pages inside CTk widgets, use `CTkImage` for OpenCV frames, avoid native `ttk` widgets, and keep one semantic theme source in `ui/theme.py`.
+- **Edge desktop client:** PyQt6, OpenCV, and MediaPipe. It captures webcam
+  frames, extracts a 30-value facial feature vector per frame, renders the
+  local preview, and sends feature sequences to the cloud.
+- **Google Cloud backend:** FastAPI on Cloud Run. It enriches raw sequences,
+  runs the deployed GRU + TCN + XGBoost late-fusion model, stores session
+  summaries, and records report completion metadata.
 
-**Semantic Colors (Light Mode):**
-- `Bg_App`: "#F3F4F6" | `Bg_Sidebar`: "#FFFFFF" | `Bg_Card`: "#FFFFFF"
-- `Text_Primary`: "#1F2937" | `Text_Secondary`: "#6B7280"
-- `Accent_Focus`: "#10B981" | `Accent_Warn`: "#EF4444" | `Btn_Neutral`: "#E5E7EB"
+The project is intentionally **vision-only**.
 
-**Semantic Colors (Dark Mode):**
-- `Bg_App`: "#0F0F0F" | `Bg_Sidebar`: "#141414" | `Bg_Card`: "#1A1A1A"
-- `Text_Primary`: "#FFFFFF" | `Text_Secondary`: "#888888"
-- `Accent_Focus`: "#2ECC71" | `Accent_Warn`: "#E74C3C" | `Btn_Neutral`: "#333333"
+### Removed capabilities
 
-**Global Styles:** Font=("Inter", 14) or ("Segoe UI", 14). Corner_Radius=12.
+Do not implement or reintroduce:
 
----
+- active window title tracking;
+- process monitoring or process termination;
+- keystroke, mouse, CPM, or KPM collection;
+- productive/distracting keyword heuristics;
+- Hardcore Mode;
+- AI + OS heuristic fusion;
+- raw webcam frame upload or storage.
 
-## 3. ASCII UI WIREFRAMES (LAYOUT REFERENCE)
-The app uses a fixed Left Sidebar (width ~200) and a dynamic Main Content Frame. Here is the exact layout you must replicate using `CustomTkinter` frames and grids:
+The final focus decision comes only from the deployed late-fusion engagement
+model and the face-presence guard.
 
-### Page 1: HomePage (Routing: Home)
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Bg_Sidebar] │ [Bg_App] -> Contains [Bg_Card] elements                      │
-│ ❖ Home       │   [Text_Primary] Hello! Ready for a deep focus session?      │
-│              │                                                              │
-│ 📊 Report    │   ┌────────────────────────────────────────────────────────┐ │
-│              │   │ [Bg_Card] POMODORO SETUP                               │ │
-│ ⚙ Settings   │   │  Duration:              [ < ]  25 Mins  [ > ]          │ │
-│              │   │  ⚡ Hardcore Mode:       [ Switch Toggle ]              │ │
-│ 👁 Vision     │   │  ✉ Send Mentor Report:  [ Switch Toggle ]              │ │
-│              │   │  ▶ Demo Mode Video:     [ Select .mp4 File ]           │ │
-│              │   │                                                        │ │
-│              │   │         [ START SESSION (Color: Accent_Focus) ]        │ │
-│              │   └────────────────────────────────────────────────────────┘ │
-└──────────────┴──────────────────────────────────────────────────────────────┘
-```
-### Page 2: ActiveSessionPage (Replaces Main Frame on Start)
+## 2. Source Of Truth
+
+When documents disagree, use this priority:
+
+1. This `AGENTS.md`.
+2. Runtime model metadata in `models/late_fusion/`.
+3. `GUIDE.md`.
+4. Existing implementation and older planning documents.
+
+Do not replace the deployed model with an imagined architecture. The current
+production model is:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Bg_Sidebar] │ [Bg_App]                                                     │
-│ ❖ Home       │   ┌────────────────────────────────────────────────────────┐ │
-│              │   │ [Bg_Card]                                              │ │
-│ 📊 Report    │   │                  24:59 (Text: Huge)                    │ │
-│              │   │          STATUS: FOCUSED (Color: Accent_Focus)         │ │
-│ ⚙ Settings   │   └────────────────────────────────────────────────────────┘ │
-│              │   ┌────────────────────────┐  ┌────────────────────────────┐ │
-│ 👁 Vision     │   │ [Bg_Card] AI CAMERA    │  │ [Bg_Card] OS TRACKER       │ │
-│              │   │ Signal: Coding         │  │ Active App: VS Code        │ │
-│              │   │ State : FOCUSED        │  │ State     : FOCUSED        │ │
-│              │   └────────────────────────┘  └────────────────────────────┘ │
-│              │      [ PAUSE (Btn_Neutral) ]      [ END (Accent_Warn) ]      │
-└──────────────┴──────────────────────────────────────────────────────────────┘
-
+raw frame features:       30 values
+raw temporal sequence:    (30, 30)
+enriched model sequence:  (30, 90)
+components:               GRU ONNX + TCN ONNX + XGBoost
+selected weights:         0.30 + 0.30 + 0.40
+selected threshold:       0.54
+runtime:                  CPU, ONNXRuntime, XGBoost
 ```
 
-### Page 3: SettingsPage (Routing: Settings)
+`tracking.buffer.enrich_raw_sequence()` is the canonical transformation from
+`(30, 30)` to `(30, 90)`. Both local tests and cloud inference must use it.
+
+## 3. Target GCP Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Bg_Sidebar] │ [Bg_App]                                                     │
-│ ❖ Home       │   ┌────────────────────────────────────────────────────────┐ │
-│              │   │ [Bg_Card] APPEARANCE & ACCOUNT                         │ │
-│ 📊 Report    │   │  Theme:          ( ) Light    (•) Dark                 │ │
-│              │   │  Mentor Email:   [ Entry Field                 ]       │ │
-│ ⚙ Settings   │   └────────────────────────────────────────────────────────┘ │
-│              │   ┌────────────────────────────────────────────────────────┐ │
-│ 👁 Vision     │   │ [Bg_Card] OS TRACKER KEYWORDS                          │ │
-│              │   │  Productive: [ vscode, github, pdf, docx, figma ]      │ │
-│              │   │  Distracting: [ facebook, netflix, lol, tiktok  ]      │ │
-│              │   └────────────────────────────────────────────────────────┘ │
-└──────────────┴──────────────────────────────────────────────────────────────┘
-
+┌──────────────────────────── EDGE DESKTOP ────────────────────────────┐
+│ PyQt6 UI                                                            │
+│   │                                                                 │
+│   ├── Camera worker: OpenCV -> MediaPipe -> raw feature [30]        │
+│   ├── Sliding buffer: 30 frames -> raw sequence [30, 30]            │
+│   ├── Preview renderer: local frames only                           │
+│   └── Network worker: session REST + telemetry WebSocket            │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │ TLS
+                                │ JSON v1 initially
+                                │ no image/video payload
+                                ▼
+┌──────────────────────── GOOGLE CLOUD ────────────────────────────────┐
+│ Cloud Run: focusflow-api                                            │
+│   ├── FastAPI REST session lifecycle                                │
+│   ├── WebSocket telemetry ingestion                                 │
+│   ├── shape/schema/idempotency validation                           │
+│   ├── enrich [30,30] -> [30,90]                                     │
+│   ├── GRU + TCN + XGBoost CPU inference                             │
+│   └── model-only focus decision                                     │
+│                                                                     │
+│ Firestore                                                           │
+│   ├── session metadata and status                                   │
+│   └── completed summary and report metadata                        │
+│                                                                     │
+│ Pub/Sub                                                             │
+│   └── durable domain events: session.completed                      │
+│                                                                     │
+│ Secret Manager                                                      │
+│   ├── FOCUSFLOW_API_KEY                                             │
+│   └── credentials for Firestore / PubSub                            │
+│                                                                     │
+│ Artifact Registry + Cloud Build                                     │
+│   └── build and deploy immutable container revisions                │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Page 4: AIVisionPage (Routing: Vision - Developer Showcase)
+### Initial deployment boundary
+
+The first production slice keeps API gateway and CPU inference in one Cloud Run
+service. This avoids an unnecessary network hop and keeps the thesis demo
+operationally understandable.
+
+Only split inference into another Cloud Run service after load tests prove that
+model CPU or memory contention is the bottleneck. The shared protocol must not
+change when that split happens.
+
+### Cloud Run constraints
+
+- WebSocket connections are subject to Cloud Run request timeout.
+- The edge client must reconnect with exponential backoff and jitter.
+- A Cloud Run instance is stateless; no session truth may live only in memory.
+- Model artifacts are loaded once during application lifespan per instance.
+- Blocking inference runs outside the asyncio event loop.
+- Configure CPU to remain allocated while handling a connected request.
+- Start with concurrency `4`; tune only from measured latency and memory data.
+
+## 4. Repository Structure
+
+The repository evolves in place. Do not create a second desktop application or
+duplicate UI tree.
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Bg_Sidebar] │ [Bg_App]                                                     │
-│ ❖ Home       │  ┌─────────────────────────────┐ ┌─────────────────────────┐ │
-│              │  │ [Bg_Card] CAMERA FEED       │ │ [Bg_Card] TELEMETRY     │ │
-│ 📊 Report    │  │   [ CTkLabel containing ]   │ │ E2E Latency: 28 ms      │ │
-│              │  │   [ OpenCV Frame with   ]   │ │ Throughput : 35 FPS     │ │
-│ ⚙ Settings   │  │   [ MediaPipe Mesh      ]   │ │ EAR : 0.32 [ProgressBa] │ │
-│              │  │                             │ │ MAR : 0.05 [ProgressBa] │ │
-│ 👁 Vision     │  └─────────────────────────────┘ │ Pitch: -5° Yaw: +2°     │ │
-│              │  ┌─────────────────────────────────────────────────────────┐ │
-│              │  │ [Bg_Card] LATE-FUSION MODEL OUTPUT                      │ │
-│              │  │  Confidence: [████████████████░░░░] 82%                 │ │
-│              │  │  VOTE: [ FOCUSED ] (Color: Accent_Focus)                │ │
-│              │  └─────────────────────────────────────────────────────────┘ │
-└──────────────┴──────────────────────────────────────────────────────────────┘
-
+FocusTracker/
+├── main.py                         # Single desktop entrypoint
+├── ui/                             # Existing PyQt6 desktop UI
+├── tracking/
+│   ├── detector.py                 # MediaPipe feature extraction
+│   ├── buffer.py                   # Canonical raw-to-enriched transform
+│   ├── inference.py                # Local fallback and golden tests
+│   └── tracker.py                  # Vision worker only
+├── edge/
+│   └── cloud_client.py             # REST lifecycle + WebSocket transport
+├── shared/
+│   ├── contracts.py                # Versioned Pydantic wire contracts
+│   └── __init__.py
+├── server/
+│   ├── app.py                      # FastAPI application factory/lifespan
+│   ├── config.py                   # Environment configuration
+│   ├── api/
+│   │   └── routes.py               # REST + WebSocket routes
+│   ├── core/
+│   │   └── inference.py            # Cloud model adapter
+│   ├── repositories/
+│   │   └── sessions.py             # Memory dev + Firestore production
+│   └── services/
+│       ├── event_publisher.py       # Pub/Sub adapter
+│       └── report finalization is handled inline at session complete
+├── deploy/gcp/
+│   ├── Dockerfile.api
+│   ├── cloudbuild.yaml
+│   ├── env.example
+│   └── CONSOLE_SETUP.md
+├── models/late_fusion/             # Immutable runtime artifacts
+└── tests/
+    ├── server/
+    └── test_logic_oonx.py
 ```
 
----
+Legacy `tracking/os_tracker.py`, `tracking/hardcore.py`, and
+`server/core/fusion.py` must not exist.
 
-## 4. THE 10 CORE USE CASES (BUSINESS LOGIC)
+## 5. Protocol V1
 
-* **UC1: Start Session:** Initializes Pomodoro timer and background tracking threads.
-* **UC2: Hybrid Monitoring:** AI (Webcam, MediaPipe features, late-fusion engagement ensemble) + OS Tracker (Window Titles). 
-* **UC3: Pause/Resume:** Must temporarily sleep/release OpenCV camera and OS tracking threads to save CPU.
-* **UC4: End & AI Coach:** Aggregates focus %, sends to OpenAI API, displays 3 lines of feedback.
-* **UC5: View History:** Read/Write `history.json`.
-* **UC6: Customize Keywords:** Edit `PRODUCTIVE_KEYWORDS` and `DISTRACTING_KEYWORDS`.
-* **UC7: Guardian Report:** Auto-send email via `smtplib` at session end.
-* **UC8: Hardcore Mode:** If distracted > 30s, use `psutil` to auto-kill the distracting app.
-* **UC9: AI Vision Showcase:** The AIVisionPage displaying live inference telemetry and late-fusion component output.
-* **UC10: Demo Mode (Video Import):** Allows selecting an `.mp4` file via `customtkinter.filedialog` to feed `cv2.VideoCapture()` instead of webcam (ID 0).
+Contracts live in `shared/contracts.py`. Contract changes require either
+backward-compatible optional fields or a new protocol version.
 
-## 5. MAINTENANCE NOTES
+### Session lifecycle
 
-* Main entrypoint: run `python main.py`. Do not reintroduce a second UI entrypoint unless there is a clear packaging reason.
-* Active UI pages live in `ui/screens/home_page.py`, `active_session_page.py`, `settings_page.py`, `report_page.py`, and `ai_vision_page.py`.
-* Model deployment notes are copied from `../engagement-cpu/checkpoints/reports/GUIDE.md` into this repo at `GUIDE.md`; use the local copy during app maintenance.
-* Runtime artifacts for the current model live under `models/late_fusion/`.
+```text
+POST /v1/sessions
+GET  /v1/sessions/{session_id}
+POST /v1/sessions/{session_id}/complete
+WS   /v1/ws/sessions/{session_id}?device_id=...
+POST /v1/inference
+GET  /healthz
+GET  /readyz
+```
+
+### Telemetry packet
+
+```json
+{
+  "protocol_version": "1.0",
+  "message_id": "uuid",
+  "session_id": "uuid",
+  "device_id": "stable-installation-id",
+  "captured_at": "ISO-8601 UTC",
+  "sequence_number": 42,
+  "raw_feature_sequence": [[0.0]],
+  "face_found": true,
+  "configuration": {
+    "engagement_threshold": 0.54
+  }
+}
+```
+
+The example abbreviates the tensor. Validation requires exactly `30` frames and
+exactly `30` float values per frame.
+
+### Inference response
+
+The server returns:
+
+- model name and version;
+- final focus score and state;
+- GRU, TCN, and XGBoost component probabilities;
+- selected weights;
+- decision trace;
+- processing latency;
+- original `message_id` for correlation.
+
+Do not include frames, landmarks, window titles, process names, or input-device
+activity in any protocol.
+
+## 6. Security And Privacy
+
+- Webcam frames remain in edge process memory and are never transmitted.
+- Facial features are biometric-derived telemetry and are still sensitive.
+  Never claim that they are anonymous or impossible to reconstruct.
+- Use TLS only (`https`/`wss`) outside local development.
+- Authenticate desktop requests using an API key during the thesis phase.
+- Store the API key in Secret Manager for cloud services and secure local
+  configuration for the desktop client.
+- Do not commit `.env`, credentials, service-account keys, or legacy report-workflow secrets.
+- Production Cloud Run service accounts use least privilege.
+- Do not download long-lived Google service-account JSON keys to the desktop.
+- Add Firebase/Auth0/Identity Platform user authentication in a later phase if
+  multi-user identity becomes part of the evaluated scope.
+
+## 7. Storage And Events
+
+### Firestore
+
+Use Firestore Native mode. Store durable session data only:
+
+```text
+focusflow_sessions/{session_id}
+  device_id
+  user_id
+  status
+  started_at
+  ended_at
+  last_seen_at
+  duration_seconds
+  summary
+  model_version
+  report_status
+  report_started_at
+  report_completed_at
+```
+
+Do not persist every 30 FPS feature sequence in Firestore. Realtime telemetry is
+processed in flight. Persist only sampled metrics later if a measured research
+requirement justifies the cost.
+
+### Pub/Sub and report completion
+
+- Publish `session.completed` after a summary is durably saved.
+- Event payloads contain identifiers and summary metadata, not raw features.
+- Keep event handlers idempotent.
+
+## 8. Desktop Runtime Modes
+
+During migration the desktop supports:
+
+- `local`: current bundled model inference, no cloud required;
+- `cloud`: edge feature extraction, cloud inference;
+- `hybrid`: cloud preferred, local fallback after network timeout.
+
+Production target is `cloud`. Thesis demos should keep `hybrid` available so a
+network interruption does not destroy the demonstration.
+
+The UI thread must never perform camera capture, inference, HTTP, or WebSocket
+I/O directly.
+
+## 9. GCP Deployment Standard
+
+Default region for a Vietnam-based demo is `asia-southeast1` unless latency,
+quota, or policy measurements justify another region.
+
+Required Google Cloud services:
+
+- Cloud Run
+- Artifact Registry
+- Cloud Build
+- Firestore
+- Pub/Sub
+- Secret Manager
+- Cloud Logging and Cloud Monitoring
+
+Use a dedicated project such as `focusflow-thesis-<suffix>`. Do not deploy into
+an unrelated shared project.
+
+All deployable resources must be reproducible from checked-in Docker,
+Cloud Build, and documented Console settings. Manual Console changes must be
+recorded in `deploy/gcp/CONSOLE_SETUP.md`.
+
+## 10. Implementation Phases
+
+### Phase 1: Vision-only cleanup
+
+- Remove OS tracker, keyword heuristics, Hardcore Mode, and their UI.
+- Keep local late-fusion inference working.
+- Replace the old OS card with component model telemetry.
+- Update all documentation and dependencies.
+
+Exit criterion: no runtime import or UI reference to removed capabilities.
+
+### Phase 2: Cloud API vertical slice
+
+- Add versioned contracts.
+- Add FastAPI health, session, inference, and WebSocket endpoints.
+- Load the late-fusion model once per Cloud Run instance.
+- Add memory repository for tests and Firestore repository for production.
+
+Exit criterion: an integration test submits `(30,30)` and receives component
+probabilities from the real bundled model.
+
+### Phase 3: Edge cloud transport
+
+- Add a network worker with reconnect/backoff.
+- Add stable device ID and session lifecycle.
+- Add `local`, `cloud`, and `hybrid` modes.
+- Keep preview frames strictly local.
+
+Exit criterion: desktop demo survives a temporary network disconnect.
+
+### Phase 4: Durable workflow
+
+- Save summaries in Firestore.
+- Publish `session.completed`.
+- Record report completion metadata only.
+
+Exit criterion: repeated completion calls are idempotent.
+
+### Phase 5: Operations and evaluation
+
+- Add Cloud Build deployment.
+- Add structured logs, request correlation, latency metrics, and alerts.
+- Benchmark bandwidth, p50/p95 latency, CPU, memory, reconnect recovery, and
+  model throughput.
+- Document measured results; do not present estimates as facts.
+
+## 11. Engineering Rules
+
+- Keep `python main.py` as the only desktop entrypoint.
+- Use PyQt6 only for the desktop UI.
+- Keep model runtime free of PyTorch.
+- Reuse existing model artifacts and metadata.
+- Prefer typed contracts and structured serialization.
+- Never silently accept the wrong model shape.
+- Never do blocking work in the UI or asyncio event loop.
+- Add focused tests for every contract, repository, and inference boundary.
+- Preserve offline fallback until cloud reliability has been demonstrated.
+- Update this document whenever a system boundary or protocol changes.

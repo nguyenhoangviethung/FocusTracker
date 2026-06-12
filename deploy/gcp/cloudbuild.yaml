@@ -1,0 +1,50 @@
+substitutions:
+  _REGION: asia-southeast1
+  _REPOSITORY: focusflow
+  _SERVICE: focusflow-api
+  _IMAGE: focusflow-api
+  _SERVICE_ACCOUNT: focusflow-api
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/gcp/Dockerfile.api
+      - --tag
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com
+      - --allow-unauthenticated
+      - --cpu=2
+      - --memory=2Gi
+      - --concurrency=4
+      - --timeout=3600
+      - --min-instances=0
+      - --max-instances=10
+      - --set-env-vars=FOCUSFLOW_ENV=production,FOCUSFLOW_REPOSITORY=firestore,FOCUSFLOW_EVENT_BACKEND=pubsub,FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events
+      - --set-secrets=FOCUSFLOW_API_KEY=focusflow-api-key:latest
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

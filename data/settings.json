@@ -6,8 +6,6 @@
   "camera_distance_scale": 0.2,
   "hardcore_enabled": false,
   "hardcore_countdown_seconds": 30,
-  "mentor_report_enabled": false,
-  "mentor_email": "",
   "demo_video_path": "",
   "productive_keywords": "vscode, github, pdf, docx, figma",
   "distracting_keywords": "facebook, netflix, lol, tiktok",

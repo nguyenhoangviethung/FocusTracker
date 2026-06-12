@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.py[cod]
+*.log
+.env
+data/
+logs/
+build/
+dist/
+.pytest_cache/
+tests/
+scripts/
+*.spec

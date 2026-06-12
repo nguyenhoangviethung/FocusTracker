@@ -1,31 +1,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import queue
 import threading
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import cv2
 
+from edge.cloud_client import CloudClientConfig, FocusFlowCloudClient
+from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
 from tracking.buffer import FeatureSequenceBuffer
 from tracking.detector import FaceFeatureDetector
-from tracking.hardcore import HardcoreDisciplineController, admin_permission_hint
 from tracking.inference import ONNXEngagementInferencer
-from tracking.os_tracker import ActiveWindowTracker
 from utils.logger import get_logger
 
 
 logger = get_logger("tracker")
 
 
-FusionLogic = Callable[[float, dict[str, Any] | None, dict[str, Any]], dict[str, Any]]
-DEFAULT_PRODUCTIVE_KEYWORDS = ("vscode", "github", "pdf", "docx", "figma")
-DEFAULT_DISTRACTING_KEYWORDS = ("facebook", "netflix", "lol", "tiktok")
 INFERENCE_EVERY_N_FRAMES = 3
 PREVIEW_EVERY_N_FRAMES = 2
+VALID_INFERENCE_MODES = {"local", "cloud", "hybrid"}
 
 
 @dataclass(slots=True)
@@ -36,17 +34,17 @@ class TrackerConfig:
     camera_distance_scale: float = 0.085
     engagement_threshold: float = 0.54
     smoothing_window: int = 5
-    os_ai_threshold: float = 0.45
-    os_override_threshold: float = 0.60
-    hardcore_enabled: bool = False
-    hardcore_countdown_seconds: int = 30
-    productive_keywords: tuple[str, ...] = DEFAULT_PRODUCTIVE_KEYWORDS
-    distracting_keywords: tuple[str, ...] = DEFAULT_DISTRACTING_KEYWORDS
+    inference_mode: str = "local"
+    cloud_api_url: str = ""
+    cloud_api_key: str = ""
+    device_id: str = ""
+    session_duration_seconds: int = 25 * 60
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "TrackerConfig":
-        productive = _split_keywords(payload.get("productive_keywords"), DEFAULT_PRODUCTIVE_KEYWORDS)
-        distracting = _split_keywords(payload.get("distracting_keywords"), DEFAULT_DISTRACTING_KEYWORDS)
+        inference_mode = str(payload.get("inference_mode") or "local").strip().lower()
+        if inference_mode not in VALID_INFERENCE_MODES:
+            inference_mode = "local"
         return cls(
             camera_index=_to_int(payload.get("camera_index"), 0),
             demo_video_path=str(payload.get("demo_video_path") or "").strip(),
@@ -54,12 +52,26 @@ class TrackerConfig:
             camera_distance_scale=_to_float(payload.get("camera_distance_scale"), 0.18),
             engagement_threshold=_to_float(payload.get("engagement_threshold"), 0.54),
             smoothing_window=max(3, min(5, _to_int(payload.get("smoothing_window"), 5))),
-            os_ai_threshold=_to_float(payload.get("os_ai_threshold"), 0.45),
-            os_override_threshold=_to_float(payload.get("os_override_threshold"), 0.60),
-            hardcore_enabled=_to_bool(payload.get("hardcore_enabled"), False),
-            hardcore_countdown_seconds=max(5, _to_int(payload.get("hardcore_countdown_seconds"), 30)),
-            productive_keywords=productive,
-            distracting_keywords=distracting,
+            inference_mode=inference_mode,
+            cloud_api_url=str(
+                payload.get("cloud_api_url")
+                or os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
+            ).strip(),
+            cloud_api_key=str(
+                payload.get("cloud_api_key")
+                or os.getenv("FOCUSFLOW_CLOUD_API_KEY", "")
+            ).strip(),
+            device_id=str(
+                payload.get("device_id")
+                or os.getenv("FOCUSFLOW_DEVICE_ID", "")
+            ).strip(),
+            session_duration_seconds=max(
+                1,
+                _to_int(
+                    payload.get("session_duration_seconds"),
+                    _to_int(payload.get("pomodoro_minutes"), 25) * 60,
+                ),
+            ),
         )
 
     def capture_source(self) -> int | str:
@@ -67,44 +79,42 @@ class TrackerConfig:
             return self.demo_video_path
         return self.camera_index
 
-    def fusion_payload(self) -> dict[str, Any]:
-        return {
-            "engagement_threshold": self.engagement_threshold,
-            "os_ai_threshold": self.os_ai_threshold,
-            "os_override_threshold": self.os_override_threshold,
-            "productive_keywords": self.productive_keywords,
-            "distracting_keywords": self.distracting_keywords,
-            "hardcore_enabled": self.hardcore_enabled,
-            "hardcore_countdown_seconds": self.hardcore_countdown_seconds,
-        }
-
-
 class FocusSessionTracker:
-    """Runs Phase 2 tracking workers and streams UI-safe telemetry through a queue."""
+    """Runs the vision pipeline and streams UI-safe telemetry through a queue."""
 
     def __init__(
         self,
         config: TrackerConfig,
         output_queue: queue.Queue[dict[str, Any]],
-        fusion_logic: FusionLogic | None = None,
     ) -> None:
         self.config = config
         self.output_queue = output_queue
-        self.fusion_logic = fusion_logic or _default_fusion_logic
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._camera_thread: threading.Thread | None = None
-        self._os_thread: threading.Thread | None = None
-        self._lock = threading.Lock()
-        self._latest_os_snapshot: dict[str, Any] | None = None
+        self._network_thread: threading.Thread | None = None
+        self._cloud_packets: queue.Queue[TelemetryPacket] = queue.Queue(maxsize=2)
+        self._cloud_responses: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=4)
+        self._cloud_session_id = ""
+        self._cloud_sequence = 0
+        self._cloud_client: FocusFlowCloudClient | None = None
+
+    @property
+    def cloud_session_id(self) -> str:
+        return self._cloud_session_id
 
     def start(self) -> None:
         self._stop_event.clear()
         self._pause_event.clear()
+        if self.config.inference_mode in {"cloud", "hybrid"}:
+            self._network_thread = threading.Thread(
+                target=self._network_loop,
+                name="focusflow-network",
+                daemon=True,
+            )
+            self._network_thread.start()
         self._camera_thread = threading.Thread(target=self._camera_loop, name="focusflow-camera", daemon=True)
-        self._os_thread = threading.Thread(target=self._os_loop, name="focusflow-os", daemon=True)
         self._camera_thread.start()
-        self._os_thread.start()
         logger.info("FocusSessionTracker started")
 
     def pause(self) -> None:
@@ -118,10 +128,45 @@ class FocusSessionTracker:
     def stop(self) -> None:
         self._stop_event.set()
         self._pause_event.clear()
-        for thread in [self._camera_thread, self._os_thread]:
+        for thread in [self._camera_thread, self._network_thread]:
             if thread and thread.is_alive():
                 thread.join(timeout=1.5)
         logger.info("FocusSessionTracker stopped")
+
+    def complete_cloud_session(self, summary: dict[str, Any]) -> None:
+        if self._cloud_client is None or not self._cloud_session_id:
+            return
+        payload = SessionSummary(
+            duration_seconds=max(0, _to_int(summary.get("total_seconds"), 0)),
+            focused_seconds=max(0, _to_int(summary.get("focused_seconds"), 0)),
+            average_focus=max(
+                0.0,
+                min(1.0, _to_float(summary.get("average_score"), 0.0)),
+            ),
+            distraction_count=max(0, _to_int(summary.get("distraction_count"), 0)),
+            focus_streak_seconds=max(
+                0.0,
+                _to_float(summary.get("focus_streak_seconds"), 0.0),
+            ),
+            completed=_to_bool(summary.get("completed"), False),
+            minute_focus_scores=[
+                max(0.0, min(1.0, _to_float(value, 0.0)))
+                for value in summary.get("minute_scores", [])
+            ],
+        )
+        threading.Thread(
+            target=self._complete_cloud_request,
+            args=(payload,),
+            name="focusflow-cloud-complete",
+            daemon=True,
+        ).start()
+
+    def _complete_cloud_request(self, summary: SessionSummary) -> None:
+        try:
+            assert self._cloud_client is not None
+            self._cloud_client.complete_session(self._cloud_session_id, summary)
+        except Exception:
+            logger.warning("Unable to complete cloud session", exc_info=True)
 
     def _camera_loop(self) -> None:
         detector: FaceFeatureDetector | None = None
@@ -131,17 +176,19 @@ class FocusSessionTracker:
         last_ai_result: dict[str, Any] | None = None
 
         try:
-            inferencer = ONNXEngagementInferencer(
-                threshold=self.config.engagement_threshold,
-                smoothing_window=self.config.smoothing_window,
-            )
+            inferencer = None
+            if self.config.inference_mode in {"local", "hybrid"}:
+                inferencer = ONNXEngagementInferencer(
+                    threshold=self.config.engagement_threshold,
+                    smoothing_window=self.config.smoothing_window,
+                )
             detector = FaceFeatureDetector(
                 draw_landmarks=self.config.show_landmarks,
                 camera_distance_scale=self.config.camera_distance_scale,
             )
             buffer = FeatureSequenceBuffer(
-                sequence_length=inferencer.spec.sequence_length,
-                frame_feature_dim=inferencer.spec.raw_feature_dim,
+                sequence_length=30,
+                frame_feature_dim=30,
             )
 
             while not self._stop_event.is_set():
@@ -151,7 +198,8 @@ class FocusSessionTracker:
                         cap.release()
                         cap = None
                         buffer.clear()
-                        inferencer.reset()
+                        if inferencer is not None:
+                            inferencer.reset()
                     time.sleep(0.2)
                     continue
 
@@ -173,6 +221,7 @@ class FocusSessionTracker:
                 frame_index += 1
                 detection = detector.extract(frame)
                 enriched = buffer.append(detection.feature)
+                raw_sequence = buffer.raw_sequence()
                 ai_result: dict[str, Any] = {
                     "probability": 0.0,
                     "focus_score": 0.0,
@@ -180,15 +229,25 @@ class FocusSessionTracker:
                     "ready": False,
                 }
                 if enriched is not None:
-                    if detection.face_found:
-                        should_infer = (
-                            last_ai_result is None
-                            or frame_index % INFERENCE_EVERY_N_FRAMES == 0
-                        )
+                    should_infer = last_ai_result is None or frame_index % INFERENCE_EVERY_N_FRAMES == 0
+                    if (
+                        should_infer
+                        and raw_sequence is not None
+                        and self.config.inference_mode in {"cloud", "hybrid"}
+                    ):
+                        self._queue_cloud_packet(raw_sequence, detection.face_found)
+
+                    cloud_result = self._latest_cloud_result()
+                    if cloud_result is not None:
+                        last_ai_result = cloud_result
+                        ai_result = dict(cloud_result)
+                    elif detection.face_found and inferencer is not None:
                         if should_infer:
                             last_ai_result = inferencer.predict(enriched)
                         ai_result = dict(last_ai_result)
-                    else:
+                    elif detection.face_found and last_ai_result is not None:
+                        ai_result = dict(last_ai_result)
+                    elif not detection.face_found:
                         ai_result = {
                             "probability": 0.0,
                             "raw_probability": 0.0,
@@ -198,20 +257,16 @@ class FocusSessionTracker:
                         }
                         last_ai_result = ai_result
 
-                with self._lock:
-                    os_snapshot = dict(self._latest_os_snapshot) if self._latest_os_snapshot else None
-
                 probability = float(ai_result.get("focus_score", 0.0))
                 model_ready = bool(ai_result.get("ready", False))
                 if model_ready:
-                    fusion = self.fusion_logic(probability, os_snapshot, self.config.fusion_payload())
+                    state = (
+                        "FOCUSED"
+                        if str(ai_result.get("state", "DISTRACTED")) == "ENGAGED"
+                        else "DISTRACTED"
+                    )
                 else:
-                    fusion = {
-                        "state": "WARMING_UP",
-                        "source": "ai_buffer",
-                        "reason": "Waiting for enough frames before first model inference.",
-                        "ai_probability": probability,
-                    }
+                    state = "WARMING_UP"
                 latency_ms = (time.perf_counter() - loop_started_at) * 1000.0
                 self._put(
                     {
@@ -231,9 +286,11 @@ class FocusSessionTracker:
                         "model_ready": model_ready,
                         "components": ai_result.get("components"),
                         "weights": ai_result.get("weights"),
-                        "state": fusion.get("state", "DISTRACTED"),
-                        "fusion": fusion,
-                        "os": os_snapshot,
+                        "inference_source": ai_result.get(
+                            "inference_source",
+                            "local" if inferencer is not None else "cloud",
+                        ),
+                        "state": state,
                         "fps": fps_counter.tick(),
                     }
                 )
@@ -246,47 +303,106 @@ class FocusSessionTracker:
             if detector is not None:
                 detector.close()
 
-    def _os_loop(self) -> None:
-        tracker = ActiveWindowTracker(
-            productive_keywords=self.config.productive_keywords,
-            distraction_keywords=self.config.distracting_keywords,
-            ai_focus_threshold=self.config.os_ai_threshold,
-            heuristic_override_threshold=self.config.os_override_threshold,
-        )
-        discipline = HardcoreDisciplineController(
-            countdown_seconds=self.config.hardcore_countdown_seconds,
-        )
-        if self.config.hardcore_enabled:
+    def _network_loop(self) -> None:
+        if not self.config.cloud_api_url or not self.config.cloud_api_key or not self.config.device_id:
             self._put(
                 {
-                    "type": "hardcore",
-                    "status": "armed",
-                    "message": f"Hardcore đang bật. {admin_permission_hint()}",
-                    "remaining_seconds": self.config.hardcore_countdown_seconds,
+                    "type": "network_status",
+                    "status": "disabled",
+                    "message": "Cloud mode requires URL, API key, and device ID.",
                 }
             )
-        while not self._stop_event.is_set():
-            if self._pause_event.is_set():
-                discipline.reset()
-                time.sleep(0.3)
-                continue
+            return
+
+        client = FocusFlowCloudClient(
+            CloudClientConfig(
+                base_url=self.config.cloud_api_url,
+                api_key=self.config.cloud_api_key,
+                device_id=self.config.device_id,
+            )
+        )
+        self._cloud_client = client
+        attempt = 0
+        while not self._stop_event.is_set() and not self._cloud_session_id:
             try:
-                snapshot = tracker.snapshot().as_dict()
-                with self._lock:
-                    self._latest_os_snapshot = snapshot
-                self._put({"type": "os", "os": snapshot})
-                if self.config.hardcore_enabled:
-                    action = discipline.evaluate(
-                        snapshot=snapshot,
-                        distracting_keywords=self.config.distracting_keywords,
-                        now=time.monotonic(),
+                record = client.create_session(
+                    SessionCreate(
+                        device_id=self.config.device_id,
+                        duration_seconds=self.config.session_duration_seconds,
                     )
-                    if action is not None:
-                        self._put(action.as_dict())
+                )
+                self._cloud_session_id = str(record["session_id"])
+                self._put(
+                    {
+                        "type": "network_status",
+                        "status": "session_created",
+                        "session_id": self._cloud_session_id,
+                    }
+                )
             except Exception as exc:
-                logger.debug("OS tracker snapshot failed", exc_info=True)
-                self._put({"type": "error", "source": "os", "message": str(exc)})
-            time.sleep(1.0)
+                attempt += 1
+                delay = min(30.0, float(2 ** min(attempt, 5)))
+                self._put(
+                    {
+                        "type": "network_status",
+                        "status": "reconnecting",
+                        "message": str(exc),
+                        "retry_in_seconds": delay,
+                    }
+                )
+                self._stop_event.wait(delay)
+
+        if self._cloud_session_id and not self._stop_event.is_set():
+            client.run_telemetry_loop(
+                self._cloud_session_id,
+                self._cloud_packets,
+                self._cloud_responses,
+                self._stop_event,
+            )
+
+    def _queue_cloud_packet(self, raw_sequence, face_found: bool) -> None:
+        if not self._cloud_session_id:
+            return
+        self._cloud_sequence += 1
+        packet = TelemetryPacket(
+            session_id=self._cloud_session_id,
+            device_id=self.config.device_id,
+            sequence_number=self._cloud_sequence,
+            raw_feature_sequence=raw_sequence.tolist(),
+            face_found=face_found,
+            configuration={"engagement_threshold": self.config.engagement_threshold},
+        )
+        try:
+            self._cloud_packets.put_nowait(packet)
+        except queue.Full:
+            try:
+                self._cloud_packets.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._cloud_packets.put_nowait(packet)
+            except queue.Full:
+                pass
+
+    def _latest_cloud_result(self) -> dict[str, Any] | None:
+        latest: dict[str, Any] | None = None
+        while True:
+            try:
+                payload = self._cloud_responses.get_nowait()
+            except queue.Empty:
+                break
+            if payload.get("type") == "network_status":
+                self._put(payload)
+                continue
+            if "focus_score" in payload:
+                latest = {
+                    **payload,
+                    "probability": payload.get("focus_score", 0.0),
+                    "ready": True,
+                    "state": payload.get("ai_state", "DISTRACTED"),
+                    "inference_source": "cloud",
+                }
+        return latest
 
     def _open_capture(self) -> cv2.VideoCapture | None:
         source = self.config.capture_source()
@@ -327,29 +443,6 @@ class _FpsCounter:
         instant = 1.0 / elapsed
         self._fps = instant if self._fps <= 0.0 else (self._fps * 0.8 + instant * 0.2)
         return self._fps
-
-
-def _default_fusion_logic(ai_probability: float, os_snapshot: dict[str, Any] | None, config: dict[str, Any]) -> dict[str, Any]:
-    threshold = _to_float(config.get("engagement_threshold"), 0.54)
-    state = "FOCUSED" if ai_probability >= threshold else "DISTRACTED"
-    return {
-        "state": state,
-        "source": "ai",
-        "reason": "Fallback AI-only fusion.",
-        "ai_probability": ai_probability,
-        "os_state": "UNKNOWN",
-    }
-
-
-def _split_keywords(value: Any, default: tuple[str, ...]) -> tuple[str, ...]:
-    if isinstance(value, str):
-        items = [item.strip().lower() for item in value.split(",")]
-    elif isinstance(value, (list, tuple)):
-        items = [str(item).strip().lower() for item in value]
-    else:
-        items = list(default)
-    cleaned = tuple(item for item in items if item)
-    return cleaned or default
 
 
 def _to_bool(value: Any, default: bool) -> bool:

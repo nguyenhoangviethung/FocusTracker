@@ -5,14 +5,11 @@ dependencies such as MediaPipe unless they actually need webcam tracking.
 """
 
 __all__ = [
-    "ActiveWindowTracker",
     "FaceFeatureDetector",
     "FeatureSequenceBuffer",
     "FocusSessionTracker",
-    "HardcoreDisciplineController",
     "ONNXEngagementInferencer",
     "TrackerConfig",
-    "list_running_processes",
 ]
 
 
@@ -25,21 +22,10 @@ def __getattr__(name: str):
         from tracking.detector import FaceFeatureDetector
 
         return FaceFeatureDetector
-    if name in {"HardcoreDisciplineController", "list_running_processes"}:
-        from tracking.hardcore import HardcoreDisciplineController, list_running_processes
-
-        return {
-            "HardcoreDisciplineController": HardcoreDisciplineController,
-            "list_running_processes": list_running_processes,
-        }[name]
     if name == "ONNXEngagementInferencer":
         from tracking.inference import ONNXEngagementInferencer
 
         return ONNXEngagementInferencer
-    if name == "ActiveWindowTracker":
-        from tracking.os_tracker import ActiveWindowTracker
-
-        return ActiveWindowTracker
     if name in {"FocusSessionTracker", "TrackerConfig"}:
         from tracking.tracker import FocusSessionTracker, TrackerConfig
 

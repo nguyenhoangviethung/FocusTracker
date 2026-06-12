@@ -1,6 +1,5 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QCheckBox, QFileDialog
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QFileDialog
 
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.theme import ThemeManager, font
@@ -13,7 +12,7 @@ class HomePage(ThemedPage):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(24)
         
-        self.header = PageTitle("Ready to Focus?", "Start a new session and let AI manage your distractions.")
+        self.header = PageTitle("Ready to Focus?", "Start a new session and track focus locally or through the cloud.")
         layout.addWidget(self.header)
         
         self.setup_card = Card()
@@ -35,26 +34,6 @@ class HomePage(ThemedPage):
         dur_layout.addStretch()
         dur_layout.addWidget(self.dur_combo)
         self.setup_card.layout.addLayout(dur_layout)
-        
-        # Hardcore Mode
-        hc_layout = QHBoxLayout()
-        hc_label = QLabel("Hardcore Mode (Auto-kill distractions):")
-        hc_label.setFont(font(14))
-        self.hc_check = QCheckBox()
-        hc_layout.addWidget(hc_label)
-        hc_layout.addStretch()
-        hc_layout.addWidget(self.hc_check)
-        self.setup_card.layout.addLayout(hc_layout)
-        
-        # Mentor Report
-        mr_layout = QHBoxLayout()
-        mr_label = QLabel("Send Mentor Report:")
-        mr_label.setFont(font(14))
-        self.mr_check = QCheckBox()
-        mr_layout.addWidget(mr_label)
-        mr_layout.addStretch()
-        mr_layout.addWidget(self.mr_check)
-        self.setup_card.layout.addLayout(mr_layout)
         
         # Demo Video
         vid_layout = QHBoxLayout()
@@ -89,8 +68,6 @@ class HomePage(ThemedPage):
         val = self.dur_combo.currentText().split()[0]
         config = {
             "pomodoro_minutes": int(val),
-            "hardcore_enabled": self.hc_check.isChecked(),
-            "mentor_report_enabled": self.mr_check.isChecked(),
             "demo_video_path": self.vid_path
         }
         app = self.property("app_reference")
@@ -98,9 +75,8 @@ class HomePage(ThemedPage):
             app.start_session(config)
             
     def apply_settings(self, settings: dict) -> None:
-        self.hc_check.setChecked(bool(settings.get("hardcore_enabled", False)))
-        self.mr_check.setChecked(bool(settings.get("mentor_report_enabled", False)))
-        
+        return
+
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)

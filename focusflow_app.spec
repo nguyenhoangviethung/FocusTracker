@@ -10,7 +10,6 @@ project_root = Path(__file__).resolve().parent
 hiddenimports = [
     "cv2",
     "numpy",
-    "customtkinter",
     "onnxruntime",
     "onnxruntime.capi.onnxruntime_pybind11_state",
     "xgboost",

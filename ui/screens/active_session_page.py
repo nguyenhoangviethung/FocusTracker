@@ -73,23 +73,23 @@ class ActiveSessionPage(ThemedPage):
         self.camera_card.layout.addWidget(self.camera_signal)
         self.camera_card.layout.addWidget(self.camera_state)
         
-        self.os_card = Card()
-        h_layout.addWidget(self.os_card)
-        o_title = QLabel("OS TRACKER")
-        o_title.setFont(font(16, bold=True))
-        self.os_app = QLabel("Active App: Not activated")
-        self.os_state = QLabel("State     : FOCUSED")
-        self.hardcore_state = QLabel("Hardcore : OFF")
+        self.model_card = Card()
+        h_layout.addWidget(self.model_card)
+        model_title = QLabel("LATE-FUSION MODEL")
+        model_title.setFont(font(16, bold=True))
+        self.gru_state = QLabel("GRU      : WARMING UP")
+        self.tcn_state = QLabel("TCN      : WARMING UP")
+        self.xgb_state = QLabel("XGBoost  : WARMING UP")
         self.trend_title = QLabel("FOCUS TREND")
         self.trend_title.setFont(font(16, bold=True))
         self.focus_chart = FocusTrendChart(max_points=300)
-        self.os_card.layout.addWidget(o_title)
-        self.os_card.layout.addWidget(self.os_app)
-        self.os_card.layout.addWidget(self.os_state)
-        self.os_card.layout.addWidget(self.hardcore_state)
-        self.os_card.layout.addSpacing(16)
-        self.os_card.layout.addWidget(self.trend_title)
-        self.os_card.layout.addWidget(self.focus_chart)
+        self.model_card.layout.addWidget(model_title)
+        self.model_card.layout.addWidget(self.gru_state)
+        self.model_card.layout.addWidget(self.tcn_state)
+        self.model_card.layout.addWidget(self.xgb_state)
+        self.model_card.layout.addSpacing(16)
+        self.model_card.layout.addWidget(self.trend_title)
+        self.model_card.layout.addWidget(self.focus_chart)
         
         ctrl_layout = QHBoxLayout()
         self.pause_button = QPushButton("PAUSE")
@@ -122,9 +122,9 @@ class ActiveSessionPage(ThemedPage):
         self.status_label.setText("STATUS: STARTING")
         self.camera_signal.setText("Signal: Starting camera/model")
         self.camera_state.setText("State : WARMING_UP")
-        self.os_app.setText("Active App: Scanning")
-        self.os_state.setText("State     : WARMING_UP")
-        self.hardcore_state.setText("Hardcore : ON" if config.get("hardcore_enabled") else "Hardcore : OFF")
+        self.gru_state.setText("GRU      : WARMING UP")
+        self.tcn_state.setText("TCN      : WARMING UP")
+        self.xgb_state.setText("XGBoost  : WARMING UP")
         
         self._start_tracker(config)
         self._render_timer()
@@ -141,6 +141,8 @@ class ActiveSessionPage(ThemedPage):
 
     def end_session(self, completed: bool = False) -> None:
         summary = self._build_session_summary(completed=completed)
+        if self._tracker:
+            self._tracker.complete_cloud_session(summary)
         self.stop_timer()
         self.stop_tracker()
         app = self.property("app_reference")
@@ -174,12 +176,7 @@ class ActiveSessionPage(ThemedPage):
     def _start_tracker(self, config: dict) -> None:
         self._tracker_queue = queue.Queue()
         tracker_config = TrackerConfig.from_dict(config)
-        app = self.property("app_reference")
-        self._tracker = FocusSessionTracker(
-            tracker_config,
-            self._tracker_queue,
-            fusion_logic=app.fusion_logic if app else None,
-        )
+        self._tracker = FocusSessionTracker(tracker_config, self._tracker_queue)
         self._tracker.start()
         self.queue_timer.start(33)
 
@@ -195,15 +192,17 @@ class ActiveSessionPage(ThemedPage):
     def _handle_tracker_payload(self, payload: dict) -> None:
         etype = str(payload.get("type", ""))
         if etype == "telemetry": self._render_telemetry(payload)
-        elif etype == "os": self._render_os(payload.get("os"))
         elif etype == "error":
             src, msg = payload.get("source", "tracker"), payload.get("message", "Unknown error")
-            target = self.camera_signal if src == "camera" else self.os_app
-            target.setText(f"{src}: {msg}")
+            self.camera_signal.setText(f"{src}: {msg}")
         elif etype == "status":
             self.camera_signal.setText(payload.get("message", "Tracking status changed"))
-        elif etype == "hardcore":
-            self._render_hardcore(payload)
+        elif etype == "network_status":
+            status = str(payload.get("status", "unknown"))
+            message = str(payload.get("message", "")).strip()
+            self.camera_signal.setText(
+                f"Cloud: {status}" + (f" | {message}" if message else "")
+            )
 
     def _render_telemetry(self, payload: dict) -> None:
         if "frame" in payload: self._render_frame(payload["frame"])
@@ -216,7 +215,8 @@ class ActiveSessionPage(ThemedPage):
         
         sig_text = f"Signal: {focus_score*100:.1f}% | {face_text} | {fps:.1f} FPS" if model_ready else f"Signal: gathering 30 frames | {face_text} | {fps:.1f} FPS"
         self.camera_signal.setText(sig_text)
-        self.camera_state.setText(f"State : AI={ai_state}")
+        source = str(payload.get("inference_source", "local")).upper()
+        self.camera_state.setText(f"State : AI={ai_state} | {source}")
         self.status_label.setText(f"STATUS: {state}")
         
         self.status_label.setStyleSheet(f"color: {self.theme.color('accent_focus') if state == 'FOCUSED' else self.theme.color('accent_warn')};")
@@ -224,27 +224,15 @@ class ActiveSessionPage(ThemedPage):
         self._latest_focus_score = focus_score
         self._latest_state = state
         self._latest_sample_ready = model_ready
-        if "os" in payload: self._render_os(payload["os"])
+        components = payload.get("components") or {}
+        self.gru_state.setText(self._component_text("GRU", components.get("gru")))
+        self.tcn_state.setText(self._component_text("TCN", components.get("tcn")))
+        self.xgb_state.setText(self._component_text("XGBoost", components.get("xgboost")))
 
-    def _render_os(self, os_snapshot: dict | None) -> None:
-        if not os_snapshot: return
-        pname = os_snapshot.get("process_name", "unknown")
-        wtitle = os_snapshot.get("window_title", pname)
-        title = wtitle[:46] + "..." if len(wtitle) > 49 else wtitle
-        self.os_app.setText(f"Active App: {pname} | {title}")
-        self.os_state.setText(f"State     : {'PRODUCTIVE' if os_snapshot.get('is_productive_context') else 'NEUTRAL'}")
-
-    def _render_hardcore(self, payload: dict) -> None:
-        status, msg = payload.get("status", ""), payload.get("message", "")
-        if status == "countdown":
-            self.hardcore_state.setText(f"Hardcore : {int(payload.get('remaining_seconds', 0))}s before closing app")
-            self.hardcore_state.setStyleSheet(f"color: {self.theme.color('accent_warn')};")
-        elif status == "terminated":
-            self.hardcore_state.setText(f"Hardcore : Closed app ({msg})")
-            self.hardcore_state.setStyleSheet(f"color: {self.theme.color('accent_warn')};")
-        elif status == "armed":
-            self.hardcore_state.setText("Hardcore : ON - protecting session")
-            self.hardcore_state.setStyleSheet(f"color: {self.theme.color('accent_focus')};")
+    @staticmethod
+    def _component_text(name: str, component: dict | None) -> str:
+        probability = float((component or {}).get("probability", 0.0))
+        return f"{name:<8} : {probability * 100:5.1f}%"
 
     def _render_frame(self, frame_bgr) -> None:
         if frame_bgr is None or len(frame_bgr) == 0:
@@ -289,20 +277,35 @@ class ActiveSessionPage(ThemedPage):
         self._last_second_state = st
 
     def _build_session_summary(self, completed: bool) -> dict:
-        ms = [sum(scores)/len(scores) for k, scores in sorted({max(0, (sec-1)//60): [] for sec, _ in self._second_samples}.items()) if scores] # simplified
+        minute_buckets: dict[int, list[float]] = {}
+        for second, score in self._second_samples:
+            minute_index = max(0, (second - 1) // 60)
+            minute_buckets.setdefault(minute_index, []).append(score)
+        ms = [
+            sum(scores) / len(scores)
+            for _, scores in sorted(minute_buckets.items())
+            if scores
+        ]
         avg = sum(s for _, s in self._second_samples)/len(self._second_samples) if self._second_samples else 0.0
         return {
             "minute_scores": ms, "average_score": avg, "completed": completed,
             "total_seconds": max(0, self._tracked_seconds), "focused_seconds": max(0, self._focused_seconds),
             "distraction_count": max(0, self._distraction_count), "focus_streak_seconds": float(self._best_focus_streak),
-            "mentor_email": str(self._session_config.get("mentor_email", "")),
-            "mentor_report_enabled": bool(self._session_config.get("mentor_report_enabled")),
-            "hardcore_enabled": bool(self._session_config.get("hardcore_enabled")),
+            "inference_mode": str(self._session_config.get("inference_mode", "local")),
+            "cloud_session_id": (
+                self._tracker.cloud_session_id if self._tracker else ""
+            ),
         }
 
     def apply_theme(self) -> None:
         super().apply_theme()
         p = self.theme.palette()
         self.focus_chart.apply_theme(p)
-        for label in [self.camera_signal, self.camera_state, self.os_app, self.os_state, self.hardcore_state]:
+        for label in [
+            self.camera_signal,
+            self.camera_state,
+            self.gru_state,
+            self.tcn_state,
+            self.xgb_state,
+        ]:
             label.setStyleSheet(f"color: {p['text_secondary']};")
