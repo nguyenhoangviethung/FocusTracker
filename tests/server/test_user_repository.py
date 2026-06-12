@@ -10,6 +10,7 @@ def test_in_memory_user_repository_password_and_google_paths() -> None:
 
     created = repo.create_password_user("student01", "hash", "salt", "Student One")
     assert created["username"] == "student01"
+    assert created["user_id"].startswith("user_password_")
 
     fetched = repo.get_by_username("student01")
     assert fetched is not None
@@ -21,6 +22,7 @@ def test_in_memory_user_repository_password_and_google_paths() -> None:
 
     google_user = repo.upsert_google_user("google-subject", "person@example.edu", "Google Person")
     assert google_user["auth_provider"] == "google"
+    assert google_user["user_id"].startswith("user_google_")
     assert repo.get_by_google_subject("google-subject")["email"] == "person@example.edu"
 
     with pytest.raises(ValueError):

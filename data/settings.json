@@ -10,10 +10,10 @@
   "demo_video_path": "",
   "engagement_threshold": 0.54,
   "smoothing_window": 5,
-  "auth_user_id": "",
-  "auth_provider": "",
+  "auth_user_id": "f1lY3V8sPIQMdJDNEXN9",
+  "auth_provider": "google",
   "auth_username": "",
-  "auth_email": "",
-  "auth_display_name": "",
-  "auth_last_login_at": ""
+  "auth_email": "nguyenhoangviethung@gmail.com",
+  "auth_display_name": "nguyenhoangviethung@gmail.com",
+  "auth_last_login_at": "2026-06-12T16:33:31.649968Z"
 }

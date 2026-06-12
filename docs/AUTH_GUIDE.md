@@ -33,7 +33,7 @@ FOCUSFLOW_GOOGLE_OAUTH_SECRET=<from Google Cloud OAuth client>
 FOCUSFLOW_GOOGLE_OAUTH_AUTH_URI=https://accounts.google.com/o/oauth2/auth
 FOCUSFLOW_GOOGLE_OAUTH_TOKEN_URI=https://oauth2.googleapis.com/token
 FOCUSFLOW_GOOGLE_OAUTH_REDIRECT_URIS=http://localhost
-FOCUSFLOW_GOOGLE_OAUTH_SCOPES="openid email"
+FOCUSFLOW_GOOGLE_OAUTH_SCOPES="openid https://www.googleapis.com/auth/userinfo.email"
 ```
 
 ## 3. Cách dùng trong app
@@ -61,6 +61,18 @@ Username/password tạo:
 focusflow_users/{user_id}
 focusflow_usernames/{username}
 ```
+
+Document mới dùng ID dễ đọc và ổn định:
+
+```text
+focusflow_users/user_google_student@example.edu
+focusflow_google_identities/google_subject_113326427935116102578
+focusflow_users/user_password_student01
+focusflow_usernames/username_student01
+```
+
+Email, username và Google subject đã nằm trong hồ sơ định danh Firestore; không
+được đưa các đường dẫn này vào log public hoặc public download bucket.
 
 Nếu chỉ thấy `focusflow_sessions`, kiểm tra endpoint auth của revision:
 

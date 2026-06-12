@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from shared.identifiers import new_session_id
 
 
 PROTOCOL_VERSION = "1.0"
@@ -25,11 +27,17 @@ class SessionCreate(ContractModel):
 
 
 class SessionRecord(SessionCreate):
-    session_id: str = Field(default_factory=lambda: str(uuid4()))
+    session_id: str = ""
     status: Literal["active", "paused", "completed", "cancelled"] = "active"
     started_at: datetime = Field(default_factory=utc_now)
     ended_at: datetime | None = None
     last_seen_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def assign_readable_session_id(self) -> "SessionRecord":
+        if not self.session_id:
+            self.session_id = new_session_id(self.device_id, self.started_at)
+        return self
 
 
 class TelemetryPacket(ContractModel):

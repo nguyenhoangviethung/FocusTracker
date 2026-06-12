@@ -84,6 +84,19 @@ Nếu gặp quota `429`, chờ vài phút rồi enable tiếp, không bấm liê
 
 Không cần tạo collection bằng tay. API sẽ tạo `focusflow_sessions`.
 
+Document mới có tên dễ kiểm tra trong demo:
+
+```text
+session_demo-client-025_20260612T162824298508Z
+user_google_student@example.edu
+google_subject_113326427935116102578
+user_password_student01
+username_student01
+```
+
+Code không tự đổi tên document cũ. Trong giai đoạn phát triển, bạn có thể xóa
+document legacy trước khi chạy lại demo.
+
 ### Step 4: Tạo Pub/Sub topic
 
 1. Mở **Pub/Sub > Topics**.

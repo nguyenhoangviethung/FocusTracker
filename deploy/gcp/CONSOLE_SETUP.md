@@ -137,7 +137,7 @@ Current values:
 ```text
 client id:   1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
 redirect:    http://localhost
-scopes:      openid email
+scopes:      openid https://www.googleapis.com/auth/userinfo.email
 ```
 
 Nếu bạn muốn thay OAuth client khác, cập nhật lại các biến

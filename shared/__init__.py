@@ -12,6 +12,13 @@ from shared.contracts import (
     SessionSummary,
     TelemetryPacket,
 )
+from shared.identifiers import (
+    google_subject_document_id,
+    new_google_user_id,
+    new_password_user_id,
+    new_session_id,
+    username_document_id,
+)
 
 __all__ = [
     "AuthGoogleLogin",
@@ -24,4 +31,9 @@ __all__ = [
     "SessionRecord",
     "SessionSummary",
     "TelemetryPacket",
+    "google_subject_document_id",
+    "new_google_user_id",
+    "new_password_user_id",
+    "new_session_id",
+    "username_document_id",
 ]

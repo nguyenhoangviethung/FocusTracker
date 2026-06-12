@@ -274,6 +274,19 @@ focusflow_sessions/{session_id}
   report_completed_at
 ```
 
+New Firestore document IDs must be deterministic and readable:
+
+```text
+session_{device_id}_{UTC timestamp with microseconds}
+user_google_{normalized email}
+user_password_{normalized username}
+google_subject_{Google subject}
+username_{normalized username}
+```
+
+Do not add random Firestore auto IDs. Existing legacy documents do not need
+automatic migration; they may be deleted manually during thesis development.
+
 Do not persist every 30 FPS feature sequence in Firestore. Realtime telemetry is
 processed in flight. Persist only sampled metrics later if a measured research
 requirement justifies the cost.

@@ -7,6 +7,7 @@ def test_in_memory_session_lifecycle() -> None:
     record = repository.create(
         SessionCreate(device_id="device-1", duration_seconds=1500)
     )
+    assert record.session_id.startswith("session_")
 
     stored = repository.get(record.session_id)
     assert stored is not None

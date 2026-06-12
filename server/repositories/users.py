@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import threading
 from typing import Any, Protocol
-from uuid import uuid4
 
 from server.config import ServerSettings
-from shared.contracts import AuthProfile, utc_now
+from shared.contracts import utc_now
+from shared.identifiers import (
+    google_subject_document_id,
+    new_google_user_id,
+    new_password_user_id,
+    username_document_id,
+)
 
 
 def _now_iso() -> str:
@@ -73,7 +76,7 @@ class InMemoryUserRepository:
         with self._lock:
             if username_key in self._username_index:
                 raise ValueError("username already exists")
-            user_id = f"user_{uuid4().hex}"
+            user_id = new_password_user_id(username_key)
             now = _now_iso()
             record = {
                 "user_id": user_id,
@@ -112,20 +115,23 @@ class InMemoryUserRepository:
         with self._lock:
             user_id = self._google_index.get(subject)
             now = _now_iso()
+            username_value = email or subject
             if user_id and user_id in self._users:
                 user = self._users[user_id]
                 user["email"] = email or user.get("email")
                 user["display_name"] = display_name or user.get("display_name") or email or subject
+                user["username"] = username_value
                 user["last_login_at"] = now
                 if id_token_jti:
                     user["last_google_jti"] = id_token_jti
+                self._username_index[username_value.lower()] = user_id
                 return dict(user)
 
-            user_id = f"google_{uuid4().hex}"
+            user_id = new_google_user_id(email, subject)
             record = {
                 "user_id": user_id,
                 "auth_provider": "google",
-                "username": None,
+                "username": username_value,
                 "display_name": display_name or email or subject,
                 "email": email,
                 "google_subject": subject,
@@ -136,6 +142,7 @@ class InMemoryUserRepository:
                 record["last_google_jti"] = id_token_jti
             self._users[user_id] = record
             self._google_index[subject] = user_id
+            self._username_index[username_value.lower()] = user_id
             return dict(record)
 
 
@@ -155,14 +162,24 @@ class FirestoreUserRepository:
         self._google_index = self._client.collection(google_index_collection)
 
     def get_by_username(self, username: str) -> dict[str, Any] | None:
-        index_snapshot = self._username_index.document(username.lower().strip()).get()
+        username_key = username.lower().strip()
+        index_snapshot = self._username_index.document(
+            username_document_id(username_key)
+        ).get()
+        if not index_snapshot.exists:
+            index_snapshot = self._username_index.document(username_key).get()
         if not index_snapshot.exists:
             return None
         user_id = (index_snapshot.to_dict() or {}).get("user_id")
         return self.get(str(user_id)) if user_id else None
 
     def get_by_google_subject(self, subject: str) -> dict[str, Any] | None:
-        index_snapshot = self._google_index.document(subject).get()
+        subject_key = subject.strip()
+        index_snapshot = self._google_index.document(
+            google_subject_document_id(subject_key)
+        ).get()
+        if not index_snapshot.exists:
+            index_snapshot = self._google_index.document(subject_key).get()
         if not index_snapshot.exists:
             return None
         user_id = (index_snapshot.to_dict() or {}).get("user_id")
@@ -180,12 +197,18 @@ class FirestoreUserRepository:
         display_name: str | None,
     ) -> dict[str, Any]:
         username_key = username.lower().strip()
-        user_ref = self._users.document()
-        username_ref = self._username_index.document(username_key)
+        user_ref = self._users.document(new_password_user_id(username_key))
+        username_ref = self._username_index.document(
+            username_document_id(username_key)
+        )
+        legacy_username_ref = self._username_index.document(username_key)
 
         @self._firestore.transactional
         def _create(transaction):
-            if username_ref.get(transaction=transaction).exists:
+            if (
+                username_ref.get(transaction=transaction).exists
+                or legacy_username_ref.get(transaction=transaction).exists
+            ):
                 raise ValueError("username already exists")
             now = _now_iso()
             record = {
@@ -208,8 +231,12 @@ class FirestoreUserRepository:
 
     def login_password_user(self, username: str) -> dict[str, Any] | None:
         username_key = username.lower().strip()
-        username_ref = self._username_index.document(username_key)
+        username_ref = self._username_index.document(
+            username_document_id(username_key)
+        )
         snapshot = username_ref.get()
+        if not snapshot.exists:
+            snapshot = self._username_index.document(username_key).get()
         if not snapshot.exists:
             return None
         user_id = (snapshot.to_dict() or {}).get("user_id")
@@ -238,12 +265,22 @@ class FirestoreUserRepository:
         id_token_jti: str | None = None,
     ) -> dict[str, Any]:
         subject_key = str(subject).strip()
-        google_ref = self._google_index.document(subject_key)
+        google_ref = self._google_index.document(
+            google_subject_document_id(subject_key)
+        )
+        legacy_google_ref = self._google_index.document(subject_key)
         now = _now_iso()
+        username_value = email or subject_key
+        username_ref = self._username_index.document(
+            username_document_id(username_value)
+        )
+        legacy_username_ref = self._username_index.document(username_value.lower().strip())
 
         @self._firestore.transactional
         def _upsert(transaction):
             index_snapshot = google_ref.get(transaction=transaction)
+            if not index_snapshot.exists:
+                index_snapshot = legacy_google_ref.get(transaction=transaction)
             if index_snapshot.exists:
                 user_id = (index_snapshot.to_dict() or {}).get("user_id")
                 if not user_id:
@@ -255,17 +292,26 @@ class FirestoreUserRepository:
                 record = user_snapshot.to_dict() or {}
                 record["email"] = email or record.get("email")
                 record["display_name"] = display_name or record.get("display_name") or email or subject_key
+                record["username"] = username_value
                 record["last_login_at"] = now
                 if id_token_jti:
                     record["last_google_jti"] = id_token_jti
                 transaction.update(user_ref, record)
+                transaction.set(
+                    username_ref,
+                    {"user_id": user_id, "username": username_value, "created_at": record.get("created_at", now)},
+                )
+                transaction.set(
+                    legacy_username_ref,
+                    {"user_id": user_id, "username": username_value, "created_at": record.get("created_at", now)},
+                )
                 return record
 
-            user_ref = self._users.document()
+            user_ref = self._users.document(new_google_user_id(email, subject_key))
             record = {
                 "user_id": user_ref.id,
                 "auth_provider": "google",
-                "username": None,
+                "username": username_value,
                 "display_name": display_name or email or subject_key,
                 "email": email,
                 "google_subject": subject_key,
@@ -276,6 +322,8 @@ class FirestoreUserRepository:
                 record["last_google_jti"] = id_token_jti
             transaction.set(user_ref, record)
             transaction.set(google_ref, {"user_id": user_ref.id, "subject": subject_key, "created_at": now})
+            transaction.set(username_ref, {"user_id": user_ref.id, "username": username_value, "created_at": now})
+            transaction.set(legacy_username_ref, {"user_id": user_ref.id, "username": username_value, "created_at": now})
             return record
 
         return _upsert(self._client.transaction())

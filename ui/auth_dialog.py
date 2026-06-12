@@ -131,7 +131,12 @@ class AuthDialog(QDialog):
         return AuthClient(api_url=api_url, api_key=api_key)
 
     def _oauth_scopes(self) -> tuple[str, ...]:
-        raw = str(os.getenv("FOCUSFLOW_GOOGLE_OAUTH_SCOPES", "openid email profile"))
+        raw = str(
+            os.getenv(
+                "FOCUSFLOW_GOOGLE_OAUTH_SCOPES",
+                "openid https://www.googleapis.com/auth/userinfo.email",
+            )
+        )
         return tuple(item for item in raw.split() if item)
 
     def _apply_profile(self, profile: dict) -> None:
