@@ -64,7 +64,7 @@ FOCUSFLOW_GOOGLE_OAUTH_SECRET=<copy from Google Cloud OAuth client>
 FOCUSFLOW_GOOGLE_OAUTH_AUTH_URI=https://accounts.google.com/o/oauth2/auth
 FOCUSFLOW_GOOGLE_OAUTH_TOKEN_URI=https://oauth2.googleapis.com/token
 FOCUSFLOW_GOOGLE_OAUTH_REDIRECT_URIS=http://localhost
-FOCUSFLOW_GOOGLE_OAUTH_SCOPES=openid email
+FOCUSFLOW_GOOGLE_OAUTH_SCOPES="openid email"
 ```
 
 Sau khi đăng nhập:

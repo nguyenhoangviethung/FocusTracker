@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ from utils.logger import get_logger, setup_logging
 from utils.settings_store import load_settings, save_settings
 
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().with_name(".env"), override=True)
 
 logger = get_logger("main")
 

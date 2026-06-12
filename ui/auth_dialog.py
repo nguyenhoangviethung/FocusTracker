@@ -17,6 +17,10 @@ from PyQt6.QtWidgets import (
 
 from edge.auth_client import AuthClient
 from ui.theme import ThemeManager, font
+from utils.logger import get_logger
+
+
+logger = get_logger("auth_dialog")
 
 
 class AuthDialog(QDialog):
@@ -140,6 +144,7 @@ class AuthDialog(QDialog):
         try:
             profile = fn()
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Authentication failed")
             status_label.setText(f"Login failed: {exc}")
             QMessageBox.critical(self, "Login failed", str(exc))
             return
@@ -169,8 +174,10 @@ class AuthDialog(QDialog):
         )
 
     def _login_google(self) -> None:
+        client = self._client()
+        logger.info("Starting Google OAuth login against %s", client.api_url)
         self._run_request(
-            lambda: self._client().login_google(self._oauth_scopes()),
+            lambda: client.login_google(self._oauth_scopes()),
             self.google_status,
         )
 
