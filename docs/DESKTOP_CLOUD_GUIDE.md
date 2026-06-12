@@ -88,10 +88,11 @@ Sau Start Session:
 
 ## 4. Server dashboard
 
-Khi bạn muốn xem server có đang nhận session hay không, mở dashboard web:
+Khi bạn muốn xem server có đang nhận session hay không, mở dashboard web.
+Với demo 100 client, nên mở dashboard trên Cloud Run để máy local đỡ bị nặng:
 
 ```text
-http://127.0.0.1:8080/dashboard
+https://YOUR_API_URL/dashboard
 ```
 
 Nếu đã deploy lên Cloud Run:
@@ -109,6 +110,13 @@ Dashboard hiển thị:
 - session gần đây;
 - device_id và user_id;
 - report status.
+
+Mẹo để tránh lag khi demo:
+
+- dùng URL Cloud Run thay vì localhost;
+- không mở thêm nhiều tab nặng cùng lúc;
+- nếu cần xem toàn bộ 100 ô, mở API summary với `?limit=100`;
+- dashboard mặc định chỉ render một preview nhỏ để giữ máy mượt.
 
 Nếu network lỗi:
 

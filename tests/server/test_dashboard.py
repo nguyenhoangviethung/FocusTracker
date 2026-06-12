@@ -10,7 +10,7 @@ def test_dashboard_routes_are_available() -> None:
         html = client.get("/dashboard")
         assert html.status_code == 200
         assert "FocusFlow AI Server Dashboard" in html.text
-        assert "100-camera wall" in html.text
+        assert "Camera wall" in html.text
 
         summary = client.get("/dashboard/api/summary")
         assert summary.status_code == 200

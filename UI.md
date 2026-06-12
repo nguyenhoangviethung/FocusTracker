@@ -309,14 +309,16 @@ telemetry, session state và số liệu quan sát được, không hiển thị
 +----------------------------------------+--------------------------------------+----------------+
 ```
 
-### 11.1 100-camera wall
+### 11.1 camera wall preview
 
 Đây là khu vực quan trọng nhất khi demo scale. Mỗi ô đại diện cho một camera
-ảo hoặc một session replay, chỉ chứa thông số, không chứa hình ảnh:
+ảo hoặc một session replay, chỉ chứa thông số, không chứa hình ảnh. Ở local
+chỉ render preview nhỏ; khi cần đủ 100 ô thì mở qua Cloud Run và truyền tham số
+`?limit=100`:
 
 ```text
 +------------------------------------------------------------------------------------------------+
-| 100 CAMERA WALL | each tile = device_id + fps + latency + face + state + queue                |
+| CAMERA WALL | each tile = device_id + fps + latency + face + state + queue                |
 +------------------------------------------------------------------------------------------------+
 | [001] FOC 28.9fps  81ms face=Y q=0 | [002] DIS 27.4fps  98ms face=Y q=0 | [003] FOC 29.1fps 76ms|
 | [004] FOC 28.2fps  84ms face=Y q=0 | [005] NOF  0.0fps   -- face=N q=0 | [006] REC  1.0fps 130ms|
@@ -330,7 +332,7 @@ Trong bản demo, dashboard có thể chuyển giữa:
 
 ```text
 1. Overview
-2. 100-camera wall
+2. camera wall
 3. Instance / latency charts
 4. Session completion table
 ```

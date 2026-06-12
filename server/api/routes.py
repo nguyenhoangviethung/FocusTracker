@@ -31,9 +31,10 @@ from shared.contracts import (
 router = APIRouter()
 
 
-def _dashboard_snapshot(request: Request) -> dict[str, Any]:
+def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
     settings, repository, _, engine, _ = _services(request)
-    recent = repository.list_recent(100)
+    safe_limit = max(1, min(int(limit or 24), 100))
+    recent = repository.list_recent(safe_limit)
     status_counts = Counter(str(record.get("status") or "unknown") for record in recent)
     active_sessions = sum(1 for record in recent if not record.get("ended_at"))
     latest = recent[0] if recent else None
@@ -71,7 +72,7 @@ def _dashboard_html() -> str:
     .kpi { font-size: 2rem; font-weight: 800; margin: 8px 0 0; }
     .sub { color: var(--muted); font-size: .92rem; }
     .two { display:grid; grid-template-columns: 1.3fr .7fr; gap:16px; }
-    .wall { display:grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap:8px; margin-top:16px; }
+    .wall { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:8px; margin-top:16px; }
     .tile { background:#0f172a; border:1px solid #243041; border-radius:12px; padding:10px; min-height:90px; }
     .tile strong { display:block; font-size:.88rem; margin-bottom:4px; }
     .tile .tiny { color: var(--muted); font-size: .78rem; line-height: 1.4; }
@@ -140,16 +141,17 @@ def _dashboard_html() -> str:
     </section>
 
     <section class="card" style="margin-top:16px;">
-      <h2 style="margin-top:0;">100-camera wall</h2>
+      <h2 style="margin-top:0;">Camera wall preview</h2>
       <div class="muted">
-        Each tile represents one client/session. Only numerical stats are shown.
+        This preview defaults to a small subset so the page stays responsive.
+        Use the API summary endpoint with `?limit=100` when you need the full wall.
       </div>
       <div id="camera-wall" class="wall"></div>
     </section>
   </div>
 <script>
 async function refreshDashboard() {
-  const response = await fetch('/dashboard/api/summary', { cache: 'no-store' });
+  const response = await fetch('/dashboard/api/summary?limit=24', { cache: 'no-store' });
   const data = await response.json();
   document.getElementById('ready-pill').textContent = data.ready ? 'READY' : 'NOT READY';
   document.getElementById('ready-pill').className = 'pill ' + (data.ready ? 'ok' : 'warn');
@@ -190,7 +192,7 @@ async function refreshDashboard() {
   }).join('');
   document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="6" class="muted">No sessions yet.</td></tr>';
 
-  const tiles = (data.recent_sessions || []).slice(0, 100).map((record, index) => {
+  const tiles = (data.recent_sessions || []).slice(0, 24).map((record, index) => {
     const summary = record.summary || {};
     const focus = summary.average_focus != null ? (summary.average_focus * 100).toFixed(1) + '%' : '-';
     const status = (record.status || 'unknown').toUpperCase();
@@ -255,8 +257,8 @@ async def dashboard() -> HTMLResponse:
 
 
 @router.get("/dashboard/api/summary")
-async def dashboard_summary(request: Request) -> dict[str, Any]:
-    return _dashboard_snapshot(request)
+async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]:
+    return _dashboard_snapshot(request, limit=limit)
 
 
 @router.get("/health")

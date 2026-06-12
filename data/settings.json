@@ -10,10 +10,10 @@
   "demo_video_path": "",
   "engagement_threshold": 0.54,
   "smoothing_window": 5,
-  "auth_user_id": "f1lY3V8sPIQMdJDNEXN9",
-  "auth_provider": "google",
-  "auth_username": "nguyenhoangviethung@gmail.com",
-  "auth_email": "nguyenhoangviethung@gmail.com",
-  "auth_display_name": "nguyenhoangviethung@gmail.com",
-  "auth_last_login_at": "2026-06-12T16:48:30.317033Z"
+  "auth_user_id": "user_password_student1",
+  "auth_provider": "password",
+  "auth_username": "student1",
+  "auth_email": "",
+  "auth_display_name": "ST1",
+  "auth_last_login_at": "2026-06-12T17:14:02.724486Z"
 }

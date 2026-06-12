@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-url", default=os.getenv("FOCUSFLOW_CLOUD_API_URL", ""))
     parser.add_argument("--api-key", default=os.getenv("FOCUSFLOW_CLOUD_API_KEY", ""))
     parser.add_argument("--features", type=Path, default=Path("demo/features"))
+    parser.add_argument("--manifest", type=Path, default=Path("demo/results/video-manifest.json"))
     parser.add_argument("--stages", default="")
     parser.add_argument("--output", type=Path, default=Path("demo/results"))
     return parser
@@ -56,38 +57,63 @@ def load_fixtures(features_dir: Path) -> list[dict]:
     return fixtures
 
 
+def load_manifest_entries(manifest_path: Path) -> list[dict]:
+    if not manifest_path.exists():
+        return []
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entries = payload.get("entries", [])
+    if not isinstance(entries, list):
+        return []
+    return [item for item in entries if isinstance(item, dict)]
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if not args.api_url or not args.api_key:
         raise SystemExit("Missing --api-url / --api-key or environment values")
 
-    fixtures = load_fixtures(args.features)
-    if not fixtures:
-        raise SystemExit(f"No feature fixtures found in {args.features}")
-
     stages = parse_stages(args.stages)
     tui = ConsoleTUI(prefix="scale-runner")
     results: list[ClientResult] = []
     started_all = perf_counter()
+    manifest_entries = load_manifest_entries(args.manifest)
+    fixtures = load_fixtures(args.features)
+    if not manifest_entries and not fixtures:
+        raise SystemExit(
+            f"No video manifest entries found in {args.manifest} and no feature fixtures found in {args.features}"
+        )
 
     for stage in stages:
         stage_start = perf_counter()
         stage_results: list[ClientResult] = []
 
         def worker(index: int) -> ClientResult:
-            fixture = fixtures[index % len(fixtures)]
+            manifest_entry = manifest_entries[index % len(manifest_entries)] if manifest_entries else None
+            fixture = fixtures[index % len(fixtures)] if fixtures else None
+            source_video = ""
+            if fixture is None and manifest_entry is not None:
+                source_video = str(manifest_entry.get("source_video") or "")
+            elif fixture is not None:
+                source_video = str(fixture.get("source_video") or "")
             config = VirtualClientConfig(
                 api_url=args.api_url,
                 api_key=args.api_key,
                 device_id=f"demo-client-{index + 1:03d}",
             )
             try:
-                outcome = replay_session(
-                    config,
-                    raw_feature_sequence=fixture["raw_feature_sequence"],
-                    face_found=bool(fixture.get("face_found", True)),
-                    session_duration_seconds=stage.duration_seconds,
-                )
+                if fixture is not None:
+                    outcome = replay_session(
+                        config,
+                        raw_feature_sequence=fixture["raw_feature_sequence"],
+                        face_found=bool(fixture.get("face_found", True)),
+                        session_duration_seconds=stage.duration_seconds,
+                    )
+                elif source_video:
+                    from demo.virtual_client import replay_video_session
+
+                    outcome = replay_video_session(config, Path(source_video))
+                else:
+                    raise RuntimeError("No fixture or source video available for replay")
                 return ClientResult(
                     device_id=config.device_id,
                     session_id=str(outcome["session_id"]),

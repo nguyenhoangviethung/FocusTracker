@@ -144,14 +144,30 @@ class AuthDialog(QDialog):
         self.authenticated.emit(profile)
         self.accept()
 
+    def _friendly_auth_message(self, exc: Exception) -> str:
+        message = str(exc).strip() or "Unknown error"
+        lowered = message.lower()
+        if "invalid username or password" in lowered:
+            return "Tên đăng nhập hoặc mật khẩu không đúng."
+        if "user not found" in lowered:
+            return "Tài khoản này chưa tồn tại."
+        if "google oauth env is missing" in lowered:
+            return "Cấu hình đăng nhập Google chưa sẵn sàng. Vui lòng thử lại sau."
+        if "cloud api auth endpoint is missing" in lowered:
+            return "Máy chủ chưa sẵn sàng cho đăng nhập. Vui lòng thử lại sau."
+        if "internal server error" in lowered:
+            return "Máy chủ đang gặp lỗi tạm thời. Vui lòng thử lại sau."
+        return "Không thể đăng nhập lúc này. Vui lòng thử lại sau."
+
     def _run_request(self, fn, status_label: QLabel) -> None:
         status_label.setText("Working...")
         try:
             profile = fn()
         except Exception as exc:  # noqa: BLE001
             logger.exception("Authentication failed")
-            status_label.setText(f"Login failed: {exc}")
-            QMessageBox.critical(self, "Login failed", str(exc))
+            friendly_message = self._friendly_auth_message(exc)
+            status_label.setText(friendly_message)
+            QMessageBox.warning(self, "Login failed", friendly_message)
             return
         self._apply_profile(profile.model_dump(mode="json"))
 
