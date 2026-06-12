@@ -23,7 +23,11 @@ def test_in_memory_user_repository_password_and_google_paths() -> None:
     google_user = repo.upsert_google_user("google-subject", "person@example.edu", "Google Person")
     assert google_user["auth_provider"] == "google"
     assert google_user["user_id"].startswith("user_google_")
+    assert google_user["username"] == "person@example.edu"
     assert repo.get_by_google_subject("google-subject")["email"] == "person@example.edu"
+
+    updated_google_user = repo.upsert_google_user("google-subject", "person@example.edu", "Google Person")
+    assert updated_google_user["username"] == "person@example.edu"
 
     with pytest.raises(ValueError):
         repo.create_password_user("student01", "hash", "salt", "Student One")

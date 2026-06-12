@@ -256,13 +256,14 @@ class FirestoreUserRepository:
 
         @self._firestore.transactional
         def _upsert(transaction):
+            effective_username = username_value
             existing_users = user_query.get(transaction=transaction)
             if existing_users:
                 user_snapshot = existing_users[0]
                 record = user_snapshot.to_dict() or {}
                 record["email"] = email or record.get("email")
                 record["display_name"] = display_name or record.get("display_name") or email or subject_key
-                record["username"] = username_value
+                record["username"] = effective_username
                 record["last_login_at"] = now
                 if id_token_jti:
                     record["last_google_jti"] = id_token_jti
@@ -271,11 +272,11 @@ class FirestoreUserRepository:
 
             user_ref = self._users.document(new_google_user_id(email, subject_key))
             if username_query.get(transaction=transaction):
-                username_value = subject_key
+                effective_username = subject_key
             record = {
                 "user_id": user_ref.id,
                 "auth_provider": "google",
-                "username": username_value,
+                "username": effective_username,
                 "display_name": display_name or email or subject_key,
                 "email": email,
                 "google_subject": subject_key,
