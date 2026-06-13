@@ -25,6 +25,7 @@ Nếu bạn chỉ muốn chạy demo nhanh, đi theo mục 5 và 6 trước.
 | `edge/auth_client.py` | manual bằng `python main.py` | Thử login và callback local. |
 | `ui/*` | `python main.py` | Test UI desktop trực tiếp. |
 | `demo/validate_videos.py` | `python -m demo.validate_videos ...` | Chỉ cần file video local. |
+| `demo/seed_users.py` | `python -m demo.seed_users ...` | Seed 100 user docs vào Firestore. |
 | `demo/extract_features.py` | `python -m demo.extract_features ...` | Tạo fixture local. |
 | `demo/run_video_clients.py` | `python -m demo.run_video_clients ...` | Replay video local tới API local/cloud. |
 | `demo/run_scale.py` | `python -m demo.run_scale ...` | Chạy local against API local/cloud. |
@@ -320,6 +321,44 @@ Như vậy người nghe sẽ thấy rõ đây là demo về:
 - dashboard quan sát số liệu trên cloud;
 - không có raw video truyền lên server.
 
+## 7.1. Seed 100 user thật vào Firestore rồi bắn session có `user_id`
+
+Nếu bạn muốn Firestore có cả `focusflow_users` lẫn `focusflow_sessions`, hãy
+seed user trước rồi mới bắn load:
+
+```bash
+python -m demo.seed_users \
+  --project-id my-thesis-496702 \
+  --count 100 \
+  --output /tmp/focusflow-user-manifest.json
+```
+
+Lệnh này sẽ:
+
+- tạo 100 document trong `focusflow_users`;
+- ghi manifest user để load generator đọc lại;
+- sinh `user_id` readable, không random rác.
+
+Chạy lệnh này trong Cloud Shell hoặc trên GCE VM có quyền Firestore/ADC. Nếu
+chạy trên máy local, nhớ có Application Default Credentials hợp lệ.
+
+Sau đó bắn 100 session có `user_id`:
+
+```bash
+python -m demo.run_scale \
+  --api-url https://YOUR_API_URL \
+  --api-key YOUR_CLOUD_API_KEY \
+  --manifest /tmp/focusflow-video-manifest.json \
+  --users-manifest /tmp/focusflow-user-manifest.json
+```
+
+Kết quả mong đợi:
+
+- Firestore có `focusflow_users` tăng lên 100 document;
+- `focusflow_sessions` có `user_id` đi kèm từng session;
+- dashboard cloud hiển thị user/session mapping rõ hơn;
+- bạn có thể chứng minh “100 người” mà không phải login 100 lần.
+
 ## 8. Checklist test local theo thứ tự
 
 Nếu muốn sàng lọc nhanh toàn bộ module mà không đụng GCP trước, đi theo thứ tự này:
@@ -332,7 +371,8 @@ Nếu muốn sàng lọc nhanh toàn bộ module mà không đụng GCP trước
 6. `python -m demo.validate_videos --input demo/Data --limit 10`
 7. `python -m demo.extract_features --manifest /tmp/focusflow-video-manifest.json --output demo/features`
 8. `python -m demo.run_video_clients --input demo/Data --limit 5 --concurrency 2`
-9. `python -m demo.run_scale --manifest /tmp/focusflow-video-manifest.json --api-url http://127.0.0.1:8080 --api-key test-secret`
+9. `python -m demo.seed_users --project-id my-thesis-496702 --count 100 --output /tmp/focusflow-user-manifest.json`
+10. `python -m demo.run_scale --manifest /tmp/focusflow-video-manifest.json --users-manifest /tmp/focusflow-user-manifest.json --api-url http://127.0.0.1:8080 --api-key test-secret`
 
 Sau khi local pass, mới chuyển sang:
 

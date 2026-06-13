@@ -32,9 +32,32 @@ router = APIRouter()
 
 
 def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
-    settings, repository, _, engine, _ = _services(request)
+    settings, repository, user_repository, engine, _ = _services(request)
     safe_limit = max(1, min(int(limit or 24), 100))
     recent = repository.list_recent(safe_limit)
+    user_cache: dict[str, dict[str, Any] | None] = {}
+
+    def resolve_user(user_id: str | None) -> dict[str, Any] | None:
+        if not user_id:
+            return None
+        if user_id not in user_cache:
+            user_cache[user_id] = user_repository.get(user_id)
+        return user_cache[user_id]
+
+    def decorate(record: dict[str, Any]) -> dict[str, Any]:
+        decorated = dict(record)
+        user = resolve_user(str(record.get("user_id") or ""))
+        if user:
+            decorated["user_display_name"] = user.get("display_name") or user.get("email") or user.get("username") or user.get("user_id")
+            decorated["user_email"] = user.get("email")
+            decorated["user_username"] = user.get("username")
+        else:
+            decorated["user_display_name"] = record.get("user_id") or "-"
+            decorated["user_email"] = None
+            decorated["user_username"] = None
+        return decorated
+
+    recent = [decorate(record) for record in recent]
     status_counts = Counter(str(record.get("status") or "unknown") for record in recent)
     active_sessions = sum(1 for record in recent if not record.get("ended_at"))
     latest = recent[0] if recent else None
@@ -118,6 +141,7 @@ def _dashboard_html() -> str:
             <tr>
               <th>Session</th>
               <th>Device</th>
+              <th>User</th>
               <th>Status</th>
               <th>Started</th>
               <th>Ended</th>
@@ -169,7 +193,9 @@ async function refreshDashboard() {
       <div><strong>Session:</strong> <span class="mono">${latest.session_id || ''}</span></div>
       <div><strong>Device:</strong> <span class="mono">${latest.device_id || ''}</span></div>
       <div><strong>Status:</strong> ${latest.status || 'unknown'}</div>
-      <div><strong>User:</strong> ${latest.user_id || '-'}</div>
+      <div><strong>User:</strong> ${latest.user_display_name || latest.user_id || '-'}</div>
+      <div><strong>Email:</strong> ${latest.user_email || '-'}</div>
+      <div><strong>User ID:</strong> <span class="mono">${latest.user_id || '-'}</span></div>
       <div><strong>Average focus:</strong> ${((summary.average_focus || 0) * 100).toFixed(1)}%</div>
       <div><strong>Report:</strong> ${latest.report_status || 'n/a'}</div>
     `;
@@ -183,6 +209,7 @@ async function refreshDashboard() {
       <tr>
         <td class="mono">${record.session_id || ''}</td>
         <td class="mono">${record.device_id || ''}</td>
+        <td>${record.user_display_name || record.user_id || '-'}</td>
         <td>${record.status || 'unknown'}</td>
         <td class="mono">${(record.started_at || '').replace('T', ' ').slice(0, 19)}</td>
         <td class="mono">${(record.ended_at || '').replace('T', ' ').slice(0, 19) || '-'}</td>
@@ -196,7 +223,7 @@ async function refreshDashboard() {
     const summary = record.summary || {};
     const focus = summary.average_focus != null ? (summary.average_focus * 100).toFixed(1) + '%' : '-';
     const status = (record.status || 'unknown').toUpperCase();
-    const user = record.user_id || '-';
+    const user = record.user_display_name || record.user_id || '-';
     return `
       <div class="tile">
         <strong>${String(index + 1).padStart(3, '0')} | ${status}</strong>

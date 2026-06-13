@@ -86,6 +86,7 @@ def replay_session(
     raw_feature_sequence: list[list[float]],
     face_found: bool,
     session_duration_seconds: int,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     with httpx.Client(
         base_url=config.api_url.rstrip("/"),
@@ -97,6 +98,7 @@ def replay_session(
             "/v1/sessions",
             json=SessionCreate(
                 device_id=config.device_id,
+                user_id=user_id,
                 duration_seconds=session_duration_seconds,
             ).model_dump(mode="json"),
         )
@@ -157,11 +159,17 @@ def replay_session(
     }
 
 
-def replay_video_session(config: VirtualClientConfig, video_path: Path) -> dict[str, Any]:
+def replay_video_session(
+    config: VirtualClientConfig,
+    video_path: Path,
+    *,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     extracted = _open_video_sequence(video_path)
     return replay_session(
         config,
         raw_feature_sequence=extracted["raw_feature_sequence"],
         face_found=bool(extracted["face_found"]),
         session_duration_seconds=60,
+        user_id=user_id,
     )

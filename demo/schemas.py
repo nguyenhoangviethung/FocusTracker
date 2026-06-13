@@ -56,6 +56,36 @@ class FeatureFixture:
 
 
 @dataclass(slots=True)
+class UserManifestEntry:
+    index: int
+    user_id: str
+    email: str
+    display_name: str
+    auth_provider: str
+    google_subject: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class UserManifest:
+    created_at: str
+    collection: str
+    limit: int
+    entries: list[UserManifestEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "created_at": self.created_at,
+            "collection": self.collection,
+            "limit": self.limit,
+            "entries": [entry.to_dict() for entry in self.entries],
+        }
+
+
+@dataclass(slots=True)
 class ClientResult:
     device_id: str
     session_id: str
@@ -96,4 +126,3 @@ class BenchmarkSummary:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
