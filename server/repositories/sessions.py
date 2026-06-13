@@ -15,6 +15,8 @@ class SessionRepository(Protocol):
 
     def list_recent(self, limit: int = 20) -> list[dict[str, Any]]: ...
 
+    def delete(self, session_id: str) -> bool: ...
+
     def touch(self, session_id: str) -> None: ...
 
     def complete(self, session_id: str, summary: SessionSummary) -> dict[str, Any] | None: ...
@@ -46,6 +48,10 @@ class InMemorySessionRepository:
                 reverse=True,
             )
             return [dict(record) for record in records[:limit]]
+
+    def delete(self, session_id: str) -> bool:
+        with self._lock:
+            return self._records.pop(session_id, None) is not None
 
     def touch(self, session_id: str) -> None:
         with self._lock:
@@ -110,6 +116,14 @@ class FirestoreSessionRepository:
             direction=self._firestore.Query.DESCENDING,
         ).limit(limit)
         return [doc.to_dict() for doc in query.stream() if doc.exists and doc.to_dict()]
+
+    def delete(self, session_id: str) -> bool:
+        reference = self._collection.document(session_id)
+        snapshot = reference.get()
+        if not snapshot.exists:
+            return False
+        reference.delete()
+        return True
 
     def touch(self, session_id: str) -> None:
         self._collection.document(session_id).update(

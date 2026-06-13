@@ -31,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, default=Path("demo/results/video-manifest.json"))
     parser.add_argument("--users-manifest", type=Path, default=Path("demo/results/user-manifest.json"))
     parser.add_argument("--stages", default="")
+    parser.add_argument("--stream-interval-seconds", type=float, default=0.0)
+    parser.add_argument("--playback-speed", type=float, default=1.0)
     parser.add_argument("--output", type=Path, default=Path("demo/results"))
     return parser
 
@@ -89,7 +91,9 @@ def main() -> None:
     started_all = perf_counter()
     manifest_entries = load_manifest_entries(args.manifest)
     user_entries = load_user_entries(args.users_manifest)
-    fixtures = load_fixtures(args.features)
+    stream_interval_seconds = max(0.0, float(args.stream_interval_seconds))
+    playback_speed = max(0.01, float(args.playback_speed))
+    fixtures = load_fixtures(args.features) if stream_interval_seconds <= 0 else []
     if not manifest_entries and not fixtures:
         raise SystemExit(
             f"No video manifest entries found in {args.manifest} and no feature fixtures found in {args.features}"
@@ -114,7 +118,17 @@ def main() -> None:
                 device_id=f"demo-client-{index + 1:03d}",
             )
             try:
-                if fixture is not None:
+                if stream_interval_seconds > 0 and source_video:
+                    from demo.virtual_client import replay_video_session
+
+                    outcome = replay_video_session(
+                        config,
+                        Path(source_video),
+                        user_id=str(user_entry.get("user_id") or "") if user_entry else None,
+                        packet_interval_seconds=stream_interval_seconds,
+                        playback_speed=playback_speed,
+                    )
+                elif fixture is not None:
                     outcome = replay_session(
                         config,
                         raw_feature_sequence=fixture["raw_feature_sequence"],
@@ -129,6 +143,8 @@ def main() -> None:
                         config,
                         Path(source_video),
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
+                        packet_interval_seconds=stream_interval_seconds or 1.0,
+                        playback_speed=playback_speed,
                     )
                 else:
                     raise RuntimeError("No fixture or source video available for replay")

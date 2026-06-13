@@ -69,7 +69,8 @@ def main() -> None:
             finally:
                 capture.release()
 
-            if sequence is None:
+            raw_sequence = buffer.raw_sequence()
+            if raw_sequence is None:
                 print(f"skip={source_video} reason=insufficient_frames")
                 continue
 
@@ -82,7 +83,7 @@ def main() -> None:
                 "face_found": face_found,
                 "frame_count": frame_count,
                 "fps": item.get("fps", 0.0),
-                "raw_feature_sequence": sequence.tolist(),
+                "raw_feature_sequence": raw_sequence.tolist(),
             }
             out_path = args.output / f"client-{int(item['index']):03d}.jsonl"
             out_path.write_text(json.dumps(fixture, ensure_ascii=False) + "\n", encoding="utf-8")
