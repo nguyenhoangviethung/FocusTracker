@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures as cf
 import json
 import os
+import traceback
 from pathlib import Path
 from time import perf_counter
 
@@ -93,6 +94,7 @@ def main() -> None:
     user_entries = load_user_entries(args.users_manifest)
     stream_interval_seconds = max(0.0, float(args.stream_interval_seconds))
     playback_speed = max(0.01, float(args.playback_speed))
+    verbose = os.getenv("DEMO_VERBOSE", "").strip().lower() in {"1", "true", "yes", "on"}
     fixtures = load_fixtures(args.features) if stream_interval_seconds <= 0 else []
     if not manifest_entries and not fixtures:
         raise SystemExit(
@@ -117,6 +119,10 @@ def main() -> None:
                 api_key=args.api_key,
                 device_id=f"demo-client-{index + 1:03d}",
             )
+            def log_step(message: str) -> None:
+                if verbose:
+                    tui.write(f"[{config.device_id}] {message}")
+
             try:
                 if stream_interval_seconds > 0 and source_video:
                     from demo.virtual_client import replay_video_session
@@ -127,6 +133,7 @@ def main() -> None:
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
                         packet_interval_seconds=stream_interval_seconds,
                         playback_speed=playback_speed,
+                        log=log_step,
                     )
                 elif fixture is not None:
                     outcome = replay_session(
@@ -135,6 +142,7 @@ def main() -> None:
                         face_found=bool(fixture.get("face_found", True)),
                         session_duration_seconds=stage.duration_seconds,
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
+                        log=log_step,
                     )
                 elif source_video:
                     from demo.virtual_client import replay_video_session
@@ -145,6 +153,7 @@ def main() -> None:
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
                         packet_interval_seconds=stream_interval_seconds or 1.0,
                         playback_speed=playback_speed,
+                        log=log_step,
                     )
                 else:
                     raise RuntimeError("No fixture or source video available for replay")
@@ -157,19 +166,31 @@ def main() -> None:
                     state=str(outcome["response"].get("state", "")),
                     focus_score=float(outcome["response"].get("focus_score", 0.0)),
                 )
-            except SystemExit as exc:
-                return ClientResult(
-                    device_id=config.device_id,
-                    session_id="",
-                    status="err",
-                    error=f"SystemExit: {exc}",
-                )
             except Exception as exc:
+                tb = traceback.format_exc()
+                if verbose:
+                    tui.write(f"[{config.device_id}] error_stage={getattr(exc, 'stage', 'unknown')} error={exc}")
+                    tui.write(tb.rstrip())
+                return ClientResult(
+                    device_id=config.device_id,
+                    session_id=str(getattr(exc, "session_id", "") or ""),
+                    status="err",
+                    error_stage=str(getattr(exc, "stage", "unknown")),
+                    error=f"{type(exc).__name__}: {exc}",
+                    traceback=tb,
+                )
+            except SystemExit as exc:
+                tb = traceback.format_exc()
+                if verbose:
+                    tui.write(f"[{config.device_id}] error_stage=system_exit error={exc}")
+                    tui.write(tb.rstrip())
                 return ClientResult(
                     device_id=config.device_id,
                     session_id="",
                     status="err",
-                    error=f"{type(exc).__name__}: {exc}",
+                    error_stage="system_exit",
+                    error=f"SystemExit: {exc}",
+                    traceback=tb,
                 )
 
         with cf.ThreadPoolExecutor(max_workers=stage.clients) as executor:

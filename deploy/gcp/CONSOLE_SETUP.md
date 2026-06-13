@@ -154,10 +154,11 @@ After deployment:
    - Region: `asia-southeast1`
    - CPU: 2
    - Memory: 2 GiB
-   - Concurrency: 8
+   - Concurrency: 4
    - Request timeout: 3600 seconds
    - Minimum instances: 1
-   - Maximum instances: 16
+   - Maximum instances: 10
+   - CPU throttling: disabled
    - Service account: `focusflow-api`
    - Secret mapping: `FOCUSFLOW_API_KEY`
 3. Open the service URL plus `/health`.

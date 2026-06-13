@@ -94,7 +94,9 @@ class ClientResult:
     complete_latency_ms: float | None = None
     state: str | None = None
     focus_score: float | None = None
+    error_stage: str | None = None
     error: str | None = None
+    traceback: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -122,6 +124,7 @@ class BenchmarkSummary:
     websocket_latency_ms: dict[str, float | None]
     completion_latency_ms: dict[str, float | None]
     states: dict[str, int]
+    failure_stages: dict[str, int]
     errors: list[tuple[str, int]]
 
     def to_dict(self) -> dict[str, Any]:

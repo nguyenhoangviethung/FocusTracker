@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from time import perf_counter, sleep
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote, urlparse, urlunparse
 
 import cv2
@@ -13,6 +13,18 @@ from websockets.sync.client import connect
 
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket, utc_now
 from tracking.buffer import FeatureSequenceBuffer
+
+
+class DemoStepError(RuntimeError):
+    def __init__(self, stage: str, message: str, *, session_id: str | None = None) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.session_id = session_id
+
+
+def _log(log: Callable[[str], None] | None, message: str) -> None:
+    if log is not None:
+        log(message)
 
 
 @dataclass(slots=True)
@@ -88,24 +100,31 @@ def replay_session(
     face_found: bool,
     session_duration_seconds: int,
     user_id: str | None = None,
+    log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    session_id = ""
     with httpx.Client(
         base_url=config.api_url.rstrip("/"),
         headers={"X-API-Key": config.api_key},
         timeout=config.request_timeout_seconds,
     ) as client:
-        create_started = perf_counter()
-        created = client.post(
-            "/v1/sessions",
-            json=SessionCreate(
-                device_id=config.device_id,
-                user_id=user_id,
-                duration_seconds=session_duration_seconds,
-            ).model_dump(mode="json"),
-        )
-        created.raise_for_status()
-        session_id = str(created.json()["session_id"])
-        create_latency_ms = (perf_counter() - create_started) * 1000.0
+        try:
+            _log(log, "create_session:start")
+            create_started = perf_counter()
+            created = client.post(
+                "/v1/sessions",
+                json=SessionCreate(
+                    device_id=config.device_id,
+                    user_id=user_id,
+                    duration_seconds=session_duration_seconds,
+                ).model_dump(mode="json"),
+            )
+            created.raise_for_status()
+            session_id = str(created.json()["session_id"])
+            create_latency_ms = (perf_counter() - create_started) * 1000.0
+            _log(log, f"create_session:ok latency_ms={create_latency_ms:.1f} session_id={session_id}")
+        except Exception as exc:
+            raise DemoStepError("create_session", f"{type(exc).__name__}: {exc}") from exc
 
     packet = TelemetryPacket(
         session_id=session_id,
@@ -116,16 +135,23 @@ def replay_session(
         configuration={"demo": True},
     )
 
-    ws_started = perf_counter()
-    with connect(
-        websocket_url(config.api_url, session_id, config.device_id),
-        additional_headers={"X-API-Key": config.api_key},
-        open_timeout=config.request_timeout_seconds,
-        close_timeout=config.request_timeout_seconds,
-    ) as websocket:
-        websocket.send(packet.model_dump_json())
-        response = json.loads(websocket.recv())
-    ws_latency_ms = (perf_counter() - ws_started) * 1000.0
+    try:
+        _log(log, "websocket:open:start")
+        ws_started = perf_counter()
+        with connect(
+            websocket_url(config.api_url, session_id, config.device_id),
+            additional_headers={"X-API-Key": config.api_key},
+            open_timeout=config.request_timeout_seconds,
+            close_timeout=config.request_timeout_seconds,
+        ) as websocket:
+            _log(log, "websocket:open:ok")
+            websocket.send(packet.model_dump_json())
+            _log(log, "websocket:stream:sent")
+            response = json.loads(websocket.recv())
+            _log(log, "websocket:stream:recv")
+        ws_latency_ms = (perf_counter() - ws_started) * 1000.0
+    except Exception as exc:
+        raise DemoStepError("websocket_stream", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
 
     summary = SessionSummary(
         duration_seconds=session_duration_seconds,
@@ -137,18 +163,23 @@ def replay_session(
         minute_focus_scores=[float(response.get("focus_score", 0.0))],
     )
 
-    complete_started = perf_counter()
-    with httpx.Client(
-        base_url=config.api_url.rstrip("/"),
-        headers={"X-API-Key": config.api_key},
-        timeout=config.request_timeout_seconds,
-    ) as client:
-        completed = client.post(
-            f"/v1/sessions/{quote(session_id, safe='')}/complete",
-            json=summary.model_dump(mode="json"),
-        )
-        completed.raise_for_status()
-    complete_latency_ms = (perf_counter() - complete_started) * 1000.0
+    try:
+        _log(log, "complete_session:start")
+        complete_started = perf_counter()
+        with httpx.Client(
+            base_url=config.api_url.rstrip("/"),
+            headers={"X-API-Key": config.api_key},
+            timeout=config.request_timeout_seconds,
+        ) as client:
+            completed = client.post(
+                f"/v1/sessions/{quote(session_id, safe='')}/complete",
+                json=summary.model_dump(mode="json"),
+            )
+            completed.raise_for_status()
+        complete_latency_ms = (perf_counter() - complete_started) * 1000.0
+        _log(log, f"complete_session:ok latency_ms={complete_latency_ms:.1f}")
+    except Exception as exc:
+        raise DemoStepError("complete_session", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
 
     return {
         "session_id": session_id,
@@ -167,6 +198,7 @@ def replay_video_session(
     user_id: str | None = None,
     packet_interval_seconds: float = 1.0,
     playback_speed: float = 1.0,
+    log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     try:
         from tracking.detector import FaceFeatureDetector
@@ -199,72 +231,85 @@ def replay_video_session(
             headers={"X-API-Key": config.api_key},
             timeout=config.request_timeout_seconds,
         ) as client:
-            create_started = perf_counter()
-            created = client.post(
-                "/v1/sessions",
-                json=SessionCreate(
-                    device_id=config.device_id,
-                    user_id=user_id,
-                    duration_seconds=session_duration_seconds,
-                ).model_dump(mode="json"),
-            )
-            created.raise_for_status()
-            session_id = str(created.json()["session_id"])
-            create_latency_ms = (perf_counter() - create_started) * 1000.0
-
-        ws_started = perf_counter()
-        playback_started = perf_counter()
-        with connect(
-            websocket_url(config.api_url, session_id, config.device_id),
-            additional_headers={"X-API-Key": config.api_key},
-            open_timeout=config.request_timeout_seconds,
-            close_timeout=config.request_timeout_seconds,
-        ) as websocket:
-            video_capture = cv2.VideoCapture(str(video_path))
-            if not video_capture.isOpened():
-                raise RuntimeError(f"Cannot reopen video: {video_path}")
             try:
-                while True:
-                    ok, frame = video_capture.read()
-                    if not ok:
-                        break
-                    frame_count += 1
-                    detection = detector.extract(frame)
-                    face_found = face_found or detection.face_found
-                    buffer.append(detection.feature)
-                    raw_sequence = buffer.raw_sequence()
-                    if raw_sequence is None:
-                        continue
-
-                    current_time = frame_count / fps if fps > 0 else frame_count / 30.0
-                    if current_time + 1e-6 < next_send_at:
-                        continue
-
-                    packet = TelemetryPacket(
-                        session_id=session_id,
+                _log(log, "create_session:start")
+                create_started = perf_counter()
+                created = client.post(
+                    "/v1/sessions",
+                    json=SessionCreate(
                         device_id=config.device_id,
-                        sequence_number=len(packets) + 1,
-                        raw_feature_sequence=raw_sequence.tolist(),
-                        face_found=face_found,
-                        captured_at=utc_now(),
-                        configuration={
-                            "demo": True,
-                            "realtime": True,
-                            "interval_seconds": packet_interval_seconds,
-                        },
-                    )
-                    websocket.send(packet.model_dump_json())
-                    latest_response = json.loads(websocket.recv())
-                    packets.append(latest_response)
-                    next_send_at = current_time + max(0.1, float(packet_interval_seconds))
+                        user_id=user_id,
+                        duration_seconds=session_duration_seconds,
+                    ).model_dump(mode="json"),
+                )
+                created.raise_for_status()
+                session_id = str(created.json()["session_id"])
+                create_latency_ms = (perf_counter() - create_started) * 1000.0
+                _log(log, f"create_session:ok latency_ms={create_latency_ms:.1f} session_id={session_id}")
+            except Exception as exc:
+                raise DemoStepError("create_session", f"{type(exc).__name__}: {exc}") from exc
 
-                    if playback_speed > 0:
-                        target_elapsed = current_time / playback_speed
-                        actual_elapsed = perf_counter() - playback_started
-                        if target_elapsed > actual_elapsed:
-                            sleep(min(target_elapsed - actual_elapsed, 0.25))
-            finally:
-                video_capture.release()
+        try:
+            _log(log, "websocket:open:start")
+            ws_started = perf_counter()
+            playback_started = perf_counter()
+            with connect(
+                websocket_url(config.api_url, session_id, config.device_id),
+                additional_headers={"X-API-Key": config.api_key},
+                open_timeout=config.request_timeout_seconds,
+                close_timeout=config.request_timeout_seconds,
+            ) as websocket:
+                _log(log, "websocket:open:ok")
+                video_capture = cv2.VideoCapture(str(video_path))
+                if not video_capture.isOpened():
+                    raise RuntimeError(f"Cannot reopen video: {video_path}")
+                try:
+                    while True:
+                        ok, frame = video_capture.read()
+                        if not ok:
+                            break
+                        frame_count += 1
+                        detection = detector.extract(frame)
+                        face_found = face_found or detection.face_found
+                        buffer.append(detection.feature)
+                        raw_sequence = buffer.raw_sequence()
+                        if raw_sequence is None:
+                            continue
+
+                        current_time = frame_count / fps if fps > 0 else frame_count / 30.0
+                        if current_time + 1e-6 < next_send_at:
+                            continue
+
+                        packet = TelemetryPacket(
+                            session_id=session_id,
+                            device_id=config.device_id,
+                            sequence_number=len(packets) + 1,
+                            raw_feature_sequence=raw_sequence.tolist(),
+                            face_found=face_found,
+                            captured_at=utc_now(),
+                            configuration={
+                                "demo": True,
+                                "realtime": True,
+                                "interval_seconds": packet_interval_seconds,
+                            },
+                        )
+                        _log(log, f"websocket:stream:send packet={len(packets) + 1} frame={frame_count}")
+                        websocket.send(packet.model_dump_json())
+                        latest_response = json.loads(websocket.recv())
+                        packets.append(latest_response)
+                        _log(log, f"websocket:stream:recv packet={len(packets)} state={latest_response.get('state')}")
+                        next_send_at = current_time + max(0.1, float(packet_interval_seconds))
+
+                        if playback_speed > 0:
+                            target_elapsed = current_time / playback_speed
+                            actual_elapsed = perf_counter() - playback_started
+                            if target_elapsed > actual_elapsed:
+                                sleep(min(target_elapsed - actual_elapsed, 0.25))
+                finally:
+                    video_capture.release()
+            ws_latency_ms = (perf_counter() - ws_started) * 1000.0
+        except Exception as exc:
+            raise DemoStepError("websocket_stream", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
     finally:
         detector.close()
 
@@ -283,18 +328,23 @@ def replay_video_session(
         minute_focus_scores=focus_scores,
     )
 
-    complete_started = perf_counter()
-    with httpx.Client(
-        base_url=config.api_url.rstrip("/"),
-        headers={"X-API-Key": config.api_key},
-        timeout=config.request_timeout_seconds,
-    ) as client:
-        completed = client.post(
-            f"/v1/sessions/{quote(session_id, safe='')}/complete",
-            json=summary.model_dump(mode="json"),
-        )
-        completed.raise_for_status()
-    complete_latency_ms = (perf_counter() - complete_started) * 1000.0
+    try:
+        _log(log, "complete_session:start")
+        complete_started = perf_counter()
+        with httpx.Client(
+            base_url=config.api_url.rstrip("/"),
+            headers={"X-API-Key": config.api_key},
+            timeout=config.request_timeout_seconds,
+        ) as client:
+            completed = client.post(
+                f"/v1/sessions/{quote(session_id, safe='')}/complete",
+                json=summary.model_dump(mode="json"),
+            )
+            completed.raise_for_status()
+        complete_latency_ms = (perf_counter() - complete_started) * 1000.0
+        _log(log, f"complete_session:ok latency_ms={complete_latency_ms:.1f}")
+    except Exception as exc:
+        raise DemoStepError("complete_session", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
 
     return {
         "session_id": session_id,

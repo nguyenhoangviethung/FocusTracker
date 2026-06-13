@@ -46,6 +46,7 @@ def build_summary(
     err = sum(1 for result in results if result.status != "ok")
     states: dict[str, int] = {}
     errors: dict[str, int] = {}
+    failure_stages: dict[str, int] = {}
     ws_latencies = []
     completion_latencies = []
     for result in results:
@@ -58,6 +59,8 @@ def build_summary(
                 completion_latencies.append(float(result.complete_latency_ms))
         elif result.error:
             errors[result.error] = errors.get(result.error, 0) + 1
+            stage = str(result.error_stage or "unknown")
+            failure_stages[stage] = failure_stages.get(stage, 0) + 1
 
     return BenchmarkSummary(
         generated_at=utc_now_iso(),
@@ -70,6 +73,7 @@ def build_summary(
         websocket_latency_ms=summarize_latencies(ws_latencies),
         completion_latency_ms=summarize_latencies(completion_latencies),
         states=states,
+        failure_stages=failure_stages,
         errors=sorted(errors.items(), key=lambda item: (-item[1], item[0]))[:10],
     )
 
@@ -104,6 +108,7 @@ def write_summary_bundle(output_dir: Path, summary: BenchmarkSummary, results: l
                 f"WebSocket latency:     {summary.websocket_latency_ms}",
                 f"Completion latency:    {summary.completion_latency_ms}",
                 f"States:                {summary.states}",
+                f"Failure stages:        {summary.failure_stages}",
                 f"Top errors:            {summary.errors}",
                 f"JSON report:           {json_path}",
                 f"CSV report:            {csv_path}",
@@ -133,4 +138,3 @@ def render_live_status(
         f"clients {connected}/{active_clients} "
         f"ok={success} err={failed} p95={p95_text} [{bar:<50}]"
     )
-
