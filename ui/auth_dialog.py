@@ -150,6 +150,8 @@ class AuthDialog(QDialog):
         if isinstance(exc, AuthRequestError):
             if exc.status_code == 422:
                 return message
+            if exc.status_code == 409:
+                return message
             if exc.status_code == 401:
                 return "Thông tin đăng nhập không đúng."
             if exc.status_code == 404:
@@ -173,7 +175,14 @@ class AuthDialog(QDialog):
         try:
             profile = fn()
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Authentication failed")
+            if isinstance(exc, AuthRequestError):
+                logger.warning(
+                    "Authentication request rejected with HTTP %s: %s",
+                    exc.status_code,
+                    exc,
+                )
+            else:
+                logger.error("Authentication failed: %s", exc)
             friendly_message = self._friendly_auth_message(exc)
             status_label.setText(friendly_message)
             QMessageBox.warning(self, "Login failed", friendly_message)

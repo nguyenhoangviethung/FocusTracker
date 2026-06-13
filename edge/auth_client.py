@@ -74,6 +74,8 @@ class AuthClient:
                     return "Tên đăng nhập hoặc mật khẩu không đúng."
                 if "user not found" in lowered:
                     return "Tài khoản này chưa tồn tại."
+                if "username already exists" in lowered:
+                    return "Tên đăng nhập này đã tồn tại. Hãy đăng nhập hoặc chọn tên khác."
                 return detail_value
             if isinstance(detail_value, list) and detail_value:
                 first = detail_value[0]

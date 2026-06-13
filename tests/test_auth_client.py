@@ -15,3 +15,12 @@ def test_friendly_http_error_parses_validation_payload() -> None:
         '{"detail":[{"type":"string_too_short","loc":["body","password"],"msg":"String should have at least 8 characters","input":"123456","ctx":{"min_length":8}}]}',
     )
     assert message == "Mật khẩu phải có ít nhất 8 ký tự."
+
+
+def test_friendly_http_error_explains_duplicate_username() -> None:
+    client = AuthClient(api_url="http://example.com", api_key="secret")
+    message = client._friendly_http_error(
+        409,
+        '{"detail":"username already exists"}',
+    )
+    assert message == "Tên đăng nhập này đã tồn tại. Hãy đăng nhập hoặc chọn tên khác."
