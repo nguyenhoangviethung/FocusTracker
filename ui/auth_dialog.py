@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from edge.auth_client import AuthClient
+from edge.auth_client import AuthClient, AuthRequestError
 from ui.theme import ThemeManager, font
 from utils.logger import get_logger
 
@@ -147,6 +147,15 @@ class AuthDialog(QDialog):
     def _friendly_auth_message(self, exc: Exception) -> str:
         message = str(exc).strip() or "Unknown error"
         lowered = message.lower()
+        if isinstance(exc, AuthRequestError):
+            if exc.status_code == 422:
+                return message
+            if exc.status_code == 401:
+                return "Thông tin đăng nhập không đúng."
+            if exc.status_code == 404:
+                return "Máy chủ chưa sẵn sàng cho chức năng đăng nhập."
+            if exc.status_code >= 500:
+                return "Máy chủ đang gặp lỗi tạm thời. Vui lòng thử lại sau."
         if "invalid username or password" in lowered:
             return "Tên đăng nhập hoặc mật khẩu không đúng."
         if "user not found" in lowered:
@@ -178,6 +187,10 @@ class AuthDialog(QDialog):
         if not username or not password:
             self.password_status.setText("Username and password are required.")
             return
+        if len(password) < 8:
+            self.password_status.setText("Mật khẩu phải có ít nhất 8 ký tự.")
+            QMessageBox.warning(self, "Login failed", "Mật khẩu phải có ít nhất 8 ký tự.")
+            return
         self._run_request(
             lambda: self._client().register_password(username, password, display_name),
             self.password_status,
@@ -188,6 +201,10 @@ class AuthDialog(QDialog):
         password = self.password_edit.text()
         if not username or not password:
             self.password_status.setText("Username and password are required.")
+            return
+        if len(password) < 8:
+            self.password_status.setText("Mật khẩu phải có ít nhất 8 ký tự.")
+            QMessageBox.warning(self, "Login failed", "Mật khẩu phải có ít nhất 8 ký tự.")
             return
         self._run_request(
             lambda: self._client().login_password(username, password),

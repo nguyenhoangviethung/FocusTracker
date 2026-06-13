@@ -4,6 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,6 +14,15 @@ from utils.logger import get_logger
 
 
 logger = get_logger("auth_client")
+
+
+@dataclass(slots=True)
+class AuthRequestError(RuntimeError):
+    status_code: int
+    message: str
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class AuthClient:
@@ -38,10 +48,45 @@ class AuthClient:
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             if exc.code == 404 and path.startswith("/v1/auth/"):
-                raise RuntimeError(
-                    "Cloud API auth endpoint is missing. Deploy the latest server revision."
+                raise AuthRequestError(
+                    exc.code,
+                    "Cloud API auth endpoint is missing. Deploy the latest server revision.",
                 ) from exc
-            raise RuntimeError(body or f"HTTP {exc.code}") from exc
+            message = self._friendly_http_error(exc.code, body)
+            raise AuthRequestError(exc.code, message) from exc
+
+    def _friendly_http_error(self, status_code: int, body: str) -> str:
+        detail = body.strip()
+        if not detail:
+            return f"FocusFlow API returned HTTP {status_code}."
+        try:
+            payload = json.loads(detail)
+        except json.JSONDecodeError:
+            return detail
+
+        if isinstance(payload, dict):
+            detail_value = payload.get("detail")
+            if isinstance(detail_value, str):
+                lowered = detail_value.lower()
+                if "string should have at least" in lowered:
+                    return "Mật khẩu hoặc trường nhập quá ngắn. Vui lòng kiểm tra lại."
+                if "invalid username or password" in lowered:
+                    return "Tên đăng nhập hoặc mật khẩu không đúng."
+                if "user not found" in lowered:
+                    return "Tài khoản này chưa tồn tại."
+                return detail_value
+            if isinstance(detail_value, list) and detail_value:
+                first = detail_value[0]
+                if isinstance(first, dict):
+                    location = first.get("loc", [])
+                    field_name = location[-1] if isinstance(location, list) and location else "trường nhập"
+                    message = str(first.get("msg") or "Validation error")
+                    if field_name == "password":
+                        return "Mật khẩu phải có ít nhất 8 ký tự."
+                    if field_name == "username":
+                        return "Tên đăng nhập không hợp lệ."
+                    return f"{field_name}: {message}"
+        return detail
 
     def register_password(self, username: str, password: str, display_name: str | None = None) -> AuthProfile:
         payload = {
