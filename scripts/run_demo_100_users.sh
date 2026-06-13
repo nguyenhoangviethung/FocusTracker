@@ -37,6 +37,7 @@ fi
 MANIFEST_PATH="${MANIFEST_PATH:-/tmp/focusflow-video-manifest.json}"
 STREAM_INTERVAL_SECONDS="${STREAM_INTERVAL_SECONDS:-1.0}"
 PLAYBACK_SPEED="${PLAYBACK_SPEED:-1.0}"
+REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-120}"
 VIDEO_INPUT_DIR="${VIDEO_INPUT_DIR:-$ROOT_DIR/demo/Data}"
 USER_MANIFEST_PATH="${USER_MANIFEST_PATH:-/tmp/focusflow-user-manifest.json}"
 RESULTS_DIR="${RESULTS_DIR:-/tmp/focusflow-demo-results}"
@@ -49,6 +50,7 @@ echo "Video input:  $VIDEO_INPUT_DIR"
 echo "Manifest:     $MANIFEST_PATH"
 echo "Stream intvl: $STREAM_INTERVAL_SECONDS"
 echo "Playback spd: $PLAYBACK_SPEED"
+echo "Request t/o:  $REQUEST_TIMEOUT_SECONDS"
 echo "Users file:   $USER_MANIFEST_PATH"
 echo "Results:      $RESULTS_DIR"
 echo "Stages:       $STAGES"
@@ -74,6 +76,7 @@ rm -rf "$RESULTS_DIR"
   --stages "$STAGES" \
   --stream-interval-seconds "$STREAM_INTERVAL_SECONDS" \
   --playback-speed "$PLAYBACK_SPEED" \
+  --request-timeout-seconds "$REQUEST_TIMEOUT_SECONDS" \
   --manifest "$MANIFEST_PATH" \
   --users-manifest "$USER_MANIFEST_PATH" \
   --output "$RESULTS_DIR"

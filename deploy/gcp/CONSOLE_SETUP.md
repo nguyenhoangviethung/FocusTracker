@@ -157,10 +157,16 @@ After deployment:
    - Concurrency: 4
    - Request timeout: 3600 seconds
    - Minimum instances: 1
-   - Maximum instances: 10
+   - Maximum instances: 60
    - CPU throttling: disabled
    - Service account: `focusflow-api`
    - Secret mapping: `FOCUSFLOW_API_KEY`
+
+With concurrency `4` and maximum instances `60`, the configured upper bound is
+approximately `240` simultaneous long-lived WebSocket requests. Actual
+throughput still depends on inference latency, regional Cloud Run quota, and
+Firestore/Pub/Sub latency; verify it with the scale demo before presenting
+`240` as measured capacity.
 3. Open the service URL plus `/health`.
 4. Expected response: `{"status":"ok"}`.
 5. Check **Logs** for model initialization errors.

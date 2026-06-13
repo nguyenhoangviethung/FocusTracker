@@ -23,6 +23,8 @@ COPY tracking/ /app/tracking/
 COPY utils/ /app/utils/
 COPY models/late_fusion/ /app/models/late_fusion/
 
+RUN python -c "from server.app import app; from server.core.inference import CloudInferenceEngine; CloudInferenceEngine(); print('FocusFlow API smoke test passed')"
+
 RUN useradd --create-home --shell /usr/sbin/nologin focusflow \
     && chown -R focusflow:focusflow /app
 

@@ -15,7 +15,13 @@ def test_summarize_latencies() -> None:
 def test_build_summary_counts_results() -> None:
     results = [
         ClientResult(device_id="a", session_id="1", status="ok", ws_latency_ms=10.0, complete_latency_ms=12.0, state="FOCUSED"),
-        ClientResult(device_id="b", session_id="2", status="err", error="boom"),
+        ClientResult(
+            device_id="b",
+            session_id="2",
+            status="err",
+            error_stage="websocket_stream",
+            error="boom",
+        ),
     ]
     summary = build_summary(
         api_url="https://example.com",
@@ -27,4 +33,4 @@ def test_build_summary_counts_results() -> None:
     assert summary.ok == 1
     assert summary.err == 1
     assert summary.states["FOCUSED"] == 1
-
+    assert summary.failure_stages == {"websocket_stream": 1}

@@ -121,3 +121,19 @@ def test_session_inference_and_completion(monkeypatch) -> None:
         assert repeated.status_code == 200
         assert repeated.json()["ended_at"] == completed.json()["ended_at"]
         assert repeated.json()["summary"] == completed.json()["summary"]
+
+        unauthorized_delete = client.delete(f"/v1/sessions/{session_id}")
+        assert unauthorized_delete.status_code == 401
+
+        deleted = client.delete(
+            f"/v1/sessions/{session_id}",
+            headers=headers,
+        )
+        assert deleted.status_code == 200
+        assert deleted.json()["session_id"] == session_id
+
+        missing = client.get(
+            f"/v1/sessions/{session_id}",
+            headers=headers,
+        )
+        assert missing.status_code == 404

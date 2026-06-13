@@ -12,8 +12,9 @@ def test_dashboard_routes_are_available() -> None:
         assert html.status_code == 200
         assert "FocusFlow AI Server Dashboard" in html.text
         assert "Camera wall" in html.text
+        assert "Session history" in html.text
         assert "live_metrics" in html.text
-        assert "setInterval(() => refreshDashboard().catch(console.error), 3000)" in html.text
+        assert "setInterval(() => window.refreshDashboard().catch(console.error), 3000)" in html.text
         assert "/dashboard/api/summary?limit=100" in html.text
 
         summary = client.get("/dashboard/api/summary")

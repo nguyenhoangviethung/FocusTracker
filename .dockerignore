@@ -13,3 +13,11 @@ dist/
 tests/
 scripts/
 *.spec
+demo/Data/
+demo/Data-x20/
+demo/results/
+demo/features/
+docs/
+ui/
+edge/
+deploy/gcp/static-site/

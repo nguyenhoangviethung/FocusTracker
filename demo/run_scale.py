@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stages", default="")
     parser.add_argument("--stream-interval-seconds", type=float, default=0.0)
     parser.add_argument("--playback-speed", type=float, default=1.0)
+    parser.add_argument("--request-timeout-seconds", type=float, default=120.0)
     parser.add_argument("--output", type=Path, default=Path("demo/results"))
     return parser
 
@@ -94,6 +95,7 @@ def main() -> None:
     user_entries = load_user_entries(args.users_manifest)
     stream_interval_seconds = max(0.0, float(args.stream_interval_seconds))
     playback_speed = max(0.01, float(args.playback_speed))
+    request_timeout_seconds = max(30.0, float(args.request_timeout_seconds))
     verbose = os.getenv("DEMO_VERBOSE", "").strip().lower() in {"1", "true", "yes", "on"}
     fixtures = load_fixtures(args.features) if stream_interval_seconds <= 0 else []
     if not manifest_entries and not fixtures:
@@ -118,6 +120,7 @@ def main() -> None:
                 api_url=args.api_url,
                 api_key=args.api_key,
                 device_id=f"demo-client-{index + 1:03d}",
+                request_timeout_seconds=request_timeout_seconds,
             )
             def log_step(message: str) -> None:
                 if verbose:

@@ -725,18 +725,23 @@ refreshDashboard().catch(err => {
         if (!target) return;
         const sessionId = target.getAttribute('data-history-delete');
         if (!sessionId) return;
-        fetch(`/dashboard/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+        const apiKey = window.prompt('Enter the FocusFlow API key to delete this session:');
+        if (!apiKey) return;
+        fetch(`/dashboard/api/sessions/${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+          headers: { 'X-API-Key': apiKey },
+        })
           .then(response => {
             if (!response.ok) {
-              throw new Error('Delete failed');
+              throw new Error(`Delete failed with HTTP ${response.status}`);
             }
             return response.json();
           })
           .then(() => {
             hideSession(sessionId);
           })
-          .catch(() => {
-            hideSession(sessionId);
+          .catch(error => {
+            window.alert(error.message || 'Delete failed');
           });
       });
     }
@@ -828,8 +833,13 @@ async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]
 
 
 @router.delete("/dashboard/api/sessions/{session_id}")
-async def dashboard_delete_session(request: Request, session_id: str) -> dict[str, str]:
-    repository: SessionRepository = request.app.state.session_repository
+async def dashboard_delete_session(
+    request: Request,
+    session_id: str,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, str]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
     existing = await asyncio.to_thread(repository.get, session_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Session not found")

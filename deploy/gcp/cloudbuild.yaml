@@ -5,6 +5,11 @@ substitutions:
   _IMAGE: focusflow-api
   _SERVICE_ACCOUNT: focusflow-api
   _GOOGLE_OAUTH_CLIENT_ID: 1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
+  _CONCURRENCY: "4"
+  _MIN_INSTANCES: "1"
+  _MAX_INSTANCES: "60"
+
+timeout: 1800s
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -50,10 +55,12 @@ steps:
       - --service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com
       - --cpu=2
       - --memory=2Gi
-      - --concurrency=4
+      - --concurrency=${_CONCURRENCY}
       - --timeout=3600
-      - --min-instances=1
-      - --max-instances=10
+      - --min=${_MIN_INSTANCES}
+      - --max=${_MAX_INSTANCES}
+      - --min-instances=${_MIN_INSTANCES}
+      - --max-instances=${_MAX_INSTANCES}
       - --cpu-boost
       - --no-cpu-throttling
       - --set-env-vars=^@^FOCUSFLOW_ENV=production@FOCUSFLOW_REPOSITORY=firestore@FOCUSFLOW_EVENT_BACKEND=pubsub@FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events@FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions@FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users@FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID}@FOCUSFLOW_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}

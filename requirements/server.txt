@@ -1,6 +1,7 @@
 fastapi==0.128.0
 uvicorn[standard]>=0.34,<1
 pydantic>=2.12,<3
+python-dotenv>=1.0,<2
 numpy
 onnxruntime
 xgboost-cpu==3.2.0
