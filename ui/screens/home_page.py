@@ -59,7 +59,7 @@ class HomePage(ThemedPage):
         self.setup_card.layout.addLayout(vid_layout)
 
         self.source_label = QLabel("Selected source: local webcam")
-        self.mode_label = QLabel("Inference mode: hybrid")
+        self.mode_label = QLabel("Inference mode: hybrid (cloud + local fallback)")
         self.source_label.setWordWrap(True)
         self.mode_label.setWordWrap(True)
         self.setup_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -95,7 +95,9 @@ class HomePage(ThemedPage):
             app.start_session(config)
             
     def apply_settings(self, settings: dict) -> None:
-        self.mode_label.setText(f"Inference mode: {settings.get('inference_mode', 'local')}")
+        mode = str(settings.get("inference_mode", "hybrid"))
+        suffix = " (cloud + local fallback)" if mode == "hybrid" else ""
+        self.mode_label.setText(f"Inference mode: {mode}{suffix}")
 
     def apply_theme(self) -> None:
         super().apply_theme()

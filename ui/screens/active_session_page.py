@@ -71,10 +71,12 @@ class ActiveSessionPage(ThemedPage):
         self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
         self.camera_signal = QLabel("Signal: Waiting for Phase 2")
         self.camera_state = QLabel("State : FOCUSED")
+        self.cloud_status = QLabel("Cloud: waiting for session")
         self.camera_card.layout.addWidget(c_title)
         self.camera_card.layout.addWidget(self.camera_preview)
         self.camera_card.layout.addWidget(self.camera_signal)
         self.camera_card.layout.addWidget(self.camera_state)
+        self.camera_card.layout.addWidget(self.cloud_status)
         
         self.model_card = Card()
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -128,6 +130,10 @@ class ActiveSessionPage(ThemedPage):
         self.status_label.setText("STATUS: STARTING")
         self.camera_signal.setText("Signal: Starting camera/model")
         self.camera_state.setText("State : WARMING_UP")
+        mode = str(config.get("inference_mode", "hybrid")).lower()
+        self.cloud_status.setText(
+            "Cloud: connecting..." if mode in {"cloud", "hybrid"} else "Cloud: disabled (local mode)"
+        )
         self.gru_state.setText("GRU      : WARMING UP")
         self.tcn_state.setText("TCN      : WARMING UP")
         self.xgb_state.setText("XGBoost  : WARMING UP")
@@ -206,7 +212,7 @@ class ActiveSessionPage(ThemedPage):
         elif etype == "network_status":
             status = str(payload.get("status", "unknown"))
             message = str(payload.get("message", "")).strip()
-            self.camera_signal.setText(
+            self.cloud_status.setText(
                 f"Cloud: {status}" + (f" | {message}" if message else "")
             )
 
@@ -310,6 +316,7 @@ class ActiveSessionPage(ThemedPage):
         for label in [
             self.camera_signal,
             self.camera_state,
+            self.cloud_status,
             self.gru_state,
             self.tcn_state,
             self.xgb_state,

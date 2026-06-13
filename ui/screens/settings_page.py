@@ -59,7 +59,7 @@ class SettingsPage(ThemedPage):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Inference Mode:"))
         self.inference_mode = QComboBox()
-        self.inference_mode.addItems(["local", "cloud", "hybrid"])
+        self.inference_mode.addItems(["hybrid", "cloud", "local"])
         mode_layout.addWidget(self.inference_mode)
         self.ai_card.layout.addLayout(mode_layout)
 
@@ -113,7 +113,7 @@ class SettingsPage(ThemedPage):
 
     def apply_settings(self, settings: dict) -> None:
         self.scale_spinbox.setValue(settings.get("camera_distance_scale", 0.18))
-        self.inference_mode.setCurrentText(str(settings.get("inference_mode", "local")))
+        self.inference_mode.setCurrentText(str(settings.get("inference_mode", "hybrid")))
         self.cloud_api_url.setText(str(settings.get("cloud_api_url", "")))
         if settings.get("theme_mode") == "Light":
             self.rb_light.setChecked(True)

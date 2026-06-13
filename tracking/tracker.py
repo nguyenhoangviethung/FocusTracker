@@ -43,7 +43,11 @@ class TrackerConfig:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "TrackerConfig":
-        inference_mode = str(payload.get("inference_mode") or "local").strip().lower()
+        inference_mode = str(
+            os.getenv("FOCUSFLOW_INFERENCE_MODE", "")
+            or payload.get("inference_mode")
+            or "hybrid"
+        ).strip().lower()
         if inference_mode not in VALID_INFERENCE_MODES:
             inference_mode = "local"
         return cls(
@@ -60,6 +64,7 @@ class TrackerConfig:
             ).strip(),
             cloud_api_key=str(
                 os.getenv("FOCUSFLOW_CLOUD_API_KEY", "")
+                or os.getenv("FOCUSFLOW_API_KEY", "")
                 or payload.get("cloud_api_key")
             ).strip(),
             device_id=str(
@@ -121,7 +126,15 @@ class FocusSessionTracker:
             self._network_thread.start()
         self._camera_thread = threading.Thread(target=self._camera_loop, name="focusflow-camera", daemon=True)
         self._camera_thread.start()
-        logger.info("FocusSessionTracker started")
+        logger.info(
+            "FocusSessionTracker started mode=%s cloud_url_configured=%s "
+            "cloud_key_configured=%s device_id=%s user_id=%s",
+            self.config.inference_mode,
+            bool(self.config.cloud_api_url),
+            bool(self.config.cloud_api_key),
+            self.config.device_id or "missing",
+            self.config.user_id or "anonymous",
+        )
 
     def pause(self) -> None:
         self._pause_event.set()
@@ -311,11 +324,20 @@ class FocusSessionTracker:
 
     def _network_loop(self) -> None:
         if not self.config.cloud_api_url or not self.config.cloud_api_key or not self.config.device_id:
+            missing = [
+                name
+                for name, value in (
+                    ("Cloud API URL", self.config.cloud_api_url),
+                    ("API key", self.config.cloud_api_key),
+                    ("device ID", self.config.device_id),
+                )
+                if not value
+            ]
             self._put(
                 {
                     "type": "network_status",
                     "status": "disabled",
-                    "message": "Cloud mode requires URL, API key, and device ID.",
+                    "message": f"Missing: {', '.join(missing)}.",
                 }
             )
             return
@@ -339,6 +361,7 @@ class FocusSessionTracker:
                     )
                 )
                 self._cloud_session_id = str(record["session_id"])
+                logger.info("Cloud session created session_id=%s", self._cloud_session_id)
                 self._put(
                     {
                         "type": "network_status",

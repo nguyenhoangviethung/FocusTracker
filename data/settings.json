@@ -4,7 +4,7 @@
   "theme_mode": "Dark",
   "show_landmarks": true,
   "camera_distance_scale": 0.2,
-  "inference_mode": "local",
+  "inference_mode": "hybrid",
   "cloud_api_url": "https://focusflow-api-smp7iybg5q-as.a.run.app",
   "device_id": "ff86ba77-26c6-4e2a-9d7e-449beb712e1a",
   "demo_video_path": "",
@@ -15,5 +15,5 @@
   "auth_username": "student1",
   "auth_email": "",
   "auth_display_name": "ST1",
-  "auth_last_login_at": "2026-06-13T01:40:03.599945Z"
+  "auth_last_login_at": "2026-06-13T02:14:48.805072Z"
 }
