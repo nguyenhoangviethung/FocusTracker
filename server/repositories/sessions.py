@@ -118,26 +118,30 @@ class FirestoreSessionRepository:
 
     def complete(self, session_id: str, summary: SessionSummary) -> dict[str, Any] | None:
         reference = self._collection.document(session_id)
-        snapshot = reference.get()
-        if not snapshot.exists:
-            return None
-        existing = snapshot.to_dict() or {}
-        if existing.get("ended_at"):
+
+        @self._firestore.transactional
+        def _complete(transaction):
+            snapshot = reference.get(transaction=transaction)
+            if not snapshot.exists:
+                return None
+            existing = snapshot.to_dict() or {}
+            if existing.get("ended_at"):
+                return existing
+            completed_at = utc_now().isoformat()
+            updates = {
+                "status": "completed" if summary.completed else "cancelled",
+                "ended_at": completed_at,
+                "last_seen_at": completed_at,
+                "summary": summary.model_dump(mode="json"),
+                "report_status": "completed",
+                "report_started_at": completed_at,
+                "report_completed_at": completed_at,
+            }
+            transaction.update(reference, updates)
+            existing.update(updates)
             return existing
-        completed_at = utc_now().isoformat()
-        updates = {
-            "status": "completed" if summary.completed else "cancelled",
-            "ended_at": completed_at,
-            "last_seen_at": completed_at,
-            "summary": summary.model_dump(mode="json"),
-            "report_status": "completed",
-            "report_started_at": completed_at,
-            "report_completed_at": completed_at,
-        }
-        reference.update(updates)
-        record = existing
-        record.update(updates)
-        return record
+
+        return _complete(self._client.transaction())
 
     def update(self, session_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
         reference = self._collection.document(session_id)

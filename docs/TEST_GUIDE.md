@@ -454,7 +454,35 @@ Kiểm tra:
 3. API key.
 4. URL phải bắt đầu bằng `https://` khi chạy cloud thật.
 
-## 11. Checklist nhanh trước demo
+## 12. Checklist nhanh trước demo
+
+Chạy kiểm tra server trước khi demo:
+
+```bash
+pytest -q
+
+curl -fsS "https://YOUR_API_URL/health"
+curl -fsS "https://YOUR_API_URL/readyz"
+curl -fsS "https://YOUR_API_URL/dashboard/api/summary?limit=5"
+```
+
+Tạo một session smoke test:
+
+```bash
+curl -fsS -X POST "https://YOUR_API_URL/v1/sessions" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_CLOUD_API_KEY" \
+  -d '{"device_id":"preflight-device","duration_seconds":60}'
+```
+
+Kết quả cần đạt:
+
+- `/health` trả `{"status":"ok"}`;
+- `/readyz` trả `{"status":"ready"}`;
+- dashboard summary trả JSON, kể cả khi lookup tên user gặp lỗi;
+- session smoke test trả `201`;
+- đăng ký trùng username trả `409`, không phải `500`;
+- Pub/Sub lỗi không làm completion đã lưu bị trả `500`.
 
 ```text
 [ ] Webcam hoạt động

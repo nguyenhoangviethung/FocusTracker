@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+import logging
 import secrets
 from typing import Annotated, Any
 
@@ -29,24 +30,33 @@ from shared.contracts import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
     settings, repository, user_repository, engine, _ = _services(request)
     safe_limit = max(1, min(int(limit or 24), 100))
-    recent = repository.list_recent(safe_limit)
-    user_cache: dict[str, dict[str, Any] | None] = {}
-
-    def resolve_user(user_id: str | None) -> dict[str, Any] | None:
-        if not user_id:
-            return None
-        if user_id not in user_cache:
-            user_cache[user_id] = user_repository.get(user_id)
-        return user_cache[user_id]
+    dashboard_error: str | None = None
+    try:
+        recent = repository.list_recent(safe_limit)
+    except Exception:
+        logger.exception("Dashboard failed to load recent sessions")
+        recent = []
+        dashboard_error = "Session storage is temporarily unavailable"
+    user_ids = [
+        str(record.get("user_id"))
+        for record in recent
+        if record.get("user_id")
+    ]
+    try:
+        user_cache = user_repository.get_many(user_ids)
+    except Exception:
+        logger.warning("Dashboard failed to resolve users", exc_info=True)
+        user_cache = {}
 
     def decorate(record: dict[str, Any]) -> dict[str, Any]:
         decorated = dict(record)
-        user = resolve_user(str(record.get("user_id") or ""))
+        user = user_cache.get(str(record.get("user_id") or ""))
         if user:
             decorated["user_display_name"] = user.get("display_name") or user.get("email") or user.get("username") or user.get("user_id")
             decorated["user_email"] = user.get("email")
@@ -72,6 +82,7 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
         "status_counts": dict(status_counts),
         "latest_session": latest,
         "recent_sessions": recent,
+        "dashboard_error": dashboard_error,
     }
 
 
@@ -149,7 +160,7 @@ def _dashboard_html() -> str:
             </tr>
           </thead>
           <tbody id="session-rows">
-            <tr><td colspan="6" class="muted">Loading...</td></tr>
+            <tr><td colspan="7" class="muted">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -185,6 +196,9 @@ async function refreshDashboard() {
   document.getElementById('active-count').textContent = data.active_sessions ?? 0;
   document.getElementById('completed-count').textContent = data.status_counts?.completed ?? 0;
   document.getElementById('api-key').textContent = data.api_key_configured ? 'Yes' : 'No';
+  if (data.dashboard_error) {
+    document.getElementById('latest-card').textContent = data.dashboard_error;
+  }
 
   const latest = data.latest_session;
   if (latest) {
@@ -200,7 +214,7 @@ async function refreshDashboard() {
       <div><strong>Report:</strong> ${latest.report_status || 'n/a'}</div>
     `;
   } else {
-    document.getElementById('latest-card').textContent = 'No sessions yet.';
+    document.getElementById('latest-card').textContent = data.dashboard_error || 'No sessions yet.';
   }
 
   const rows = (data.recent_sessions || []).map(record => {
@@ -217,7 +231,7 @@ async function refreshDashboard() {
       </tr>
     `;
   }).join('');
-  document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="6" class="muted">No sessions yet.</td></tr>';
+  document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="7" class="muted">No sessions yet.</td></tr>';
 
   const tiles = (data.recent_sessions || []).slice(0, 24).map((record, index) => {
     const summary = record.summary || {};
@@ -237,7 +251,7 @@ async function refreshDashboard() {
   document.getElementById('camera-wall').innerHTML = tiles || '<div class="muted">No sessions yet.</div>';
 }
 refreshDashboard().catch(err => {
-  document.getElementById('session-rows').innerHTML = '<tr><td colspan="6" class="muted">Dashboard load failed.</td></tr>';
+  document.getElementById('session-rows').innerHTML = '<tr><td colspan="7" class="muted">Dashboard load failed.</td></tr>';
   console.error(err);
 });
 setInterval(() => refreshDashboard().catch(console.error), 3000);
@@ -285,7 +299,7 @@ async def dashboard() -> HTMLResponse:
 
 @router.get("/dashboard/api/summary")
 async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]:
-    return _dashboard_snapshot(request, limit=limit)
+    return await asyncio.to_thread(_dashboard_snapshot, request, limit)
 
 
 @router.get("/health")
@@ -311,13 +325,22 @@ async def register_password_user(
     settings, _, user_repository, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
     password_hash, password_salt, iterations = hash_password(payload.password)
-    record = await asyncio.to_thread(
-        user_repository.create_password_user,
-        payload.username,
-        password_hash,
-        password_salt,
-        payload.display_name,
-    )
+    try:
+        record = await asyncio.to_thread(
+            user_repository.create_password_user,
+            payload.username,
+            password_hash,
+            password_salt,
+            payload.display_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Password registration storage failure")
+        raise HTTPException(
+            status_code=503,
+            detail="Identity storage is temporarily unavailable",
+        ) from exc
     record["password_iterations"] = iterations
     return profile_from_record(record)
 
@@ -330,7 +353,14 @@ async def login_password_user(
 ) -> AuthProfile:
     settings, _, user_repository, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
-    record = await asyncio.to_thread(user_repository.get_by_username, payload.username)
+    try:
+        record = await asyncio.to_thread(user_repository.get_by_username, payload.username)
+    except Exception as exc:
+        logger.exception("Password login storage failure")
+        raise HTTPException(
+            status_code=503,
+            detail="Identity storage is temporarily unavailable",
+        ) from exc
     if record is None:
         raise HTTPException(status_code=404, detail="User not found")
     if not verify_password(
@@ -340,7 +370,11 @@ async def login_password_user(
         int(record.get("password_iterations") or 390000),
     ):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    updated = await asyncio.to_thread(user_repository.login_password_user, payload.username)
+    try:
+        updated = await asyncio.to_thread(user_repository.login_password_user, payload.username)
+    except Exception:
+        logger.warning("Failed to update password login timestamp", exc_info=True)
+        updated = None
     return profile_from_record(updated or record)
 
 
@@ -362,13 +396,20 @@ async def login_google_user(
     subject = str(claims.get("sub") or "").strip()
     if not subject:
         raise HTTPException(status_code=401, detail="Google token missing subject")
-    record = await asyncio.to_thread(
-        user_repository.upsert_google_user,
-        subject,
-        str(claims.get("email") or "") or None,
-        str(claims.get("name") or "") or None,
-        str(claims.get("jti") or "") or None,
-    )
+    try:
+        record = await asyncio.to_thread(
+            user_repository.upsert_google_user,
+            subject,
+            str(claims.get("email") or "") or None,
+            str(claims.get("name") or "") or None,
+            str(claims.get("jti") or "") or None,
+        )
+    except Exception as exc:
+        logger.exception("Google login storage failure")
+        raise HTTPException(
+            status_code=503,
+            detail="Identity storage is temporarily unavailable",
+        ) from exc
     return profile_from_record(record)
 
 
@@ -414,15 +455,22 @@ async def complete_session(
     record = await asyncio.to_thread(repository.complete, session_id, summary)
     if record is None:  # Defensive guard for concurrent deletion.
         raise HTTPException(status_code=404, detail="Session not found")
-    await asyncio.to_thread(
-        publisher.publish,
-        "session.completed",
-        {
-            "session_id": session_id,
-            "device_id": record.get("device_id"),
-            "summary": summary.model_dump(mode="json"),
-        },
-    )
+    try:
+        await asyncio.to_thread(
+            publisher.publish,
+            "session.completed",
+            {
+                "session_id": session_id,
+                "device_id": record.get("device_id"),
+                "summary": summary.model_dump(mode="json"),
+            },
+        )
+    except Exception:
+        logger.error(
+            "Session completed but event publication failed session_id=%s",
+            session_id,
+            exc_info=True,
+        )
     return record
 
 
@@ -440,7 +488,14 @@ async def run_inference(
     if str(session.get("device_id")) != packet.device_id:
         raise HTTPException(status_code=403, detail="Device does not own this session")
     response = await asyncio.to_thread(engine.predict, packet)
-    await asyncio.to_thread(repository.touch, packet.session_id)
+    try:
+        await asyncio.to_thread(repository.touch, packet.session_id)
+    except Exception:
+        logger.warning(
+            "Inference succeeded but session touch failed session_id=%s",
+            packet.session_id,
+            exc_info=True,
+        )
     return response
 
 
@@ -485,7 +540,26 @@ async def session_telemetry(websocket: WebSocket, session_id: str) -> None:
                 )
                 continue
             response = await asyncio.to_thread(engine.predict, packet)
-            await asyncio.to_thread(repository.touch, session_id)
+            try:
+                await asyncio.to_thread(repository.touch, session_id)
+            except Exception:
+                logger.warning(
+                    "WebSocket inference succeeded but session touch failed session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
             await websocket.send_json(response.model_dump(mode="json"))
     except WebSocketDisconnect:
         return
+    except Exception:
+        logger.exception("WebSocket telemetry failure session_id=%s", session_id)
+        try:
+            await websocket.send_json(
+                {
+                    "type": "server_error",
+                    "message": "Telemetry processing is temporarily unavailable",
+                }
+            )
+            await websocket.close(code=1011)
+        except Exception:
+            return

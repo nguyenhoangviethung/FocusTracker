@@ -4,6 +4,11 @@ from fastapi.testclient import TestClient
 from server.app import create_app
 
 
+class FailingEventPublisher:
+    def publish(self, event_type: str, payload: dict) -> str:
+        raise RuntimeError("pubsub unavailable")
+
+
 def test_session_inference_and_completion(monkeypatch) -> None:
     monkeypatch.setenv("FOCUSFLOW_ENV", "development")
     monkeypatch.setenv("FOCUSFLOW_REPOSITORY", "memory")
@@ -64,6 +69,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             assert streamed["session_id"] == session_id
             assert set(streamed["components"]) == {"gru", "tcn", "xgboost"}
 
+        client.app.state.event_publisher = FailingEventPublisher()
         completed = client.post(
             f"/v1/sessions/{session_id}/complete",
             json={

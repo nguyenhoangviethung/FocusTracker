@@ -30,6 +30,18 @@ def test_password_register_login_and_google_login(monkeypatch) -> None:
         assert registered.json()["auth_provider"] == "password"
         assert registered.json()["username"] == "student01"
 
+        duplicate = client.post(
+            "/v1/auth/password/register",
+            json={
+                "username": "student01",
+                "password": "super-secret-pass",
+                "display_name": "Student One",
+            },
+            headers=headers,
+        )
+        assert duplicate.status_code == 409
+        assert duplicate.json()["detail"] == "username already exists"
+
         logged_in = client.post(
             "/v1/auth/password/login",
             json={"username": "student01", "password": "super-secret-pass"},

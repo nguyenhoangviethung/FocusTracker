@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.api.routes import router
@@ -11,6 +13,9 @@ from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import create_session_repository
 from server.repositories.users import create_user_repository
 from server.services.event_publisher import create_event_publisher
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -39,6 +44,26 @@ def create_app() -> FastAPI:
             allow_methods=["GET", "POST"],
             allow_headers=["Content-Type", "X-API-Key"],
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(
+        request: Request,
+        exc: Exception,
+    ) -> JSONResponse:
+        logger.error(
+            "Unhandled server error method=%s path=%s",
+            request.method,
+            request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error",
+                "path": request.url.path,
+            },
+        )
+
     app.include_router(router)
     return app
 

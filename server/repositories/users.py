@@ -19,6 +19,8 @@ class UserRepository(Protocol):
 
     def get(self, user_id: str) -> dict[str, Any] | None: ...
 
+    def get_many(self, user_ids: list[str]) -> dict[str, dict[str, Any]]: ...
+
     def create_password_user(
         self,
         username: str,
@@ -65,6 +67,14 @@ class InMemoryUserRepository:
         with self._lock:
             user = self._users.get(user_id)
             return dict(user) if user else None
+
+    def get_many(self, user_ids: list[str]) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            return {
+                user_id: dict(self._users[user_id])
+                for user_id in user_ids
+                if user_id in self._users
+            }
 
     def create_password_user(
         self,
@@ -182,6 +192,17 @@ class FirestoreUserRepository:
     def get(self, user_id: str) -> dict[str, Any] | None:
         snapshot = self._users.document(user_id).get()
         return snapshot.to_dict() if snapshot.exists else None
+
+    def get_many(self, user_ids: list[str]) -> dict[str, dict[str, Any]]:
+        unique_ids = list(dict.fromkeys(user_id for user_id in user_ids if user_id))
+        if not unique_ids:
+            return {}
+        references = [self._users.document(user_id) for user_id in unique_ids]
+        records: dict[str, dict[str, Any]] = {}
+        for snapshot in self._client.get_all(references):
+            if snapshot.exists:
+                records[snapshot.id] = snapshot.to_dict() or {}
+        return records
 
     def create_password_user(
         self,

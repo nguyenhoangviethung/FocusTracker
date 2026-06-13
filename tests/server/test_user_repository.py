@@ -15,6 +15,9 @@ def test_in_memory_user_repository_password_and_google_paths() -> None:
     fetched = repo.get_by_username("student01")
     assert fetched is not None
     assert fetched["display_name"] == "Student One"
+    assert repo.get_many([created["user_id"], "missing-user"]) == {
+        created["user_id"]: created
+    }
 
     updated = repo.login_password_user("student01")
     assert updated is not None
