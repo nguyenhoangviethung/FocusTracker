@@ -23,6 +23,7 @@ logger = get_logger("tracker")
 
 INFERENCE_EVERY_N_FRAMES = 3
 PREVIEW_EVERY_N_FRAMES = 2
+CLOUD_TELEMETRY_INTERVAL_SECONDS = 1.0
 VALID_INFERENCE_MODES = {"local", "cloud", "hybrid"}
 
 
@@ -108,6 +109,7 @@ class FocusSessionTracker:
         self._cloud_responses: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=4)
         self._cloud_session_id = ""
         self._cloud_sequence = 0
+        self._last_cloud_packet_at = 0.0
         self._cloud_client: FocusFlowCloudClient | None = None
 
     @property
@@ -393,6 +395,10 @@ class FocusSessionTracker:
     def _queue_cloud_packet(self, raw_sequence, face_found: bool) -> None:
         if not self._cloud_session_id:
             return
+        now = time.monotonic()
+        if now - self._last_cloud_packet_at < CLOUD_TELEMETRY_INTERVAL_SECONDS:
+            return
+        self._last_cloud_packet_at = now
         self._cloud_sequence += 1
         packet = TelemetryPacket(
             session_id=self._cloud_session_id,

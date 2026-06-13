@@ -4,6 +4,8 @@ import asyncio
 from collections import Counter
 import logging
 import secrets
+import threading
+import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -31,6 +33,28 @@ from shared.contracts import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+DASHBOARD_CACHE_SECONDS = 3.0
+
+
+class DashboardSnapshotCache:
+    def __init__(self, ttl_seconds: float = DASHBOARD_CACHE_SECONDS) -> None:
+        self.ttl_seconds = ttl_seconds
+        self._entries: dict[int, tuple[float, dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def get_or_load(
+        self,
+        limit: int,
+        loader,
+    ) -> tuple[dict[str, Any], bool]:
+        now = time.monotonic()
+        with self._lock:
+            cached = self._entries.get(limit)
+            if cached and now - cached[0] < self.ttl_seconds:
+                return cached[1], True
+            snapshot = loader()
+            self._entries[limit] = (time.monotonic(), snapshot)
+            return snapshot, False
 
 
 def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
@@ -83,6 +107,27 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
         "latest_session": latest,
         "recent_sessions": recent,
         "dashboard_error": dashboard_error,
+        "firestore_query_limit": safe_limit,
+    }
+
+
+def _live_session_updates(
+    response: InferenceResponse,
+    packet: TelemetryPacket,
+) -> dict[str, Any]:
+    return {
+        "last_seen_at": response.processed_at.isoformat(),
+        "live_metrics": {
+            "sequence_number": packet.sequence_number,
+            "captured_at": packet.captured_at.isoformat(),
+            "processed_at": response.processed_at.isoformat(),
+            "state": response.state,
+            "ai_state": response.ai_state,
+            "focus_score": response.focus_score,
+            "face_found": packet.face_found,
+            "latency_ms": response.latency_ms,
+            "components": response.components,
+        },
     }
 
 
@@ -178,15 +223,15 @@ def _dashboard_html() -> str:
     <section class="card" style="margin-top:16px;">
       <h2 style="margin-top:0;">Camera wall preview</h2>
       <div class="muted">
-        This preview defaults to a small subset so the page stays responsive.
-        Use the API summary endpoint with `?limit=100` when you need the full wall.
+        The server reads at most 100 recent session documents in one bounded
+        query and caches the snapshot for 3 seconds.
       </div>
       <div id="camera-wall" class="wall"></div>
     </section>
   </div>
 <script>
 async function refreshDashboard() {
-  const response = await fetch('/dashboard/api/summary?limit=24', { cache: 'no-store' });
+  const response = await fetch('/dashboard/api/summary?limit=100', { cache: 'no-store' });
   const data = await response.json();
   document.getElementById('ready-pill').textContent = data.ready ? 'READY' : 'NOT READY';
   document.getElementById('ready-pill').className = 'pill ' + (data.ready ? 'ok' : 'warn');
@@ -210,6 +255,10 @@ async function refreshDashboard() {
       <div><strong>User:</strong> ${latest.user_display_name || latest.user_id || '-'}</div>
       <div><strong>Email:</strong> ${latest.user_email || '-'}</div>
       <div><strong>User ID:</strong> <span class="mono">${latest.user_id || '-'}</span></div>
+      <div><strong>Live state:</strong> ${latest.live_metrics?.state || 'waiting'}</div>
+      <div><strong>Live focus:</strong> ${latest.live_metrics?.focus_score != null ? (latest.live_metrics.focus_score * 100).toFixed(1) + '%' : '-'}</div>
+      <div><strong>Face:</strong> ${latest.live_metrics?.face_found == null ? '-' : (latest.live_metrics.face_found ? 'found' : 'not found')}</div>
+      <div><strong>Inference latency:</strong> ${latest.live_metrics?.latency_ms != null ? latest.live_metrics.latency_ms.toFixed(1) + ' ms' : '-'}</div>
       <div><strong>Average focus:</strong> ${((summary.average_focus || 0) * 100).toFixed(1)}%</div>
       <div><strong>Report:</strong> ${latest.report_status || 'n/a'}</div>
     `;
@@ -235,16 +284,19 @@ async function refreshDashboard() {
 
   const tiles = (data.recent_sessions || []).slice(0, 24).map((record, index) => {
     const summary = record.summary || {};
-    const focus = summary.average_focus != null ? (summary.average_focus * 100).toFixed(1) + '%' : '-';
-    const status = (record.status || 'unknown').toUpperCase();
+    const live = record.live_metrics || {};
+    const focusValue = live.focus_score ?? summary.average_focus;
+    const focus = focusValue != null ? (focusValue * 100).toFixed(1) + '%' : '-';
+    const status = (live.state || record.status || 'unknown').toUpperCase();
     const user = record.user_display_name || record.user_id || '-';
     return `
       <div class="tile">
         <strong>${String(index + 1).padStart(3, '0')} | ${status}</strong>
         <div class="tiny mono">${(record.device_id || '').slice(0, 16)}</div>
         <div class="tiny">focus: ${focus}</div>
+        <div class="tiny">face: ${live.face_found == null ? '-' : (live.face_found ? 'found' : 'missing')}</div>
+        <div class="tiny">latency: ${live.latency_ms != null ? live.latency_ms.toFixed(1) + ' ms' : '-'}</div>
         <div class="tiny">user: ${String(user).slice(0, 16)}</div>
-        <div class="tiny">report: ${record.report_status || '-'}</div>
       </div>
     `;
   }).join('');
@@ -299,7 +351,21 @@ async def dashboard() -> HTMLResponse:
 
 @router.get("/dashboard/api/summary")
 async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]:
-    return await asyncio.to_thread(_dashboard_snapshot, request, limit)
+    safe_limit = max(1, min(int(limit or 24), 100))
+    cache: DashboardSnapshotCache = request.app.state.dashboard_cache
+
+    def load_snapshot() -> tuple[dict[str, Any], bool]:
+        return cache.get_or_load(
+            safe_limit,
+            lambda: _dashboard_snapshot(request, safe_limit),
+        )
+
+    snapshot, cache_hit = await asyncio.to_thread(load_snapshot)
+    return {
+        **snapshot,
+        "dashboard_cache_hit": cache_hit,
+        "dashboard_cache_seconds": DASHBOARD_CACHE_SECONDS,
+    }
 
 
 @router.get("/health")
@@ -489,10 +555,14 @@ async def run_inference(
         raise HTTPException(status_code=403, detail="Device does not own this session")
     response = await asyncio.to_thread(engine.predict, packet)
     try:
-        await asyncio.to_thread(repository.touch, packet.session_id)
+        await asyncio.to_thread(
+            repository.update,
+            packet.session_id,
+            _live_session_updates(response, packet),
+        )
     except Exception:
         logger.warning(
-            "Inference succeeded but session touch failed session_id=%s",
+            "Inference succeeded but live metrics update failed session_id=%s",
             packet.session_id,
             exc_info=True,
         )
@@ -541,10 +611,14 @@ async def session_telemetry(websocket: WebSocket, session_id: str) -> None:
                 continue
             response = await asyncio.to_thread(engine.predict, packet)
             try:
-                await asyncio.to_thread(repository.touch, session_id)
+                await asyncio.to_thread(
+                    repository.update,
+                    session_id,
+                    _live_session_updates(response, packet),
+                )
             except Exception:
                 logger.warning(
-                    "WebSocket inference succeeded but session touch failed session_id=%s",
+                    "WebSocket inference succeeded but live metrics update failed session_id=%s",
                     session_id,
                     exc_info=True,
                 )

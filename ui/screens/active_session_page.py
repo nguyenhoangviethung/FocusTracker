@@ -227,8 +227,7 @@ class ActiveSessionPage(ThemedPage):
         
         sig_text = f"Signal: {focus_score*100:.1f}% | {face_text} | {fps:.1f} FPS" if model_ready else f"Signal: gathering 30 frames | {face_text} | {fps:.1f} FPS"
         self.camera_signal.setText(sig_text)
-        source = str(payload.get("inference_source", "local")).upper()
-        self.camera_state.setText(f"State : AI={ai_state} | {source}")
+        self.camera_state.setText(f"State : AI={ai_state}")
         self.status_label.setText(f"STATUS: {state}")
         
         self.status_label.setStyleSheet(f"color: {self.theme.color('accent_focus') if state == 'FOCUSED' else self.theme.color('accent_warn')};")

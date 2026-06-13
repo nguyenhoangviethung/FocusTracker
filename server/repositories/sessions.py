@@ -145,13 +145,8 @@ class FirestoreSessionRepository:
 
     def update(self, session_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
         reference = self._collection.document(session_id)
-        snapshot = reference.get()
-        if not snapshot.exists:
-            return None
         reference.update(updates)
-        record = snapshot.to_dict() or {}
-        record.update(updates)
-        return record
+        return dict(updates)
 
 
 def create_session_repository(settings: ServerSettings) -> SessionRepository:

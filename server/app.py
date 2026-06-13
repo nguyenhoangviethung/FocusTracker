@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from server.api.routes import router
+from server.api.routes import DashboardSnapshotCache, router
 from server.config import ServerSettings
 from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import create_session_repository
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     app.state.user_repository = create_user_repository(settings)
     app.state.event_publisher = create_event_publisher(settings)
     app.state.inference_engine = CloudInferenceEngine()
+    app.state.dashboard_cache = DashboardSnapshotCache()
     yield
 
 

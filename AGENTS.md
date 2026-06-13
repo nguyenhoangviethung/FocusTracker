@@ -272,6 +272,7 @@ focusflow_sessions/{session_id}
   last_seen_at
   duration_seconds
   summary
+  live_metrics
   model_version
   report_status
   report_started_at
@@ -294,8 +295,20 @@ Do not keep a separate `focusflow_usernames` collection; use `focusflow_users`
 as the single source of truth for user identity documents.
 
 Do not persist every 30 FPS feature sequence in Firestore. Realtime telemetry is
-processed in flight. Persist only sampled metrics later if a measured research
-requirement justifies the cost.
+processed in flight. `live_metrics` is a single overwrite-only dashboard
+snapshot sampled at no more than 1 Hz per desktop session. The dashboard may
+poll and render these snapshots every 3 seconds to reduce browser and Firestore
+read load. A snapshot may contain the current model state, focus score,
+face-presence flag, component probabilities, sequence number, and inference
+latency. It must never contain raw features, frames, landmarks, or telemetry
+history.
+
+Dashboard reads must be bounded and batched on the server side. The default
+dashboard view may query at most 100 recent session documents at once, resolve
+user documents with Firestore `get_all`, and cache the assembled snapshot for
+3 seconds per Cloud Run instance. Do not make clients coordinate telemetry
+batches and do not create a single aggregate document that every client writes,
+because that would become a hot document at large scale.
 
 ### Pub/Sub and report completion
 

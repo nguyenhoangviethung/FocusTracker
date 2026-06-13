@@ -48,6 +48,18 @@ def test_session_inference_and_completion(monkeypatch) -> None:
         )
         assert inferred.status_code == 200
         assert set(inferred.json()["components"]) == {"gru", "tcn", "xgboost"}
+        stored_after_rest = client.get(
+            f"/v1/sessions/{session_id}",
+            headers=headers,
+        )
+        assert stored_after_rest.status_code == 200
+        assert stored_after_rest.json()["live_metrics"]["sequence_number"] == 1
+        assert stored_after_rest.json()["live_metrics"]["face_found"] is True
+        assert stored_after_rest.json()["live_metrics"]["state"] in {
+            "FOCUSED",
+            "DISTRACTED",
+            "NO_FACE",
+        }
 
         with client.websocket_connect(
             f"/v1/ws/sessions/{session_id}?device_id=device-1",
@@ -68,6 +80,13 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             streamed = websocket.receive_json()
             assert streamed["session_id"] == session_id
             assert set(streamed["components"]) == {"gru", "tcn", "xgboost"}
+
+        stored_after_websocket = client.get(
+            f"/v1/sessions/{session_id}",
+            headers=headers,
+        )
+        assert stored_after_websocket.status_code == 200
+        assert stored_after_websocket.json()["live_metrics"]["sequence_number"] == 2
 
         client.app.state.event_publisher = FailingEventPublisher()
         completed = client.post(
