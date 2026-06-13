@@ -175,6 +175,12 @@ def _dashboard_html() -> str:
     .pill { display:inline-block; padding:4px 10px; border-radius:999px; background: #1f2937; border:1px solid #334155; }
     .pill.ok { background: rgba(46, 204, 113, .14); border-color: rgba(46, 204, 113, .32); color: #7ef0a9; }
     .pill.warn { background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .28); color: #fca5a5; }
+    .focus-meter { min-width:110px; }
+    .focus-value { display:flex; justify-content:space-between; gap:8px; font-weight:700; }
+    .focus-track { height:6px; margin-top:6px; overflow:hidden; border-radius:999px; background:#303030; }
+    .focus-fill { height:100%; border-radius:inherit; background:var(--accent); }
+    .focus-fill.medium { background:#f59e0b; }
+    .focus-fill.low { background:#ef4444; }
     .row { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
     code { background:#0b1220; padding:2px 6px; border-radius:8px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -221,12 +227,13 @@ def _dashboard_html() -> str:
               <th>Status</th>
               <th>Started</th>
               <th>Ended</th>
-              <th>Summary</th>
+              <th>Focus</th>
+              <th>Result</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody id="session-rows">
-            <tr><td colspan="8" class="muted">Loading...</td></tr>
+            <tr><td colspan="9" class="muted">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -289,6 +296,9 @@ async function refreshDashboard() {
 
   const rows = (data.recent_sessions || []).map(record => {
     const summary = record.summary || {};
+    const live = record.live_metrics || {};
+    const focusValue = summary.average_focus ?? live.focus_score;
+    const focus = focusValue != null ? (focusValue * 100).toFixed(1) + '%' : '-';
     return `
       <tr>
         <td class="mono">${record.session_id || ''}</td>
@@ -297,11 +307,13 @@ async function refreshDashboard() {
         <td>${record.status || 'unknown'}</td>
         <td class="mono">${(record.started_at || '').replace('T', ' ').slice(0, 19)}</td>
         <td class="mono">${(record.ended_at || '').replace('T', ' ').slice(0, 19) || '-'}</td>
-        <td>${summary.completed ? 'completed' : (summary.average_focus != null ? ((summary.average_focus * 100).toFixed(1) + '% focus') : '-')}</td>
+        <td>${focus}</td>
+        <td>${summary.completed ? 'completed' : (record.status || 'unknown')}</td>
+        <td>-</td>
       </tr>
     `;
   }).join('');
-  document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="8" class="muted">No sessions yet.</td></tr>';
+  document.getElementById('session-rows').innerHTML = rows || '<tr><td colspan="9" class="muted">No sessions yet.</td></tr>';
 
   const tiles = (data.recent_sessions || []).slice(0, 24).map((record, index) => {
     const summary = record.summary || {};
@@ -324,7 +336,7 @@ async function refreshDashboard() {
   document.getElementById('camera-wall').innerHTML = tiles || '<div class="muted">No sessions yet.</div>';
 }
 refreshDashboard().catch(err => {
-  document.getElementById('session-rows').innerHTML = '<tr><td colspan="8" class="muted">Dashboard load failed.</td></tr>';
+  document.getElementById('session-rows').innerHTML = '<tr><td colspan="9" class="muted">Dashboard load failed.</td></tr>';
   console.error(err);
 });
 </script>
@@ -555,7 +567,7 @@ refreshDashboard().catch(err => {
     const focusValue = record => {
       const summary = record.summary || {};
       const live = record.live_metrics || {};
-      return Number(live.focus_score ?? summary.average_focus ?? -1);
+      return Number(summary.average_focus ?? live.focus_score ?? -1);
     };
     const byText = key => [...records].sort((a, b) => normalize(a?.[key]).localeCompare(normalize(b?.[key])));
     const sorted = [...records];
@@ -572,6 +584,22 @@ refreshDashboard().catch(err => {
       return byText('device_id');
     }
     return sorted.sort((a, b) => normalize(b.started_at).localeCompare(normalize(a.started_at)));
+  }
+
+  function focusPresentation(record) {
+    const summary = record.summary || {};
+    const live = record.live_metrics || {};
+    const rawValue = summary.average_focus ?? live.focus_score;
+    if (rawValue == null || Number.isNaN(Number(rawValue))) {
+      return { label: '-', width: 0, tone: 'low', source: 'No result' };
+    }
+    const value = Math.max(0, Math.min(1, Number(rawValue)));
+    return {
+      label: `${(value * 100).toFixed(1)}%`,
+      width: value * 100,
+      tone: value >= 0.54 ? '' : (value >= 0.35 ? 'medium' : 'low'),
+      source: summary.average_focus != null ? 'Average' : 'Live',
+    };
   }
 
   function render(data) {
@@ -655,6 +683,7 @@ refreshDashboard().catch(err => {
           const summary = record.summary || {};
           const live = record.live_metrics || {};
           const stateLabel = (live.state || record.status || 'unknown').toLowerCase();
+          const focus = focusPresentation(record);
           return `
             <tr>
               <td class="mono">${record.session_id || ''}</td>
@@ -663,7 +692,13 @@ refreshDashboard().catch(err => {
               <td>${stateLabel}</td>
               <td class="mono">${(record.started_at || '').replace('T', ' ').slice(0, 19)}</td>
               <td class="mono">${(record.ended_at || '').replace('T', ' ').slice(0, 19) || '-'}</td>
-              <td>${summary.completed ? 'completed' : (summary.average_focus != null ? ((summary.average_focus * 100).toFixed(1) + '% focus') : '-')}</td>
+              <td>
+                <div class="focus-meter" title="${focus.source} focus score">
+                  <div class="focus-value"><span>${focus.label}</span><span class="table-muted">${focus.source}</span></div>
+                  <div class="focus-track"><div class="focus-fill ${focus.tone}" style="width:${focus.width}%"></div></div>
+                </div>
+              </td>
+              <td>${summary.completed ? 'completed' : stateLabel}</td>
               <td>
                 <button class="history-action danger" type="button" data-history-delete="${record.session_id || ''}">Delete</button>
               </td>

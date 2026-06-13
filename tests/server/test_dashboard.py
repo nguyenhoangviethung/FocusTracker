@@ -13,6 +13,9 @@ def test_dashboard_routes_are_available() -> None:
         assert "FocusFlow AI Server Dashboard" in html.text
         assert "Camera wall" in html.text
         assert "Session history" in html.text
+        assert "<th>Focus</th>" in html.text
+        assert "focusPresentation(record)" in html.text
+        assert "summary.average_focus" in html.text
         assert "live_metrics" in html.text
         assert "setInterval(() => window.refreshDashboard().catch(console.error), 3000)" in html.text
         assert "/dashboard/api/summary?limit=100" in html.text
