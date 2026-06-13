@@ -1,5 +1,23 @@
 [
   {
+    "timestamp": "2026-06-13T02:58:29.827984+00:00",
+    "duration_seconds": 204,
+    "focused_seconds": 98,
+    "minute_focus_scores": [
+      0.4837272790542368,
+      0.6860247093460651,
+      0.5344035040514874,
+      0.787998360336751
+    ],
+    "average_focus": 0.5950189883023808,
+    "distraction_count": 10,
+    "focus_streak_seconds": 45.0,
+    "completed": false,
+    "report_status": "completed",
+    "report_started_at": "2026-06-13T02:58:29.843491+00:00",
+    "report_completed_at": "2026-06-13T02:58:29.843491+00:00"
+  },
+  {
     "timestamp": "2026-06-13T02:33:13.735047+00:00",
     "duration_seconds": 73,
     "focused_seconds": 9,

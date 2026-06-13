@@ -92,20 +92,30 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
         return decorated
 
     recent = [decorate(record) for record in recent]
-    status_counts = Counter(str(record.get("status") or "unknown") for record in recent)
-    active_sessions = sum(1 for record in recent if not record.get("ended_at"))
-    latest = recent[0] if recent else None
+    unique_recent: list[dict[str, Any]] = []
+    seen_user_keys: set[str] = set()
+    for record in recent:
+        user_key = str(record.get("user_id") or "").strip()
+        dedupe_key = f"user:{user_key}" if user_key else f"session:{record.get('session_id') or ''}"
+        if dedupe_key in seen_user_keys:
+            continue
+        seen_user_keys.add(dedupe_key)
+        unique_recent.append(record)
+
+    status_counts = Counter(str(record.get("status") or "unknown") for record in unique_recent)
+    active_sessions = sum(1 for record in unique_recent if not record.get("ended_at"))
+    latest = unique_recent[0] if unique_recent else None
     return {
         "environment": settings.environment,
         "repository_backend": settings.repository_backend,
         "event_backend": settings.event_backend,
         "api_key_configured": bool(settings.api_key),
         "ready": engine is not None and repository is not None,
-        "recent_count": len(recent),
+        "recent_count": len(unique_recent),
         "active_sessions": active_sessions,
         "status_counts": dict(status_counts),
         "latest_session": latest,
-        "recent_sessions": recent,
+        "recent_sessions": unique_recent,
         "dashboard_error": dashboard_error,
         "firestore_query_limit": safe_limit,
     }
