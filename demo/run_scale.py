@@ -139,9 +139,10 @@ def main() -> None:
                         log=log_step,
                     )
                 elif fixture is not None:
+                    raw_seq = [f[:30] for f in fixture["raw_feature_sequence"]]
                     outcome = replay_session(
                         config,
-                        raw_feature_sequence=fixture["raw_feature_sequence"],
+                        raw_feature_sequence=raw_seq,
                         face_found=bool(fixture.get("face_found", True)),
                         session_duration_seconds=stage.duration_seconds,
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
