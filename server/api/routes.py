@@ -256,10 +256,35 @@ def _dashboard_html(settings: ServerSettings) -> str:
     <!-- Tab 2: Sessions -->
     <div id="tab-sessions" class="tab-content" style="display: none;">
       <div class="section-title">All Sessions List</div>
+      
+      <!-- Session controls, filters & operations -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; flex-wrap: wrap;">
+        <!-- Filters tab design -->
+        <div style="display: flex; gap: 4px; background: #E2E8F0; padding: 4px; border-radius: 8px;">
+          <button id="filter-all" onclick="setStatusFilter('all')" style="border: none; background: #FFF; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; color: #1E5EEB; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;">All</button>
+          <button id="filter-active" onclick="setStatusFilter('active')" style="border: none; background: transparent; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; color: #64748B; transition: all 0.2s;">Active</button>
+          <button id="filter-completed" onclick="setStatusFilter('completed')" style="border: none; background: transparent; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; color: #64748B; transition: all 0.2s;">Completed</button>
+        </div>
+        
+        <!-- Quick clean up tools & actions -->
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button id="batch-delete-btn" onclick="batchDeleteSelected()" style="display: none; background: #EF4444; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; align-items: center; gap: 6px; box-shadow: 0 2px 5px rgba(239, 68, 68, 0.2);">
+            Delete Selected (<span id="selected-count">0</span>)
+          </button>
+          <button onclick="clearStaleSessions()" style="background: #F59E0B1A; color: #D97706; border: 1px solid #F59E0B33; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+            Clear Stale Active (>1h)
+          </button>
+          <button onclick="clearAllSessions()" style="background: #EF44441A; color: #EF4444; border: 1px solid #EF444433; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+            Clear All
+          </button>
+        </div>
+      </div>
+
       <div style="background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; text-align: left;" id="sessions-table">
           <thead>
             <tr style="border-bottom: 2px solid #E5E7EB; color: #64748B; font-weight: 600;">
+              <th style="padding: 12px 16px; width: 40px;"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" style="cursor: pointer; width: 16px; height: 16px;"></th>
               <th style="padding: 12px 16px;">User</th>
               <th style="padding: 12px 16px;">Session ID</th>
               <th style="padding: 12px 16px;">Device ID</th>
@@ -272,12 +297,13 @@ def _dashboard_html(settings: ServerSettings) -> str:
           </thead>
           <tbody id="sessions-table-body">
             <tr>
-              <td colspan="8" style="padding: 24px; text-align: center; color: #64748B;">Loading sessions...</td>
+              <td colspan="9" style="padding: 24px; text-align: center; color: #64748B;">Loading sessions...</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
 
     <!-- Tab 3: Metrics (Simulation Info) -->
     <div id="tab-metrics" class="tab-content" style="display: none;">
@@ -394,9 +420,43 @@ def _dashboard_html(settings: ServerSettings) -> str:
     if (clickedItem) clickedItem.classList.add('active');
   }}
 
+  let selectedSessions = new Set();
+  let statusFilter = 'all';
+
+  function setStatusFilter(filter) {{
+    statusFilter = filter;
+    
+    // Update active tab buttons visual style
+    const filters = ['all', 'active', 'completed'];
+    filters.forEach(f => {{
+      const btn = document.getElementById('filter-' + f);
+      if (f === filter) {{
+        btn.style.background = '#FFF';
+        btn.style.color = '#1E5EEB';
+        btn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      }} else {{
+        btn.style.background = 'transparent';
+        btn.style.color = '#64748B';
+        btn.style.boxShadow = 'none';
+      }}
+    }});
+    
+    filterSessions();
+  }}
+
   function updateSessionsTable(sessions) {{
     allSessions = sessions;
+    
+    // Clean up selectedSessions to remove IDs that are no longer present
+    const validIds = new Set(sessions.map(s => s.session_id));
+    for (let id of selectedSessions) {{
+      if (!validIds.has(id)) {{
+        selectedSessions.delete(id);
+      }}
+    }}
+    
     filterSessions();
+    updateBatchDeleteButton();
   }}
 
   function filterSessions() {{
@@ -407,11 +467,23 @@ def _dashboard_html(settings: ServerSettings) -> str:
       const user = (s.user_display_name || s.user_id || '').toLowerCase();
       const sid = (s.session_id || '').toLowerCase();
       const did = (s.device_id || '').toLowerCase();
-      return user.includes(query) || sid.includes(query) || did.includes(query);
+      const matchesSearch = user.includes(query) || sid.includes(query) || did.includes(query);
+      
+      const status = s.ended_at ? 'completed' : 'active';
+      const matchesStatus = statusFilter === 'all' || status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
     }});
 
+    // Update Select All checkbox state based on filtered rows
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (selectAllCheckbox) {{
+      const allChecked = filtered.length > 0 && filtered.every(s => selectedSessions.has(s.session_id));
+      selectAllCheckbox.checked = allChecked;
+    }}
+
     if (filtered.length === 0) {{
-      tbody.innerHTML = `<tr><td colspan="8" style="padding: 24px; text-align: center; color: #64748B;">No sessions found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="padding: 24px; text-align: center; color: #64748B;">No sessions found.</td></tr>`;
       return;
     }}
 
@@ -421,6 +493,7 @@ def _dashboard_html(settings: ServerSettings) -> str:
       const latency = s.live_metrics?.latency_ms ?? '-';
       const status = s.ended_at ? 'completed' : 'active';
       const statusColor = status === 'active' ? '#22C55E' : '#3B82F6';
+      const isChecked = selectedSessions.has(s.session_id) ? 'checked' : '';
       
       let durationStr = '-';
       if (s.started_at) {{
@@ -434,6 +507,9 @@ def _dashboard_html(settings: ServerSettings) -> str:
 
       return `
         <tr style="border-bottom: 1px solid #F1F5F9; color: #475569;">
+          <td style="padding: 16px; width: 40px;">
+            <input type="checkbox" class="session-checkbox" value="${{s.session_id}}" ${{isChecked}} onchange="onSessionCheckChange(this)" style="cursor: pointer; width: 16px; height: 16px;">
+          </td>
           <td style="padding: 16px; font-weight: 600;">${{s.user_display_name || s.user_id || '-'}}</td>
           <td style="padding: 16px; font-family: monospace;">${{s.session_id.split('-')[0]}}</td>
           <td style="padding: 16px; font-family: monospace;">${{(s.device_id || '').substring(0,8)}}</td>
@@ -455,6 +531,126 @@ def _dashboard_html(settings: ServerSettings) -> str:
     }}).join('');
   }}
 
+  function onSessionCheckChange(checkbox) {{
+    if (checkbox.checked) {{
+      selectedSessions.add(checkbox.value);
+    }} else {{
+      selectedSessions.delete(checkbox.value);
+    }}
+    updateBatchDeleteButton();
+    
+    // Check/uncheck Select All based on whether all filtered are checked
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (selectAllCheckbox) {{
+      const query = (document.getElementById('search-input').value || '').toLowerCase().trim();
+      const filtered = allSessions.filter(s => {{
+        const user = (s.user_display_name || s.user_id || '').toLowerCase();
+        const sid = (s.session_id || '').toLowerCase();
+        const did = (s.device_id || '').toLowerCase();
+        const matchesSearch = user.includes(query) || sid.includes(query) || did.includes(query);
+        const status = s.ended_at ? 'completed' : 'active';
+        const matchesStatus = statusFilter === 'all' || status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }});
+      const allChecked = filtered.length > 0 && filtered.every(s => selectedSessions.has(s.session_id));
+      selectAllCheckbox.checked = allChecked;
+    }}
+  }}
+
+  function toggleSelectAll(selectAllCheckbox) {{
+    const query = (document.getElementById('search-input').value || '').toLowerCase().trim();
+    const filtered = allSessions.filter(s => {{
+      const user = (s.user_display_name || s.user_id || '').toLowerCase();
+      const sid = (s.session_id || '').toLowerCase();
+      const did = (s.device_id || '').toLowerCase();
+      const matchesSearch = user.includes(query) || sid.includes(query) || did.includes(query);
+      const status = s.ended_at ? 'completed' : 'active';
+      const matchesStatus = statusFilter === 'all' || status === statusFilter;
+      return matchesSearch && matchesStatus;
+    }});
+
+    filtered.forEach(s => {{
+      if (selectAllCheckbox.checked) {{
+        selectedSessions.add(s.session_id);
+      }} else {{
+        selectedSessions.delete(s.session_id);
+      }}
+    }});
+
+    const checkboxes = document.querySelectorAll('.session-checkbox');
+    checkboxes.forEach(cb => {{
+      cb.checked = selectAllCheckbox.checked;
+    }});
+    
+    updateBatchDeleteButton();
+  }}
+
+  function updateBatchDeleteButton() {{
+    const btn = document.getElementById('batch-delete-btn');
+    const countSpan = document.getElementById('selected-count');
+    if (selectedSessions.size > 0) {{
+      btn.style.display = 'flex';
+      countSpan.textContent = selectedSessions.size;
+    }} else {{
+      btn.style.display = 'none';
+    }}
+  }}
+
+  async function batchDeleteSelected() {{
+    if (selectedSessions.size === 0) return;
+    if (!confirm('Are you sure you want to delete the ' + selectedSessions.size + ' selected session(s)?')) return;
+    try {{
+      const ids = Array.from(selectedSessions);
+      const resp = await fetch('/dashboard/api/sessions/batch-delete', {{
+        method: 'POST',
+        headers: {{ 'X-API-Key': API_KEY, 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ session_ids: ids }})
+      }});
+      if (resp.ok) {{
+        selectedSessions.clear();
+        refreshDashboard();
+      }}
+    }} catch(err) {{
+      console.error(err);
+    }}
+  }}
+
+  async function clearAllSessions() {{
+    if (allSessions.length === 0) return;
+    if (!confirm('Are you sure you want to delete ALL sessions currently retrieved (up to 100)? This action is permanent.')) return;
+    try {{
+      const ids = allSessions.map(s => s.session_id);
+      const resp = await fetch('/dashboard/api/sessions/batch-delete', {{
+        method: 'POST',
+        headers: {{ 'X-API-Key': API_KEY, 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ session_ids: ids }})
+      }});
+      if (resp.ok) {{
+        selectedSessions.clear();
+        refreshDashboard();
+      }}
+    }} catch(err) {{
+      console.error(err);
+    }}
+  }}
+
+  async function clearStaleSessions() {{
+    if (!confirm('Are you sure you want to delete all inactive/stale active sessions that started more than 1 hour ago?')) return;
+    try {{
+      const resp = await fetch('/dashboard/api/sessions/clear-stale', {{
+        method: 'POST',
+        headers: {{ 'X-API-Key': API_KEY }}
+      }});
+      if (resp.ok) {{
+        const result = await resp.json();
+        alert('Cleared ' + result.deleted_ids.length + ' stale active session(s).');
+        refreshDashboard();
+      }}
+    }} catch(err) {{
+      console.error(err);
+    }}
+  }}
+
   async function deleteSession(sessionId) {{
     if (!confirm('Are you sure you want to delete this session?')) return;
     try {{
@@ -463,6 +659,7 @@ def _dashboard_html(settings: ServerSettings) -> str:
         headers: {{ 'X-API-Key': API_KEY }}
       }});
       if (resp.ok) {{
+        selectedSessions.delete(sessionId);
         refreshDashboard();
       }}
     }} catch(err) {{
@@ -645,6 +842,58 @@ async def dashboard_delete_session(
     if cache is not None:
         cache.clear()
     return {"status": "deleted", "session_id": session_id}
+
+
+@router.post("/dashboard/api/sessions/batch-delete")
+async def dashboard_batch_delete_sessions(
+    request: Request,
+    payload: dict[str, list[str]],
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    session_ids = payload.get("session_ids", [])
+    deleted_ids = []
+    for sid in session_ids:
+        deleted = await asyncio.to_thread(repository.delete, sid)
+        if deleted:
+            deleted_ids.append(sid)
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+    return {"status": "deleted", "deleted_ids": deleted_ids}
+
+
+@router.post("/dashboard/api/sessions/clear-stale")
+async def dashboard_clear_stale_sessions(
+    request: Request,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    recent = await asyncio.to_thread(repository.list_recent, 100)
+    import datetime
+    from shared.contracts import utc_now
+    now = utc_now()
+    deleted_ids = []
+    for s in recent:
+        if not s.get("ended_at"):
+            started_at_str = s.get("started_at")
+            if started_at_str:
+                try:
+                    # parse started_at with timezone offset
+                    started_at = datetime.datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                    if (now - started_at).total_seconds() > 3600:
+                        deleted = await asyncio.to_thread(repository.delete, s["session_id"])
+                        if deleted:
+                            deleted_ids.append(s["session_id"])
+                except Exception:
+                    pass
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+    return {"status": "cleared", "deleted_ids": deleted_ids}
+
 
 
 
