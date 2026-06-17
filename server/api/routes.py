@@ -635,6 +635,31 @@ async def get_user_stats(
     )
 
 
+@router.get("/v1/users/{username}/sessions")
+async def get_user_sessions(
+    username: str,
+    request: Request,
+    user_id: str | None = None,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> list[dict[str, Any]]:
+    settings, repository, user_repository, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+
+    # Resolve user_id
+    resolved_user_id = (user_id or "").strip()
+    if not resolved_user_id:
+        user = await asyncio.to_thread(user_repository.get_by_username, username)
+        if user:
+            resolved_user_id = str(user.get("user_id", ""))
+
+    if not resolved_user_id:
+        resolved_user_id = f"user_password_{username.lower().strip()}"
+
+    sessions = await asyncio.to_thread(repository.list_by_user, resolved_user_id, 100)
+    return sessions
+
+
+
 @router.post("/v1/sessions", response_model=SessionRecord, status_code=201)
 async def create_session(
     payload: SessionCreate,

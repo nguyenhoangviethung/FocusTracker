@@ -119,6 +119,13 @@ class AuthClient:
             path += f"?user_id={user_id}"
         return self._request_json("GET", path)
 
+    def get_user_sessions(self, username: str, user_id: str = "") -> list:
+        path = f"/v1/users/{username}/sessions"
+        if user_id:
+            path += f"?user_id={user_id}"
+        return self._request_json("GET", path)
+
+
     def login_google(self, scopes: tuple[str, ...]) -> AuthProfile:
         client_id = os.getenv("FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID", "").strip()
         client_secret = os.getenv("FOCUSFLOW_GOOGLE_OAUTH_SECRET", "").strip()

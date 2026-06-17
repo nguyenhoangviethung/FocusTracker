@@ -46,24 +46,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_IN_MEMORY_HISTORY: list[dict[str, Any]] = []
+
+
 def load_session_history() -> list[dict[str, Any]]:
-    target = _history_file()
-    if not target.exists():
-        return []
-    try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        logger.warning("Cannot parse history file, returning empty list", exc_info=True)
-        return []
-    if not isinstance(raw, list):
-        return []
-    normalized = [normalize_session_record(item) for item in raw if isinstance(item, dict)]
+    normalized = [normalize_session_record(item) for item in _IN_MEMORY_HISTORY if isinstance(item, dict)]
     return sorted(normalized, key=lambda item: item.get("timestamp") or "", reverse=True)
 
 
 def save_session_history(records: list[dict[str, Any]]) -> None:
-    target = _history_file()
-    target.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    global _IN_MEMORY_HISTORY
+    _IN_MEMORY_HISTORY = list(records)
+
 
 
 def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:

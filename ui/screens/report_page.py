@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.theme import ThemeManager, font
@@ -164,3 +164,87 @@ class ReportPage(ThemedPage):
         super().apply_theme()
         self.header.apply_theme(self.theme)
         self.report_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
+
+    def refresh(self):
+        """Called by app_window.navigate() when switching to this page."""
+        import time
+        now = time.monotonic()
+        # Debounce: skip if last load was less than 5 seconds ago
+        if hasattr(self, '_last_history_load') and (now - self._last_history_load) < 5.0:
+            return
+        self._last_history_load = now
+        self._load_history()
+
+    def _load_history(self):
+        import os
+        
+        app = self.property("app_reference")
+        if not app: return
+        username = app.settings.get("auth_username")
+        user_id = app.settings.get("auth_user_id", "")
+        if not username: return
+        api_url = app.settings.get("cloud_api_url") or "https://focusflow-api-smp7iybg5q-as.a.run.app"
+        api_key = os.getenv("FOCUSFLOW_API_KEY", "focusflow-demo-key-2025")
+
+        # Cancel any running worker
+        if hasattr(self, '_history_worker') and self._history_worker is not None:
+            if self._history_worker.isRunning():
+                return  # Don't start another request while one is pending
+
+        self._history_worker = _HistoryWorker(username, user_id, api_url, api_key)
+        self._history_worker.history_ready.connect(self._update_history_ui)
+        self._history_worker.history_error.connect(self._show_history_error)
+        self._history_worker.start()
+
+    def _show_history_error(self, msg: str):
+        pass
+
+    def _update_history_ui(self, sessions: list):
+        # Format the sessions to match local format
+        local_history = []
+        for rec in sessions:
+            summary = rec.get("summary") or {}
+            mapped = {
+                "timestamp": rec.get("started_at") or rec.get("timestamp") or "",
+                "average_focus": summary.get("average_focus") or rec.get("average_focus") or 0.0,
+                "duration_seconds": summary.get("duration_seconds") or rec.get("duration_seconds") or 0,
+                "focused_seconds": summary.get("focused_seconds") or rec.get("focused_seconds") or 0,
+                "distraction_count": summary.get("distraction_count") or rec.get("distraction_count") or 0,
+                "completed": summary.get("completed") if "completed" in summary else rec.get("completed", False),
+                "minute_focus_scores": summary.get("minute_focus_scores") or rec.get("minute_focus_scores") or [],
+                "report_status": rec.get("report_status") or "completed",
+                "report_completed_at": rec.get("report_completed_at") or "",
+            }
+            local_history.append(mapped)
+
+        from utils.session_storage import save_session_history
+        save_session_history(local_history)
+        
+        self._render_history()
+
+        # If there is at least one session, open/show the most recent one automatically!
+        if local_history and self.status_label.text() == "No session data available.":
+            self.show_session(local_history[0], False)
+
+
+class _HistoryWorker(QThread):
+    """Background worker that fetches user session history from the cloud API."""
+    history_ready = pyqtSignal(list)
+    history_error = pyqtSignal(str)
+
+    def __init__(self, username: str, user_id: str, api_url: str, api_key: str):
+        super().__init__()
+        self._username = username
+        self._user_id = user_id
+        self._api_url = api_url
+        self._api_key = api_key
+
+    def run(self):
+        from edge.auth_client import AuthClient
+        try:
+            client = AuthClient(self._api_url, self._api_key)
+            result = client.get_user_sessions(self._username, self._user_id)
+            self.history_ready.emit(result)
+        except Exception as exc:
+            self.history_error.emit(str(exc))
+
