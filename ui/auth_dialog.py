@@ -86,12 +86,12 @@ class AuthDialog(QDialog):
         layout.addLayout(form)
 
         btn_row = QHBoxLayout()
-        self.register_btn = QPushButton("Create account")
         self.login_btn = QPushButton("Sign in")
-        self.register_btn.clicked.connect(self._register_password)
+        self.register_btn = QPushButton("Create account")
         self.login_btn.clicked.connect(self._login_password)
-        btn_row.addWidget(self.register_btn)
+        self.register_btn.clicked.connect(self._register_password)
         btn_row.addWidget(self.login_btn)
+        btn_row.addWidget(self.register_btn)
         layout.addLayout(btn_row)
 
         self.password_status = QLabel("")

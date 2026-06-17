@@ -15,6 +15,8 @@ class SessionRepository(Protocol):
 
     def list_recent(self, limit: int = 20) -> list[dict[str, Any]]: ...
 
+    def list_by_user(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]: ...
+
     def delete(self, session_id: str) -> bool: ...
 
     def touch(self, session_id: str) -> None: ...
@@ -44,6 +46,15 @@ class InMemorySessionRepository:
         with self._lock:
             records = sorted(
                 self._records.values(),
+                key=lambda record: str(record.get("started_at", "")),
+                reverse=True,
+            )
+            return [dict(record) for record in records[:limit]]
+
+    def list_by_user(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        with self._lock:
+            records = sorted(
+                [r for r in self._records.values() if r.get("user_id") == user_id],
                 key=lambda record: str(record.get("started_at", "")),
                 reverse=True,
             )
@@ -116,6 +127,12 @@ class FirestoreSessionRepository:
             direction=self._firestore.Query.DESCENDING,
         ).limit(limit)
         return [doc.to_dict() for doc in query.stream() if doc.exists and doc.to_dict()]
+
+    def list_by_user(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        query = self._collection.where("user_id", "==", user_id)
+        results = [doc.to_dict() for doc in query.stream() if doc.exists and doc.to_dict()]
+        results.sort(key=lambda x: str(x.get("started_at", "")), reverse=True)
+        return results[:limit]
 
     def delete(self, session_id: str) -> bool:
         reference = self._collection.document(session_id)

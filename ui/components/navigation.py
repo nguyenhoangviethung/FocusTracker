@@ -1,11 +1,12 @@
 from __future__ import annotations
 from collections.abc import Callable
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal
 from ui.theme import ThemeManager, font
 
 class SidebarNavigation(QFrame):
     route_selected = pyqtSignal(str)
+    logout_requested = pyqtSignal()
 
     def __init__(self, theme: ThemeManager, on_toggle_theme: Callable[[], None]) -> None:
         super().__init__()
@@ -18,27 +19,43 @@ class SidebarNavigation(QFrame):
         layout.setContentsMargins(16, 24, 16, 24)
         layout.setSpacing(8)
 
-        self.logo = QLabel("FocusFlow")
-        self.logo.setFont(font(20, bold=True))
+        self.logo = QLabel("▶ FocusFlow")
+        self.logo.setFont(font(22, bold=True))
         
-        self.subtitle = QLabel("AI Pomodoro")
-        self.subtitle.setFont(font(12))
         self.user_label = QLabel("Not signed in")
         self.user_label.setWordWrap(True)
         self.user_label.setFont(font(11))
         
         layout.addWidget(self.logo)
-        layout.addWidget(self.subtitle)
         layout.addWidget(self.user_label)
+        layout.addSpacing(24)
+
+        self.new_btn = QPushButton("+ New Session")
+        self.new_btn.setFont(font(13, bold=True))
+        self.new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.new_btn.clicked.connect(lambda: self._on_click("home"))
+        self.new_btn.setStyleSheet("""
+            QPushButton {
+                background-color: white; color: #111;
+                border: 1px solid #E5E7EB; border-radius: 20px;
+                padding: 10px 20px;
+            }
+            QPushButton:hover { background-color: #F8FAFC; }
+        """)
+        
+        new_btn_layout = QHBoxLayout()
+        new_btn_layout.setContentsMargins(0,0,0,0)
+        new_btn_layout.addWidget(self.new_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addLayout(new_btn_layout)
         layout.addSpacing(24)
 
         self._buttons = {}
         items = [
-            ("home", "Home"),
-            ("active_session", "Active"),
-            ("vision", "Vision"),
-            ("report", "Report"),
-            ("settings", "Settings"),
+            ("home", "Dashboard"),
+            ("active_session", "Live Session"),
+            ("vision", "Vision Settings"),
+            ("report", "History"),
+            ("settings", "App Settings"),
         ]
 
         for key, label in items:
@@ -51,11 +68,33 @@ class SidebarNavigation(QFrame):
 
         layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
-        self.theme_btn = QPushButton("Dark Mode")
+        self.system_card = QFrame()
+        self.system_card.setObjectName("bg_card")
+        self.system_card.setStyleSheet("QFrame#bg_card { background-color: #F8FAFC; border-radius: 12px; }")
+        sc_layout = QVBoxLayout(self.system_card)
+        sc_layout.setContentsMargins(16, 16, 16, 16)
+        sc_title = QLabel("System Status")
+        sc_title.setFont(font(12, bold=True))
+        sc_desc = QLabel("Ready for inference\nNo active session")
+        sc_desc.setFont(font(11))
+        sc_desc.setStyleSheet("color: #64748B;")
+        sc_layout.addWidget(sc_title)
+        sc_layout.addWidget(sc_desc)
+        layout.addWidget(self.system_card)
+        layout.addSpacing(16)
+
+        self.theme_btn = QPushButton("Toggle Theme")
         self.theme_btn.setFont(font(13, bold=True))
         self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.theme_btn.clicked.connect(self.on_toggle_theme)
         layout.addWidget(self.theme_btn)
+
+        self.logout_btn = QPushButton("Logout")
+        self.logout_btn.setFont(font(13, bold=True))
+        self.logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logout_btn.setStyleSheet("color: #EF4444;")
+        self.logout_btn.clicked.connect(self.logout_requested.emit)
+        layout.addWidget(self.logout_btn)
 
         self.set_active("home")
 
@@ -76,29 +115,32 @@ class SidebarNavigation(QFrame):
             }}
         """)
         self.logo.setStyleSheet(f"color: {p['text_primary']};")
-        self.subtitle.setStyleSheet(f"color: {p['text_secondary']};")
         self.user_label.setStyleSheet(f"color: {p['text_secondary']};")
         
         for key, btn in self._buttons.items():
             if key == self.active_key:
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {p['accent_focus']};
-                        color: white;
+                        background-color: transparent;
+                        color: {p['accent_focus']};
                         text-align: left;
                         padding-left: 16px;
+                        border-right: 4px solid {p['accent_focus']};
+                        border-radius: 0px;
                     }}
                 """)
             else:
                 btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: transparent;
-                        color: {p['text_primary']};
+                        color: {p['text_secondary']};
                         text-align: left;
                         padding-left: 16px;
+                        border-right: 4px solid transparent;
+                        border-radius: 0px;
                     }}
                     QPushButton:hover {{
-                        background-color: {p['sidebar_hover']};
+                        color: {p['text_primary']};
                     }}
                 """)
         

@@ -30,6 +30,13 @@ class UserRepository(Protocol):
     ) -> dict[str, Any]: ...
 
     def login_password_user(self, username: str) -> dict[str, Any] | None: ...
+    
+    def update_password(
+        self,
+        username: str,
+        password_hash: str,
+        password_salt: str,
+    ) -> dict[str, Any] | None: ...
 
     def upsert_google_user(
         self,
@@ -115,6 +122,23 @@ class InMemoryUserRepository:
             user = stored
             user["last_login_at"] = _now_iso()
             return dict(user)
+
+    def update_password(
+        self,
+        username: str,
+        password_hash: str,
+        password_salt: str,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            user = self._find_user_by_username(username)
+            if not user or str(user.get("auth_provider") or "") != "password":
+                return None
+            stored = self._users.get(str(user["user_id"]))
+            if not stored:
+                return None
+            stored["password_hash"] = password_hash
+            stored["password_salt"] = password_salt
+            return dict(stored)
 
     def upsert_google_user(
         self,
@@ -261,6 +285,36 @@ class FirestoreUserRepository:
             return user_payload
 
         return _touch(self._client.transaction())
+
+    def update_password(
+        self,
+        username: str,
+        password_hash: str,
+        password_salt: str,
+    ) -> dict[str, Any] | None:
+        username_key = username.lower().strip()
+        query = self._users.where("username", "==", username_key)
+
+        @self._firestore.transactional
+        def _update(transaction):
+            snapshots = query.get(transaction=transaction)
+            if not snapshots:
+                return None
+            chosen = None
+            for doc in snapshots:
+                payload = doc.to_dict() or {}
+                if str(payload.get("auth_provider") or "") == "password":
+                    chosen = (doc.reference, payload)
+                    break
+            if chosen is None:
+                return None
+            user_ref, user_payload = chosen
+            transaction.update(user_ref, {"password_hash": password_hash, "password_salt": password_salt})
+            user_payload["password_hash"] = password_hash
+            user_payload["password_salt"] = password_salt
+            return user_payload
+
+        return _update(self._client.transaction())
 
     def upsert_google_user(
         self,

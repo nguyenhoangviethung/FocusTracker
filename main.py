@@ -40,6 +40,8 @@ def main() -> None:
     logger.info("Starting FocusFlow AI PyQt6 desktop app")
 
     app = QApplication(sys.argv)
+    app.setApplicationName("FocusFlow")
+    app.setOrganizationName("FocusFlowAI")
     settings = load_settings()
     theme = ThemeManager(str(settings.get("theme_mode", "Dark")))
     auth_dialog = AuthDialog(theme, settings)

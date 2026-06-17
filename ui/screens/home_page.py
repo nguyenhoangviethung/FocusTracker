@@ -10,7 +10,9 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QSizePolicy,
+    QWidget,
 )
+from PyQt6.QtCore import Qt
 
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.theme import ThemeManager, font
@@ -23,17 +25,55 @@ class HomePage(ThemedPage):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(24)
         
-        self.header = PageTitle("Ready to Focus?", "Start a new session and track focus locally or through the cloud.")
-        layout.addWidget(self.header)
+        # Header Layout mimicking Dashboard
+        header_layout = QHBoxLayout()
+        self.header = PageTitle("Hello User", "Start a new session and track focus locally or through the cloud.")
         
+        premium_badge = QLabel("★ PREMIUM")
+        premium_badge.setStyleSheet("background-color: #333; color: #FFD700; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;")
+        
+        header_layout.addWidget(self.header)
+        header_layout.addWidget(premium_badge, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+        
+        # Summary Gradient Cards mimicking Dashboard
+        self.summary_card = Card()
+        self.summary_card.setStyleSheet("""
+            QFrame#bg_card {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2E8CFF, stop:1 #1E5EEB);
+                border-radius: 16px;
+            }
+            QLabel { color: white; }
+        """)
+        summary_layout = QHBoxLayout()
+        summary_layout.setSpacing(24)
+        
+        self.stat_labels = {}
+        for val, lbl in [("-", "Focus Time"), ("-", "Sessions"), ("-", "Avg Score"), ("-", "Day Streak")]:
+            col = QVBoxLayout()
+            val_lbl = QLabel(val)
+            val_lbl.setFont(font(36, bold=True))
+            self.stat_labels[lbl] = val_lbl
+            desc_lbl = QLabel(lbl)
+            desc_lbl.setFont(font(12))
+            desc_lbl.setStyleSheet("color: rgba(255,255,255,0.8);")
+            col.addWidget(val_lbl)
+            col.addWidget(desc_lbl)
+            summary_layout.addLayout(col)
+            
+        self.summary_card.layout.addLayout(summary_layout)
+        layout.addWidget(self.summary_card)
+
+        # Setup Area
+        setup_layout = QHBoxLayout()
+        setup_layout.setSpacing(24)
+
         self.setup_card = Card()
-        layout.addWidget(self.setup_card)
-        
         title_label = QLabel("Pomodoro Setup")
         title_label.setFont(font(16, bold=True))
         self.setup_card.layout.addWidget(title_label)
         
-        # Duration
         dur_layout = QHBoxLayout()
         dur_label = QLabel("Duration:")
         dur_label.setFont(font(14))
@@ -46,7 +86,6 @@ class HomePage(ThemedPage):
         dur_layout.addWidget(self.dur_combo)
         self.setup_card.layout.addLayout(dur_layout)
         
-        # Demo Video
         vid_layout = QHBoxLayout()
         vid_label = QLabel("Demo Mode Video:")
         vid_label.setFont(font(14))
@@ -62,11 +101,9 @@ class HomePage(ThemedPage):
         self.mode_label = QLabel("Inference mode: hybrid (cloud + local fallback)")
         self.source_label.setWordWrap(True)
         self.mode_label.setWordWrap(True)
-        self.setup_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setup_card.layout.addWidget(self.source_label)
         self.setup_card.layout.addWidget(self.mode_label)
         
-        # Start button
         self.start_btn = QPushButton("START SESSION")
         self.start_btn.setObjectName("accent_focus")
         self.start_btn.setMinimumHeight(48)
@@ -75,6 +112,23 @@ class HomePage(ThemedPage):
         self.setup_card.layout.addSpacing(16)
         self.setup_card.layout.addWidget(self.start_btn)
         
+        setup_layout.addWidget(self.setup_card)
+
+        # User Activity
+        self.recent_card = Card()
+        recent_title = QLabel("Recent Activity")
+        recent_title.setFont(font(16, bold=True))
+        self.recent_card.layout.addWidget(recent_title)
+        
+        self.recent_content = QVBoxLayout()
+        self.recent_card.layout.addLayout(self.recent_content)
+        self.recent_card.layout.addStretch()
+        
+        setup_layout.addWidget(self.recent_card)
+        setup_layout.setStretch(0, 2)
+        setup_layout.setStretch(1, 1)
+
+        layout.addLayout(setup_layout)
         layout.addStretch()
 
     def _select_video(self):
@@ -102,3 +156,70 @@ class HomePage(ThemedPage):
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)
+
+    def refresh(self):
+        self._load_stats()
+        
+    def _load_stats(self):
+        import os
+        from PyQt6.QtCore import QThread, pyqtSignal
+        
+        app = self.property("app_reference")
+        if not app: return
+        username = app.settings.get("auth_username")
+        if not username: return
+        api_url = app.settings.get("cloud_api_url") or "https://focusflow-api-smp7iybg5q-as.a.run.app"
+        api_key = os.getenv("FOCUSFLOW_API_KEY", "focusflow-demo-key-2025")
+        
+        # Define worker inside to avoid polluting module namespace if we want to keep it contained
+        class StatsWorker(QThread):
+            stats_ready = pyqtSignal(dict)
+            def __init__(self, uname, url, key):
+                super().__init__()
+                self.uname = uname
+                self.url = url
+                self.key = key
+            def run(self):
+                from edge.auth_client import AuthClient
+                try:
+                    client = AuthClient(self.url, self.key)
+                    self.stats_ready.emit(client.get_user_stats(self.uname))
+                except Exception as e:
+                    print(f"Stats load error: {e}")
+                    
+        self.worker = StatsWorker(username, api_url, api_key)
+        self.worker.stats_ready.connect(self._update_stats_ui)
+        self.worker.start()
+        
+    def _update_stats_ui(self, stats: dict):
+        self.stat_labels["Focus Time"].setText(str(stats.get("total_focus_hours", "-")))
+        self.stat_labels["Sessions"].setText(str(stats.get("total_sessions", "-")))
+        self.stat_labels["Avg Score"].setText(str(stats.get("average_score", "-")))
+        self.stat_labels["Day Streak"].setText(str(stats.get("current_streak", "-")))
+        
+        # Clear recent content
+        while self.recent_content.count():
+            item = self.recent_content.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        recent = stats.get("recent_activity", [])
+        if not recent:
+            lbl = QLabel("No recent activity.")
+            lbl.setStyleSheet("color: #64748B;")
+            self.recent_content.addWidget(lbl)
+            return
+            
+        for act in recent:
+            r_row = QHBoxLayout()
+            r_name = QLabel(act.get("label", ""))
+            r_name.setFont(font(12, bold=True))
+            r_size = QLabel(act.get("description", ""))
+            r_size.setStyleSheet("color: #64748B;")
+            r_row.addWidget(r_name)
+            r_row.addStretch()
+            r_row.addWidget(r_size)
+            
+            row_widget = QWidget()
+            row_widget.setLayout(r_row)
+            self.recent_content.addWidget(row_widget)

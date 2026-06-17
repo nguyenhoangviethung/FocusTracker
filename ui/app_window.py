@@ -38,6 +38,7 @@ class FocusFlowApp(QMainWindow):
 
         self.sidebar = SidebarNavigation(self.theme, self.theme.toggle)
         self.sidebar.route_selected.connect(self.navigate)
+        self.sidebar.logout_requested.connect(self.handle_logout)
         layout.addWidget(self.sidebar)
 
         self.stack = QStackedWidget()
@@ -62,14 +63,30 @@ class FocusFlowApp(QMainWindow):
         self._update_user_identity()
         self.navigate("home")
 
+    def handle_logout(self) -> None:
+        self.settings["auth_user_id"] = ""
+        self.settings["auth_provider"] = ""
+        self.settings["auth_username"] = ""
+        self.settings["auth_email"] = ""
+        self.settings["auth_display_name"] = ""
+        self.settings["auth_last_login_at"] = ""
+        self.settings = save_settings(self.settings)
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Logout", "You have been logged out. The application will now close.")
+        self.close()
+
     def navigate(self, route: str) -> None:
         if self._current_route == "vision" and route != "vision":
             if hasattr(self.pages["vision"], "shutdown"):
                 self.pages["vision"].shutdown()
 
         self._current_route = route
-        self.stack.setCurrentWidget(self.pages[route])
+        new_page = self.pages[route]
+        self.stack.setCurrentWidget(new_page)
         self.sidebar.set_active(route)
+        
+        if hasattr(new_page, "refresh"):
+            new_page.refresh()
 
     def start_session(self, config: dict) -> None:
         settings_config = getattr(self.pages["settings"], "tracker_config", None)

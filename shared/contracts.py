@@ -87,6 +87,19 @@ class SessionSummary(ContractModel):
     minute_focus_scores: list[float] = Field(default_factory=list)
 
 
+class ActivitySummary(ContractModel):
+    label: str
+    description: str
+
+
+class UserStats(ContractModel):
+    total_focus_hours: str
+    total_sessions: str
+    average_score: str
+    current_streak: str
+    recent_activity: list[ActivitySummary]
+
+
 class AuthPasswordRegister(ContractModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=256)
@@ -96,6 +109,12 @@ class AuthPasswordRegister(ContractModel):
 class AuthPasswordLogin(ContractModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=256)
+
+
+class AuthPasswordChange(ContractModel):
+    username: str = Field(min_length=3, max_length=64)
+    old_password: str = Field(min_length=8, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
 
 
 class AuthGoogleLogin(ContractModel):

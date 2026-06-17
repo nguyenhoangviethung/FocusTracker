@@ -30,17 +30,18 @@ class AuthClient:
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key.strip()
 
-    def _request_json(self, method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        data = json.dumps(payload).encode("utf-8")
+    def _request_json(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
         logger.info("Auth API request: %s %s%s", method, self.api_url, path)
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": self.api_key,
+        }
         req = urllib.request.Request(
             f"{self.api_url}{path}",
             data=data,
             method=method,
-            headers={
-                "Content-Type": "application/json",
-                "X-API-Key": self.api_key,
-            },
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -105,6 +106,15 @@ class AuthClient:
         return AuthProfile.model_validate(
             self._request_json("POST", "/v1/auth/password/login", payload)
         )
+
+    def change_password(self, username: str, old_password: str, new_password: str) -> AuthProfile:
+        payload = {"username": username, "old_password": old_password, "new_password": new_password}
+        return AuthProfile.model_validate(
+            self._request_json("PUT", "/v1/auth/password", payload)
+        )
+
+    def get_user_stats(self, username: str) -> dict:
+        return self._request_json("GET", f"/v1/users/{username}/stats")
 
     def login_google(self, scopes: tuple[str, ...]) -> AuthProfile:
         client_id = os.getenv("FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID", "").strip()

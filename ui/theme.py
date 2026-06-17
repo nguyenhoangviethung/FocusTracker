@@ -6,18 +6,18 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 class ThemeManager:
     _PALETTES = {
         "Light": {
-            "bg_app": "#F3F4F6",
+            "bg_app": "#F0F4F8",
             "bg_sidebar": "#FFFFFF",
             "bg_card": "#FFFFFF",
             "text_primary": "#111827",
-            "text_secondary": "#4B5563",
-            "accent_focus": "#10B981",
+            "text_secondary": "#64748B",
+            "accent_focus": "#1E5EEB",
             "accent_warn": "#EF4444",
-            "btn_neutral": "#D1D5DB",
-            "btn_neutral_hover": "#9CA3AF",
-            "sidebar_hover": "#E5E7EB",
+            "btn_neutral": "#F1F5F9",
+            "btn_neutral_hover": "#E2E8F0",
+            "sidebar_hover": "#F0F4F8",
             "input": "#FFFFFF",
-            "border": "#9CA3AF",
+            "border": "#E5E7EB",
         },
         "Dark": {
             "bg_app": "#0F0F0F",
@@ -25,7 +25,7 @@ class ThemeManager:
             "bg_card": "#1A1A1A",
             "text_primary": "#FFFFFF",
             "text_secondary": "#888888",
-            "accent_focus": "#2ECC71",
+            "accent_focus": "#1E5EEB",
             "accent_warn": "#E74C3C",
             "btn_neutral": "#333333",
             "btn_neutral_hover": "#404040",
@@ -68,7 +68,7 @@ class ThemeManager:
                 color: {p['text_primary']};
                 font-family: 'Inter', 'Segoe UI', sans-serif;
             }}
-            QMainWindow, #bg_app {{
+            QMainWindow, QDialog, #bg_app {{
                 background-color: {p['bg_app']};
             }}
             #bg_sidebar {{
@@ -79,6 +79,9 @@ class ThemeManager:
                 background-color: {p['bg_card']};
                 border-radius: 12px;
                 border: none;
+            }}
+            QLabel#text_secondary {{
+                color: {p['text_secondary']};
             }}
             QPushButton {{
                 background-color: {p['btn_neutral']};
@@ -115,6 +118,25 @@ class ThemeManager:
             QComboBox::drop-down {{
                 border: none;
                 width: 24px;
+            }}
+            QTabWidget::pane {{
+                border: 1px solid {p['border']};
+                border-radius: 8px;
+                background-color: {p['bg_card']};
+            }}
+            QTabBar::tab {{
+                background-color: transparent;
+                color: {p['text_secondary']};
+                padding: 8px 16px;
+                border: 1px solid transparent;
+                border-bottom: 2px solid transparent;
+            }}
+            QTabBar::tab:selected {{
+                color: {p['accent_focus']};
+                border-bottom: 2px solid {p['accent_focus']};
+            }}
+            QTabBar::tab:hover {{
+                color: {p['text_primary']};
             }}
             QComboBox::down-arrow {{
                 image: none; /* Can add a custom arrow image if needed */

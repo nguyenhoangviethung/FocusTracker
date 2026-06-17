@@ -62,7 +62,11 @@ def late_fusion_report_path() -> Path:
 
 
 def data_dir() -> Path:
-    path = writable_base_dir() / "data"
+    from PyQt6.QtCore import QStandardPaths
+    app_data_path = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+    if not app_data_path:
+        app_data_path = str(Path.home() / ".focusflow")
+    path = Path(app_data_path)
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -1,7 +1,7 @@
 {
   "session_minutes": 5,
   "camera_index": 0,
-  "theme_mode": "Dark",
+  "theme_mode": "Light",
   "show_landmarks": true,
   "camera_distance_scale": 0.2,
   "inference_mode": "hybrid",
@@ -15,5 +15,5 @@
   "auth_username": "student1",
   "auth_email": "",
   "auth_display_name": "ST1",
-  "auth_last_login_at": "2026-06-13T02:55:01.556312Z"
+  "auth_last_login_at": "2026-06-17T03:44:22.447788Z"
 }
