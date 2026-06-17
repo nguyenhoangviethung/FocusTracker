@@ -554,54 +554,84 @@ async def login_google_user(
 async def get_user_stats(
     username: str,
     request: Request,
+    user_id: str | None = None,
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> UserStats:
+    from datetime import datetime, timedelta, timezone
+
     settings, repository, user_repository, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
-    
-    user = await asyncio.to_thread(user_repository.get_by_username, username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    user_id = str(user.get("user_id"))
-    sessions = await asyncio.to_thread(repository.list_by_user, user_id, 100)
-    
+
+    # Resolve user_id: prefer explicit query param, then lookup by username
+    resolved_user_id = (user_id or "").strip()
+    if not resolved_user_id:
+        user = await asyncio.to_thread(user_repository.get_by_username, username)
+        if user:
+            resolved_user_id = str(user.get("user_id", ""))
+
+    # Fallback: construct deterministic user_id from username pattern
+    if not resolved_user_id:
+        resolved_user_id = f"user_password_{username.lower().strip()}"
+
+    sessions = await asyncio.to_thread(repository.list_by_user, resolved_user_id, 100)
+
     total_focused_seconds = 0
     total_score = 0.0
-    completed_sessions = 0
-    
-    from datetime import datetime
-    
-    recent_activity = []
-    
+    scored_sessions = 0
+    recent_activity: list[dict[str, str]] = []
+    session_dates: list[str] = []
+
     for sess in sessions:
         summary = sess.get("summary") or {}
-        # Only count sessions that have a valid summary
-        if sess.get("status") == "completed" or summary.get("completed"):
-            completed_sessions += 1
-            total_focused_seconds += summary.get("focused_seconds", 0)
-            total_score += summary.get("average_focus", 0.0)
-            
-            if len(recent_activity) < 3:
-                started_at = sess.get("started_at")
-                if started_at:
-                    try:
-                        dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                        label = dt.strftime("%A, %I:%M %p")
-                        mins = summary.get("focused_seconds", 0) // 60
-                        recent_activity.append({"label": label, "description": f"{mins} mins focused"})
-                    except Exception:
-                        pass
-    
-    avg_score = (total_score / completed_sessions) if completed_sessions > 0 else 0.0
+        status = sess.get("status", "")
+        has_summary = bool(summary.get("duration_seconds") or summary.get("focused_seconds"))
+
+        if has_summary and status in ("completed", "cancelled"):
+            scored_sessions += 1
+            total_focused_seconds += int(summary.get("focused_seconds", 0))
+            total_score += float(summary.get("average_focus", 0.0))
+
+            started_at = sess.get("started_at", "")
+            if started_at:
+                try:
+                    dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    session_dates.append(dt.strftime("%Y-%m-%d"))
+                    if len(recent_activity) < 5:
+                        label = dt.strftime("%a %d/%m, %I:%M %p")
+                        mins = int(summary.get("focused_seconds", 0)) // 60
+                        score_pct = int(float(summary.get("average_focus", 0)) * 100)
+                        recent_activity.append({
+                            "label": label,
+                            "description": f"{mins}m focused · {score_pct}%",
+                        })
+                except Exception:
+                    pass
+
+    avg_score = (total_score / scored_sessions) if scored_sessions > 0 else 0.0
     hours = total_focused_seconds / 3600.0
-    
+
+    # Calculate day streak
+    streak = 0
+    if session_dates:
+        unique_days = sorted(set(session_dates), reverse=True)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        if unique_days[0] in (today, yesterday):
+            streak = 1
+            for i in range(1, len(unique_days)):
+                prev = datetime.strptime(unique_days[i - 1], "%Y-%m-%d")
+                curr = datetime.strptime(unique_days[i], "%Y-%m-%d")
+                if (prev - curr).days == 1:
+                    streak += 1
+                else:
+                    break
+
     return UserStats(
         total_focus_hours=f"{hours:.1f}h",
-        total_sessions=str(completed_sessions),
+        total_sessions=str(scored_sessions),
         average_score=f"{int(avg_score * 100)}%",
-        current_streak="1",
-        recent_activity=recent_activity
+        current_streak=str(streak),
+        recent_activity=recent_activity,
     )
 
 

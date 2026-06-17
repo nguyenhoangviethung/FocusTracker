@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QWidget,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.theme import ThemeManager, font
@@ -158,44 +158,47 @@ class HomePage(ThemedPage):
         self.header.apply_theme(self.theme)
 
     def refresh(self):
+        """Called by app_window.navigate() when switching to this page."""
+        import time
+        now = time.monotonic()
+        # Debounce: skip if last load was less than 5 seconds ago
+        if hasattr(self, '_last_stats_load') and (now - self._last_stats_load) < 5.0:
+            return
+        self._last_stats_load = now
         self._load_stats()
         
     def _load_stats(self):
         import os
-        from PyQt6.QtCore import QThread, pyqtSignal
         
         app = self.property("app_reference")
         if not app: return
         username = app.settings.get("auth_username")
+        user_id = app.settings.get("auth_user_id", "")
         if not username: return
         api_url = app.settings.get("cloud_api_url") or "https://focusflow-api-smp7iybg5q-as.a.run.app"
         api_key = os.getenv("FOCUSFLOW_API_KEY", "focusflow-demo-key-2025")
-        
-        # Define worker inside to avoid polluting module namespace if we want to keep it contained
-        class StatsWorker(QThread):
-            stats_ready = pyqtSignal(dict)
-            def __init__(self, uname, url, key):
-                super().__init__()
-                self.uname = uname
-                self.url = url
-                self.key = key
-            def run(self):
-                from edge.auth_client import AuthClient
-                try:
-                    client = AuthClient(self.url, self.key)
-                    self.stats_ready.emit(client.get_user_stats(self.uname))
-                except Exception as e:
-                    print(f"Stats load error: {e}")
-                    
-        self.worker = StatsWorker(username, api_url, api_key)
-        self.worker.stats_ready.connect(self._update_stats_ui)
-        self.worker.start()
-        
+
+        # Cancel any running worker
+        if hasattr(self, '_stats_worker') and self._stats_worker is not None:
+            if self._stats_worker.isRunning():
+                return  # Don't start another request while one is pending
+
+        self._stats_worker = _StatsWorker(username, user_id, api_url, api_key)
+        self._stats_worker.stats_ready.connect(self._update_stats_ui)
+        self._stats_worker.stats_error.connect(self._show_stats_error)
+        self._stats_worker.start()
+
+    def _show_stats_error(self, msg: str):
+        """Show placeholder values when stats can't be loaded."""
+        for lbl in self.stat_labels.values():
+            if lbl.text() == "-":
+                pass  # keep placeholder
+                
     def _update_stats_ui(self, stats: dict):
-        self.stat_labels["Focus Time"].setText(str(stats.get("total_focus_hours", "-")))
-        self.stat_labels["Sessions"].setText(str(stats.get("total_sessions", "-")))
-        self.stat_labels["Avg Score"].setText(str(stats.get("average_score", "-")))
-        self.stat_labels["Day Streak"].setText(str(stats.get("current_streak", "-")))
+        self.stat_labels["Focus Time"].setText(str(stats.get("total_focus_hours", "0h")))
+        self.stat_labels["Sessions"].setText(str(stats.get("total_sessions", "0")))
+        self.stat_labels["Avg Score"].setText(str(stats.get("average_score", "0%")))
+        self.stat_labels["Day Streak"].setText(str(stats.get("current_streak", "0")))
         
         # Clear recent content
         while self.recent_content.count():
@@ -223,3 +226,25 @@ class HomePage(ThemedPage):
             row_widget = QWidget()
             row_widget.setLayout(r_row)
             self.recent_content.addWidget(row_widget)
+
+
+class _StatsWorker(QThread):
+    """Background worker that fetches user stats from the cloud API."""
+    stats_ready = pyqtSignal(dict)
+    stats_error = pyqtSignal(str)
+
+    def __init__(self, username: str, user_id: str, api_url: str, api_key: str):
+        super().__init__()
+        self._username = username
+        self._user_id = user_id
+        self._api_url = api_url
+        self._api_key = api_key
+
+    def run(self):
+        from edge.auth_client import AuthClient
+        try:
+            client = AuthClient(self._api_url, self._api_key)
+            result = client.get_user_stats(self._username, self._user_id)
+            self.stats_ready.emit(result)
+        except Exception as exc:
+            self.stats_error.emit(str(exc))
