@@ -82,9 +82,41 @@ Sau Start Session:
 3. WebSocket connect.
 4. Camera tích lũy 30 frames.
 5. Sequence gửi lên cloud.
-6. UI source chuyển thành `CLOUD`.
-7. Component card hiển thị GRU/TCN/XGBoost.
-8. Header hiển thị Google account đã đăng nhập.
+6. Cloud enrich `(30,30)` thành `(30,90)` và chạy model 4-class.
+7. UI source chuyển thành `CLOUD`.
+8. Component card hiển thị `final_xgb`, `boost_xgb`, `targeted_xgb`.
+9. Header hiển thị Google account đã đăng nhập.
+
+Response cloud/client hiện tại cần có các field chính:
+
+```json
+{
+  "model_name": "fixed_triple_xgb_fusion",
+  "model_version": "product_4class_fixed_triple_xgb",
+  "label_space": "daisee_4class",
+  "decision_rule": "argmax_4class",
+  "state": "FOCUSED",
+  "ai_state": "ENGAGED",
+  "focus_score": 0.64,
+  "class_labels": ["very_low", "low", "medium", "high"],
+  "class_probabilities": [0.01, 0.20, 0.38, 0.41],
+  "predicted_class": 3,
+  "predicted_label": "high",
+  "components": {
+    "final_xgb": {"probability": 0.77},
+    "boost_xgb": {"probability": 0.91},
+    "targeted_xgb": {"probability": 0.77}
+  }
+}
+```
+
+`focus_score` là telemetry liên tục `P(medium) + P(high)`. Quyết định 4-class
+không dùng threshold binary; quyết định đúng là `argmax_4class`, sau đó class
+`2/3` map sang `ENGAGED`, class `0/1` map sang `DISTRACTED`.
+
+Nếu Cloud Run chưa redeploy và vẫn trả component key cũ `gru/tcn/xgboost`, UI
+desktop sẽ map tạm sang ba dòng XGB mới. Tuy nhiên server production vẫn nên
+được redeploy để trả đúng schema 4-class.
 
 ## 4. Server dashboard
 
@@ -173,13 +205,26 @@ Kịch bản demo:
 
 1. Start session.
 2. Cho thấy raw video chỉ hiển thị local.
-3. Cho thấy ba component model.
+3. Cho thấy ba component model `final_xgb`, `boost_xgb`, `targeted_xgb`.
 4. Mở Cloud Run Logs để chứng minh inference cloud.
 5. Tắt network ngắn để chứng minh hybrid fallback.
 6. Bật network để chứng minh reconnect.
 7. End Session.
 8. Mở Firestore summary.
 9. Mở report completion metadata trong Firestore/report.
+
+## 7.1. Client UI notes hiện tại
+
+Các điểm UX đã chốt tạm thời:
+
+- Light/Dark mode dùng token trong `ui/theme.py`, không hard-code màu control.
+- `QComboBox` phải apply stylesheet trực tiếp cho cả combo và `combo.view()`
+  để popup không giữ palette dark trong light mode.
+- Component telemetry bị thiếu không được render thành `0.0%`; UI giữ giá trị
+  hợp lệ gần nhất hoặc hiện `--`.
+- Active Session là màn demo chính; Settings chỉ chứa cấu hình thiết bị,
+  theme, goal, duration, sound, và đổi mật khẩu.
+- Raw webcam frame chỉ hiển thị trong process desktop.
 
 ## 8. Troubleshooting
 

@@ -4,6 +4,191 @@ Tài liệu này là bản thiết kế giao diện và kịch bản demo cho đ
 Các sơ đồ dùng ký tự ASCII để có thể trình bày trực tiếp trong terminal,
 Markdown viewer hoặc slide mà không phụ thuộc công cụ thiết kế.
 
+## 0. Client snapshot hiện tại (2026-06-18)
+
+Phần này ghi lại trạng thái client PyQt6 đang được chốt tạm thời. Nếu các mockup
+cũ bên dưới còn nhắc GRU/TCN hoặc threshold binary, dùng section này làm nguồn
+đọc nhanh cho UI hiện tại.
+
+### 0.1 Navigation hiện tại
+
+```text
+-------------------+----------------------------------------------------------+
+| FOCUSFLOW         | PAGE CONTENT                                             |
+|                   |                                                          |
+| Home              | Pomodoro setup, duration, recent activity                |
+| Active            | Main running session: camera, 4-class model, trend       |
+| AI Vision         | Vision diagnostics / local preview explanation           |
+| Report            | Session summary and local/cloud completion history       |
+| Settings          | Theme, camera, focus goals, sounds, security             |
+|                   |                                                          |
+| Theme toggle      | Light/Dark, palette-aware controls                       |
++-------------------+----------------------------------------------------------+
+```
+
+The desktop keeps `python main.py` as the only entrypoint. The UI is PyQt6 only.
+
+### 0.2 Theme and color rules
+
+The app supports both Light and Dark modes. Controls must use
+`ThemeManager.palette()` tokens instead of hard-coded dark/light colors.
+
+Important theme tokens:
+
+```text
+bg_app, bg_sidebar, bg_card
+text_primary, text_secondary
+accent_focus, accent_warn
+btn_neutral, btn_neutral_hover
+input, border
+```
+
+Known UX rule from the current implementation:
+
+- `QComboBox` and its popup `QListView` must be styled explicitly from the
+  current palette. The popup can otherwise keep a native dark palette while the
+  app is in Light mode.
+- `ui/theme.py` exposes `combo_box_stylesheet()` and
+  `combo_popup_stylesheet()`.
+- `HomePage` and `SettingsPage` apply those styles directly to each combo and
+  `combo.view()`.
+- Missing model component telemetry must render as `--`, not `0.0%`, because
+  `0.0%` implies a real model output.
+
+### 0.3 Home screen hiện tại
+
+```text
++------------------------------------------------------------------------------+
+| Hello User                                             PREMIUM                |
+| Start a new session and track focus locally or through the cloud.            |
++------------------------------------------------------------------------------+
+| Focus Time          Sessions             Avg Score            Day Streak      |
+| <cloud/user stats if available, otherwise placeholders>                       |
++------------------------------------------------------------------------------+
+| POMODORO SETUP                         | RECENT ACTIVITY                     |
+| Duration [25 Mins v]                   | Thu 18/06, 02:59 PM  1m focused... |
+| [ START SESSION ]                      | Wed 17/06, 04:03 AM  4m focused... |
++------------------------------------------------------------------------------+
+```
+
+Behavior:
+
+- Duration comes from settings and can be changed before starting.
+- Start Session passes `pomodoro_minutes` into the active session page.
+- Recent activity is loaded in a background worker from the cloud auth/stats
+  API when a username is present. If it cannot load, placeholders remain.
+
+### 0.4 Active Session screen hiện tại
+
+```text
++------------------------------------------------------------------------------+
+|                               25:00                                          |
+|                         STATUS: FOCUSED/DISTRACTED                           |
++--------------------------------------+---------------------------------------+
+| AI CAMERA                            | 4-CLASS XGB FUSION                    |
+| +----------------------------------+ | Final XGB    : 77.7%                 |
+| | local webcam/video preview only  | | Boost XGB    : 91.6%                 |
+| | optional landmarks               | | Targeted XGB : 77.2%                 |
+| +----------------------------------+ |                                       |
+| Signal: 64.8% | face found | FPS     | FOCUS TREND                           |
+| State : AI=ENGAGED/DISTRACTED        | Guide line: 50% telemetry guide       |
+| Cloud: connected/reconnecting/...    |                                       |
++--------------------------------------+---------------------------------------+
+|                         [ PAUSE ] [ END ]                                    |
++------------------------------------------------------------------------------+
+```
+
+Runtime behavior:
+
+- Frames remain local. The preview is never sent to cloud.
+- Camera/tracker work happens outside the UI thread.
+- The feature buffer waits for 30 frames before a sample is ready.
+- Local/cloud responses use the same 4-class response shape where possible.
+- `focus_score = P(class 2) + P(class 3)` is telemetry for signal/trend only.
+- The final AI state comes from `prediction_4class = argmax(probabilities)`.
+  Classes `2` and `3` map to `ENGAGED`; classes `0` and `1` map to
+  `DISTRACTED`.
+- The UI maps `ENGAGED` to final `FOCUSED`, unless the face-presence guard
+  returns `NO_FACE`.
+
+Component display safeguards:
+
+- The canonical component keys are `final_xgb`, `boost_xgb`, `targeted_xgb`.
+- `ui/component_metrics.py` also accepts legacy cloud keys
+  `gru`, `tcn`, `xgboost` so a not-yet-redeployed server does not break the UI.
+- If a packet lacks component data, the UI keeps the last valid component
+  values. It does not reset all three rows to `0.0%`.
+- If no component has ever been received, the UI shows `--`.
+
+### 0.5 Settings screen hiện tại
+
+```text
++------------------------------------------------------------------------------+
+| Settings                                                                     |
++------------------------------------------------------------------------------+
+| Appearance & Device Preferences                                              |
+| Theme Mode: ( ) Light (x) Dark                                               |
+| [ ] Auto-hide camera preview when starting session                           |
+| [x] Show facial landmarks on camera preview                                  |
+| Webcam Device: [ Webcam 0 (Default) v ]                                      |
+|                                                                              |
+| Focus & Work Goals                                                           |
+| Daily Focus Goal:             [ 120 Mins v ]                                 |
+| Default Pomodoro Duration:    [ 25 Mins v ]                                  |
+|                                                                              |
+| Notifications & Sound Alerts                                                 |
+| [x] Play sound when session completes                                        |
+| [ ] Play warning sound when distraction is detected                          |
+|                                                                              |
+| Security                                                                     |
+| Current Password, New Password, Change Password                              |
++------------------------------------------------------------------------------+
+```
+
+Notes:
+
+- Settings currently keeps a legacy `engagement_threshold` in settings storage
+  for compatibility, but the 4-class model does not use it for inference.
+- Theme changes must refresh both widgets and popup views.
+
+### 0.6 Client-to-cloud runtime flow
+
+```text
+Start Session
+  -> FocusSessionTracker starts camera worker
+  -> network worker creates POST /v1/sessions
+  -> websocket opens /v1/ws/sessions/{session_id}?device_id=...
+  -> camera worker extracts 30-value raw features per frame
+  -> FeatureSequenceBuffer builds raw sequence (30, 30)
+  -> cloud/hybrid sends raw_feature_sequence only
+  -> server enriches to (30, 90)
+  -> fixed_triple_xgb_fusion returns 4-class probabilities
+  -> UI renders focus score, argmax state, component probabilities
+  -> End Session posts summary and report completion metadata
+```
+
+Hybrid mode:
+
+- Prefer cloud response when available.
+- Use local model when cloud is unavailable or reconnecting.
+- Reconnect status is shown in the Cloud label.
+- Bounded queues drop stale packets rather than growing memory.
+
+### 0.7 Files to read first next time
+
+```text
+ui/theme.py                       palette + global styles + combo popup styles
+ui/component_metrics.py           component schema normalization for UI
+ui/screens/home_page.py           Home session start and recent activity
+ui/screens/active_session_page.py running session UI and summary creation
+ui/screens/settings_page.py       settings controls and theme-aware combos
+tracking/tracker.py               camera/local/cloud/hybrid orchestration
+tracking/inference.py             4-class local fallback inference
+edge/cloud_client.py              REST + WebSocket transport
+shared/contracts.py               v1 wire contracts
+server/core/inference.py          cloud model adapter
+```
+
 ## 1. Mục tiêu của buổi demo
 
 Buổi demo phải chứng minh được bốn điểm:

@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QPushButton,
+    QListView,
 )
 from PyQt6.QtCore import Qt
 
@@ -76,6 +77,7 @@ class SettingsPage(ThemedPage):
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(["Webcam 0 (Default)", "Webcam 1", "Webcam 2", "Webcam 3"])
         self.camera_combo.setFixedWidth(200)
+        self._prepare_combo(self.camera_combo)
         camera_layout.addWidget(self.camera_combo)
         camera_layout.addStretch()
         self.acc_card.layout.addLayout(camera_layout)
@@ -91,6 +93,7 @@ class SettingsPage(ThemedPage):
         goal_layout.addWidget(QLabel("Daily Focus Goal:"))
         self.goal_combo = QComboBox()
         self.goal_combo.addItems(["30 Mins", "60 Mins", "120 Mins", "180 Mins", "240 Mins", "300 Mins"])
+        self._prepare_combo(self.goal_combo)
         goal_layout.addWidget(self.goal_combo)
         self.focus_card.layout.addLayout(goal_layout)
 
@@ -98,6 +101,7 @@ class SettingsPage(ThemedPage):
         session_layout.addWidget(QLabel("Default Pomodoro Duration:"))
         self.session_combo = QComboBox()
         self.session_combo.addItems(["15 Mins", "25 Mins", "45 Mins", "60 Mins", "90 Mins"])
+        self._prepare_combo(self.session_combo)
         session_layout.addWidget(self.session_combo)
         self.focus_card.layout.addLayout(session_layout)
         
@@ -159,6 +163,17 @@ class SettingsPage(ThemedPage):
         app = self.property("app_reference")
         if app:
             app.set_theme(mode)
+
+    @staticmethod
+    def _prepare_combo(combo: QComboBox) -> None:
+        combo.setView(QListView())
+
+    def _apply_combo_theme(self) -> None:
+        combo_style = self.theme.combo_box_stylesheet()
+        popup_style = self.theme.combo_popup_stylesheet()
+        for combo in (self.camera_combo, self.goal_combo, self.session_combo):
+            combo.setStyleSheet(combo_style)
+            combo.view().setStyleSheet(popup_style)
 
     def _save(self):
         app = self.property("app_reference")
@@ -236,3 +251,4 @@ class SettingsPage(ThemedPage):
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)
+        self._apply_combo_theme()

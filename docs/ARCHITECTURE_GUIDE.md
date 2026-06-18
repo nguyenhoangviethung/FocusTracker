@@ -8,7 +8,7 @@ FocusFlow AI là hệ thống edge-to-cloud chỉ dùng tín hiệu thị giác:
 - Desktop không gửi ảnh hoặc video lên cloud.
 - Desktop gửi chuỗi đặc trưng khuôn mặt `(30, 30)`.
 - Cloud enrich thành `(30, 90)`.
-- Cloud chạy ensemble GRU + TCN + XGBoost.
+- Cloud chạy model 4-class `fixed_triple_xgb_fusion`.
 - Firestore lưu lifecycle và summary của session.
 - Report completion chỉ ghi trạng thái tổng kết, không còn AI coach hay email mentor.
 
@@ -27,11 +27,11 @@ Webcam frame
   -> Cloud Run API
   -> enrich raw + velocity + std
   -> enriched sequence (30, 90)
-  -> GRU ONNX
-  -> TCN ONNX
-  -> XGBoost
-  -> late-fusion score
-  -> FOCUSED / DISTRACTED
+  -> tsfresh-like tabular features (2161)
+  -> final_xgb + boost_xgb + targeted_xgb
+  -> weighted probability fusion + class bias + temperature
+  -> argmax over 4 calibrated class probabilities
+  -> class 2/3 = FOCUSED, class 0/1 = DISTRACTED
 ```
 
 Khi không tìm thấy mặt, face-presence guard trả `NO_FACE` và không tin model
@@ -39,16 +39,20 @@ score.
 
 ## 3. Contract của model
 
-Artifact runtime nằm trong `models/late_fusion/`.
+Artifact runtime nằm trong `models/product_4class_fixed_triple_xgb/`.
 
 ```text
 sequence length:       30
 raw feature dim:       30
 enriched feature dim:  90
-GRU weight:            0.30
-TCN weight:            0.30
-XGBoost weight:        0.40
-threshold:             0.54
+tabular feature dim:   2161
+final_xgb weight:      0.84
+boost_xgb weight:      0.14
+targeted_xgb weight:   0.02
+bias_power:            0.42
+temperature:           1.15
+decision rule:         argmax_4class
+class labels:          very_low, low, medium, high
 ```
 
 Hàm chuẩn duy nhất để enrich dữ liệu:
@@ -58,6 +62,10 @@ tracking.buffer.enrich_raw_sequence(raw_sequence)
 ```
 
 Không tự viết một phép enrich khác trong server hoặc client.
+
+`focus_score` trong UI/API là telemetry liên tục `P(medium) + P(high)`, dùng
+cho signal và trend chart. Nó không phải threshold decision. Quyết định model
+đến từ `prediction_4class = argmax(probabilities_4class)`.
 
 ## 4. Trách nhiệm từng vùng source
 
@@ -70,6 +78,8 @@ Không tự viết một phép enrich khác trong server hoặc client.
 - `tracking/inference.py`: local fallback inference.
 - `tracking/tracker.py`: camera worker, local/cloud/hybrid orchestration.
 - `edge/cloud_client.py`: REST lifecycle và WebSocket transport.
+- `ui/component_metrics.py`: normalize component telemetry cho UI, gồm cả
+  fallback từ key legacy `gru/tcn/xgboost` sang `final_xgb/boost_xgb/targeted_xgb`.
 
 ### Shared
 

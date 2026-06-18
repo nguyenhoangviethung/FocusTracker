@@ -114,10 +114,18 @@ class ThemeManager:
                 border: 1px solid {p['border']};
                 border-radius: 8px;
                 padding: 8px;
+                selection-background-color: {p['accent_focus']};
+                selection-color: white;
+            }}
+            QComboBox {{
+                padding-right: 28px;
             }}
             QComboBox::drop-down {{
                 border: none;
                 width: 24px;
+            }}
+            QComboBox:on {{
+                border-color: {p['accent_focus']};
             }}
             QTabWidget::pane {{
                 border: 1px solid {p['border']};
@@ -141,11 +149,28 @@ class ThemeManager:
             QComboBox::down-arrow {{
                 image: none; /* Can add a custom arrow image if needed */
             }}
-            QComboBox QAbstractItemView {{
-                background-color: {p['bg_card']};
+            QComboBox QAbstractItemView, QComboBox QListView {{
+                background-color: {p['input']};
                 color: {p['text_primary']};
                 border: 1px solid {p['border']};
-                selection-background-color: {p['btn_neutral']};
+                border-radius: 8px;
+                padding: 4px;
+                outline: 0;
+                selection-background-color: {p['accent_focus']};
+                selection-color: white;
+            }}
+            QComboBox QAbstractItemView::item, QComboBox QListView::item {{
+                min-height: 28px;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+            QComboBox QAbstractItemView::item:hover, QComboBox QListView::item:hover {{
+                background-color: {p['btn_neutral_hover']};
+                color: {p['text_primary']};
+            }}
+            QComboBox QAbstractItemView::item:selected, QComboBox QListView::item:selected {{
+                background-color: {p['accent_focus']};
+                color: white;
             }}
             QCheckBox, QRadioButton {{
                 color: {p['text_primary']};
@@ -189,6 +214,59 @@ class ThemeManager:
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 border: none;
                 background: none;
+            }}
+        """
+
+    def combo_box_stylesheet(self) -> str:
+        p = self.palette()
+        return f"""
+            QComboBox {{
+                background-color: {p['input']};
+                color: {p['text_primary']};
+                border: 1px solid {p['border']};
+                border-radius: 8px;
+                padding: 8px;
+                padding-right: 28px;
+                selection-background-color: {p['accent_focus']};
+                selection-color: white;
+            }}
+            QComboBox:on {{
+                border-color: {p['accent_focus']};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 24px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+            }}
+        """
+
+    def combo_popup_stylesheet(self) -> str:
+        p = self.palette()
+        return f"""
+            QListView {{
+                background-color: {p['input']};
+                color: {p['text_primary']};
+                border: 1px solid {p['border']};
+                border-radius: 8px;
+                padding: 4px;
+                outline: 0;
+                selection-background-color: {p['accent_focus']};
+                selection-color: white;
+            }}
+            QListView::item {{
+                min-height: 28px;
+                padding: 6px 8px;
+                border-radius: 6px;
+            }}
+            QListView::item:hover {{
+                background-color: {p['btn_neutral_hover']};
+                color: {p['text_primary']};
+            }}
+            QListView::item:selected {{
+                background-color: {p['accent_focus']};
+                color: white;
             }}
         """
 

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QComboBox,
     QFileDialog,
+    QListView,
     QSizePolicy,
     QWidget,
 )
@@ -81,6 +82,7 @@ class HomePage(ThemedPage):
         self.dur_combo.addItems(["15 Mins", "25 Mins", "45 Mins", "60 Mins", "90 Mins"])
         self.dur_combo.setCurrentText("25 Mins")
         self.dur_combo.setFixedWidth(150)
+        self.dur_combo.setView(QListView())
         dur_layout.addWidget(dur_label)
         dur_layout.addStretch()
         dur_layout.addWidget(self.dur_combo)
@@ -129,6 +131,8 @@ class HomePage(ThemedPage):
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)
+        self.dur_combo.setStyleSheet(self.theme.combo_box_stylesheet())
+        self.dur_combo.view().setStyleSheet(self.theme.combo_popup_stylesheet())
 
     def refresh(self):
         """Called by app_window.navigate() when switching to this page."""
