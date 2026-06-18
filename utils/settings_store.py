@@ -33,6 +33,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auth_email": "",
     "auth_display_name": "",
     "auth_last_login_at": "",
+    "daily_focus_goal_minutes": 120,
+    "sound_session_complete": True,
+    "sound_distraction_alert": False,
+    "auto_hide_camera": False,
 }
 
 
@@ -100,6 +104,12 @@ def normalize_settings(payload: dict[str, Any] | None) -> dict[str, Any]:
     normalized["auth_email"] = str(source.get("auth_email") or "").strip()
     normalized["auth_display_name"] = str(source.get("auth_display_name") or "").strip()
     normalized["auth_last_login_at"] = str(source.get("auth_last_login_at") or "").strip()
+    
+    # User-centric UX properties
+    normalized["daily_focus_goal_minutes"] = max(10, min(720, _to_int(source.get("daily_focus_goal_minutes"), 120)))
+    normalized["sound_session_complete"] = bool(source.get("sound_session_complete", True))
+    normalized["sound_distraction_alert"] = bool(source.get("sound_distraction_alert", False))
+    normalized["auto_hide_camera"] = bool(source.get("auto_hide_camera", False))
     return normalized
 
 

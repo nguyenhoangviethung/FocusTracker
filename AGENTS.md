@@ -10,7 +10,7 @@ The product has two runtime sides:
   frames, extracts a 30-value facial feature vector per frame, renders the
   local preview, and sends feature sequences to the cloud.
 - **Google Cloud backend:** FastAPI on Cloud Run. It enriches raw sequences,
-  runs the deployed GRU + TCN + XGBoost late-fusion model, stores session
+  runs the deployed 4-class fixed triple-XGBoost fusion model, stores session
   summaries, and records report completion metadata.
 
 The project is intentionally **vision-only**.
@@ -35,7 +35,7 @@ model and the face-presence guard.
 When documents disagree, use this priority:
 
 1. This `AGENTS.md`.
-2. Runtime model metadata in `models/late_fusion/`.
+2. Runtime model metadata in `models/product_4class_fixed_triple_xgb/`.
 3. `GUIDE.md`.
 4. Existing implementation and older planning documents.
 
@@ -46,10 +46,13 @@ production model is:
 raw frame features:       30 values
 raw temporal sequence:    (30, 30)
 enriched model sequence:  (30, 90)
-components:               GRU ONNX + TCN ONNX + XGBoost
-selected weights:         0.30 + 0.30 + 0.40
-selected threshold:       0.54
-runtime:                  CPU, ONNXRuntime, XGBoost
+tabular model features:    2161 tsfresh-like values
+components:               final_xgb + boost_xgb + targeted_xgb
+selected weights:         0.84 + 0.14 + 0.02
+decision rule:            argmax over calibrated 4-class probabilities
+runtime:                  CPU, XGBoost
+class labels:             very_low, low, medium, high
+focus score:              P(medium) + P(high), telemetry only
 ```
 
 `tracking.buffer.enrich_raw_sequence()` is the canonical transformation from
@@ -76,7 +79,7 @@ runtime:                  CPU, ONNXRuntime, XGBoost
 │   ├── WebSocket telemetry ingestion                                 │
 │   ├── shape/schema/idempotency validation                           │
 │   ├── enrich [30,30] -> [30,90]                                     │
-│   ├── GRU + TCN + XGBoost CPU inference                             │
+│   ├── fixed triple-XGBoost 4-class CPU inference                    │
 │   └── model-only focus decision                                     │
 │                                                                     │
 │ Firestore                                                           │
@@ -170,7 +173,7 @@ FocusTracker/
 │   ├── cloudbuild.yaml
 │   ├── env.example
 │   └── CONSOLE_SETUP.md
-├── models/late_fusion/             # Immutable runtime artifacts
+├── models/product_4class_fixed_triple_xgb/ # Immutable runtime artifacts
 └── tests/
     ├── server/
     └── test_logic_oonx.py
@@ -213,7 +216,7 @@ GET  /readyz
   "raw_feature_sequence": [[0.0]],
   "face_found": true,
   "configuration": {
-    "engagement_threshold": 0.54
+    "decision_rule": "argmax_4class"
   }
 }
 ```
@@ -227,7 +230,8 @@ The server returns:
 
 - model name and version;
 - final focus score and state;
-- GRU, TCN, and XGBoost component probabilities;
+- final_xgb, boost_xgb, and targeted_xgb component probabilities;
+- 4-class labels, probabilities, predicted class, and predicted label;
 - selected weights;
 - decision trace;
 - processing latency;

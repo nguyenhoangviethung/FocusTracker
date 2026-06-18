@@ -27,14 +27,7 @@ def add_data(path: Path, target: str) -> tuple[str, str] | None:
 datas = [
     item
     for item in [
-        add_data(project_root / "models" / "late_fusion" / "engagement_gru.onnx", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_gru.json", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_tcn.onnx", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_tcn.json", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.json", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.summary.json", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "engagement_xgb.preprocess.npz", "models/late_fusion"),
-        add_data(project_root / "models" / "late_fusion" / "late_fusion_gru_tcn_xgb_report.json", "models/late_fusion"),
+        add_data(project_root / "models" / "product_4class_fixed_triple_xgb", "models/product_4class_fixed_triple_xgb"),
         add_data(project_root / "models" / "face_landmarker.task", "models"),
         add_data(project_root / "assets", "assets"),
         add_data(project_root / "data", "data"),

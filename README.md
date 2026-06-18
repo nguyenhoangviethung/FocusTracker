@@ -1,7 +1,7 @@
 # FocusFlow AI
 
 FocusFlow AI là hệ thống edge-to-cloud theo dõi mức độ tập trung bằng webcam,
-MediaPipe và ensemble GRU + TCN + XGBoost.
+MediaPipe và model 4-class fixed triple-XGBoost fusion.
 
 ## Tài liệu
 
@@ -23,12 +23,9 @@ Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Work
 - `shared/`: Pydantic contracts dùng chung.
 - `server/`: FastAPI gateway, cloud inference và persistence adapters.
 - `deploy/gcp/`: Docker, Cloud Build và hướng dẫn Google Cloud Console.
-- `models/late_fusion/engagement_gru.onnx`: artifact GRU cho ensemble late-fusion.
-- `models/late_fusion/engagement_tcn.onnx`: artifact TCN cho ensemble late-fusion.
-- `models/late_fusion/engagement_xgb.json`: artifact XGBoost cho ensemble late-fusion.
-- `models/late_fusion/late_fusion_gru_tcn_xgb_report.json`: report chọn ensemble.
+- `models/product_4class_fixed_triple_xgb/`: artifact runtime chính gồm `final_xgb`, `boost_xgb`, `targeted_xgb`, preprocessors, summary và reproduction config.
 - `models/face_landmarker.task`: model MediaPipe FaceMesh.
-- `GUIDE.md`: guide production inference được kéo từ `../engagement-cpu/checkpoints/reports/GUIDE.md` để bảo trì model ngay trong repo app.
+- `GUIDE.md`: guide production inference 4-class để bảo trì model ngay trong repo app.
 
 ## Chạy app
 
@@ -54,7 +51,7 @@ FOCUSFLOW_REPOSITORY=memory uvicorn server.app:app --reload
 ## Test nhanh pipeline
 
 ```bash
-python tests/manual/test_tracker.py --model models/late_fusion/engagement_gru.onnx
+python tests/manual/test_tracker.py --model models/product_4class_fixed_triple_xgb
 ```
 
 ## Build desktop app
@@ -81,6 +78,6 @@ while the download portal stays simple and easy to maintain.
 - UI stack hiện tại là PyQt6.
 - Hệ thống không thu thập window title, process, bàn phím hoặc chuột.
 - Raw webcam frame không được gửi lên cloud.
-- `scripts/export_to_onnx.py` chỉ dùng khi cần xuất lại checkpoint sang ONNX.
+- `scripts/export_to_onnx.py` chỉ dùng cho artifact ONNX legacy, không dùng cho model 4-class chính.
 - Dữ liệu phiên được lưu cục bộ trong `data/history.json`.
 - Report completion chỉ ghi trạng thái/timestamp, không còn AI coach hoặc mentor email.

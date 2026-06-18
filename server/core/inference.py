@@ -29,10 +29,13 @@ class CloudInferenceEngine:
             state = "FOCUSED" if ai_state == "ENGAGED" else "DISTRACTED"
             decision = {
                 "state": state,
-                "source": "late_fusion_model",
-                "reason": "Decision produced by the GRU + TCN + XGBoost ensemble.",
+                "source": "product_4class_model",
+                "reason": "Decision produced by the fixed triple-XGBoost 4-class fusion model.",
                 "ai_probability": focus_score,
-                "threshold": float(prediction.get("threshold", 0.54)),
+                "decision_rule": prediction.get("decision_rule", "argmax_4class"),
+                "predicted_class": prediction.get("prediction_4class"),
+                "predicted_label": prediction.get("prediction_label"),
+                "engaged_class_indices": prediction.get("engaged_class_indices", [2, 3]),
             }
         else:
             prediction = {}
@@ -51,11 +54,16 @@ class CloudInferenceEngine:
             session_id=packet.session_id,
             model_name=str(prediction.get("model_name", MODEL_NAME)),
             model_version=str(prediction.get("model_version", MODEL_VERSION)),
+            label_space=prediction.get("label_space"),
             state=state,
             ai_state=ai_state,
             focus_score=max(0.0, min(1.0, focus_score)),
             components=dict(prediction.get("components") or {}),
             weights=dict(prediction.get("weights") or {}),
+            class_labels=list(prediction.get("class_labels") or []),
+            class_probabilities=list(prediction.get("probabilities_4class") or []),
+            predicted_class=prediction.get("prediction_4class"),
+            predicted_label=prediction.get("prediction_label"),
             decision=decision,
             latency_ms=(time.perf_counter() - started) * 1000.0,
         )

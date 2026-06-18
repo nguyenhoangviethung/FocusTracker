@@ -200,7 +200,6 @@ class FocusSessionTracker:
             inferencer = None
             if self.config.inference_mode in {"local", "hybrid"}:
                 inferencer = ONNXEngagementInferencer(
-                    threshold=self.config.engagement_threshold,
                     smoothing_window=self.config.smoothing_window,
                 )
             detector = FaceFeatureDetector(
@@ -278,12 +277,12 @@ class FocusSessionTracker:
                         }
                         last_ai_result = ai_result
 
-                probability = float(ai_result.get("focus_score", 0.0))
+                probability = float(ai_result.get("focus_score", ai_result.get("probability", 0.0)))
                 model_ready = bool(ai_result.get("ready", False))
                 if model_ready:
                     state = (
                         "FOCUSED"
-                        if str(ai_result.get("state", "DISTRACTED")) == "ENGAGED"
+                        if str(ai_result.get("state", "DISTRACTED")) in {"ENGAGED", "FOCUSED"}
                         else "DISTRACTED"
                     )
                 else:
@@ -406,7 +405,7 @@ class FocusSessionTracker:
             sequence_number=self._cloud_sequence,
             raw_feature_sequence=raw_sequence.tolist(),
             face_found=face_found,
-            configuration={"engagement_threshold": self.config.engagement_threshold},
+            configuration={"decision_rule": "argmax_4class"},
         )
         try:
             self._cloud_packets.put_nowait(packet)

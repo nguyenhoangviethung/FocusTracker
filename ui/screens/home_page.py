@@ -86,24 +86,6 @@ class HomePage(ThemedPage):
         dur_layout.addWidget(self.dur_combo)
         self.setup_card.layout.addLayout(dur_layout)
         
-        vid_layout = QHBoxLayout()
-        vid_label = QLabel("Demo Mode Video:")
-        vid_label.setFont(font(14))
-        self.vid_btn = QPushButton("Select .mp4 File")
-        self.vid_btn.clicked.connect(self._select_video)
-        self.vid_path = ""
-        vid_layout.addWidget(vid_label)
-        vid_layout.addStretch()
-        vid_layout.addWidget(self.vid_btn)
-        self.setup_card.layout.addLayout(vid_layout)
-
-        self.source_label = QLabel("Selected source: local webcam")
-        self.mode_label = QLabel("Inference mode: hybrid (cloud + local fallback)")
-        self.source_label.setWordWrap(True)
-        self.mode_label.setWordWrap(True)
-        self.setup_card.layout.addWidget(self.source_label)
-        self.setup_card.layout.addWidget(self.mode_label)
-        
         self.start_btn = QPushButton("START SESSION")
         self.start_btn.setObjectName("accent_focus")
         self.start_btn.setMinimumHeight(48)
@@ -131,27 +113,18 @@ class HomePage(ThemedPage):
         layout.addLayout(setup_layout)
         layout.addStretch()
 
-    def _select_video(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Select Video", "", "Video Files (*.mp4 *.avi)")
-        if file:
-            self.vid_path = file
-            self.vid_btn.setText(Path(file).name)
-            self.source_label.setText(f"Selected source: {Path(file).name}")
-
     def _on_start(self):
         val = self.dur_combo.currentText().split()[0]
         config = {
-            "pomodoro_minutes": int(val),
-            "demo_video_path": self.vid_path
+            "pomodoro_minutes": int(val)
         }
         app = self.property("app_reference")
         if app:
             app.start_session(config)
             
     def apply_settings(self, settings: dict) -> None:
-        mode = str(settings.get("inference_mode", "hybrid"))
-        suffix = " (cloud + local fallback)" if mode == "hybrid" else ""
-        self.mode_label.setText(f"Inference mode: {mode}{suffix}")
+        session_def = settings.get("session_minutes", 25)
+        self.dur_combo.setCurrentText(f"{session_def} Mins")
 
     def apply_theme(self) -> None:
         super().apply_theme()

@@ -9,6 +9,7 @@ from PyQt6.QtGui import QImage, QPixmap
 from ui.screens.base import ThemedPage, Card
 from ui.theme import ThemeManager, font
 from ui.components.focus_chart import FocusTrendChart
+from ui.component_metrics import component_text, normalize_components
 from tracking.tracker import FocusSessionTracker, TrackerConfig
 
 class ActiveSessionPage(ThemedPage):
@@ -32,6 +33,7 @@ class ActiveSessionPage(ThemedPage):
         self._last_second_state = None
         self._second_samples = []
         self._session_config = {}
+        self._latest_components = {}
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -62,8 +64,18 @@ class ActiveSessionPage(ThemedPage):
         self.camera_card = Card()
         self.camera_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.camera_card)
+        
+        cam_header = QHBoxLayout()
         c_title = QLabel("AI CAMERA")
         c_title.setFont(font(16, bold=True))
+        self.toggle_cam_btn = QPushButton("Hide")
+        self.toggle_cam_btn.setCheckable(True)
+        self.toggle_cam_btn.setFixedWidth(70)
+        self.toggle_cam_btn.clicked.connect(self._toggle_camera_visibility)
+        cam_header.addWidget(c_title)
+        cam_header.addStretch()
+        cam_header.addWidget(self.toggle_cam_btn)
+        
         self.camera_preview = QLabel("Camera will open when session starts")
         self.camera_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.camera_preview.setMinimumHeight(240)
@@ -72,7 +84,8 @@ class ActiveSessionPage(ThemedPage):
         self.camera_signal = QLabel("Signal: Waiting for Phase 2")
         self.camera_state = QLabel("State : FOCUSED")
         self.cloud_status = QLabel("Cloud: waiting for session")
-        self.camera_card.layout.addWidget(c_title)
+        
+        self.camera_card.layout.addLayout(cam_header)
         self.camera_card.layout.addWidget(self.camera_preview)
         self.camera_card.layout.addWidget(self.camera_signal)
         self.camera_card.layout.addWidget(self.camera_state)
@@ -81,18 +94,18 @@ class ActiveSessionPage(ThemedPage):
         self.model_card = Card()
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.model_card)
-        model_title = QLabel("LATE-FUSION MODEL")
+        model_title = QLabel("4-CLASS XGB FUSION")
         model_title.setFont(font(16, bold=True))
-        self.gru_state = QLabel("GRU      : WARMING UP")
-        self.tcn_state = QLabel("TCN      : WARMING UP")
-        self.xgb_state = QLabel("XGBoost  : WARMING UP")
+        self.final_xgb_state = QLabel("Final XGB    : WARMING UP")
+        self.boost_xgb_state = QLabel("Boost XGB    : WARMING UP")
+        self.targeted_xgb_state = QLabel("Targeted XGB : WARMING UP")
         self.trend_title = QLabel("FOCUS TREND")
         self.trend_title.setFont(font(16, bold=True))
         self.focus_chart = FocusTrendChart(max_points=300)
         self.model_card.layout.addWidget(model_title)
-        self.model_card.layout.addWidget(self.gru_state)
-        self.model_card.layout.addWidget(self.tcn_state)
-        self.model_card.layout.addWidget(self.xgb_state)
+        self.model_card.layout.addWidget(self.final_xgb_state)
+        self.model_card.layout.addWidget(self.boost_xgb_state)
+        self.model_card.layout.addWidget(self.targeted_xgb_state)
         self.model_card.layout.addSpacing(16)
         self.model_card.layout.addWidget(self.trend_title)
         self.model_card.layout.addWidget(self.focus_chart)
@@ -134,13 +147,19 @@ class ActiveSessionPage(ThemedPage):
         self.cloud_status.setText(
             "Cloud: connecting..." if mode in {"cloud", "hybrid"} else "Cloud: disabled (local mode)"
         )
-        self.gru_state.setText("GRU      : WARMING UP")
-        self.tcn_state.setText("TCN      : WARMING UP")
-        self.xgb_state.setText("XGBoost  : WARMING UP")
+        self.final_xgb_state.setText("Final XGB    : WARMING UP")
+        self.boost_xgb_state.setText("Boost XGB    : WARMING UP")
+        self.targeted_xgb_state.setText("Targeted XGB : WARMING UP")
         
+        self.focus_chart.set_threshold(0.5)
         self._start_tracker(config)
         self._render_timer()
         self.timer.start(1000)
+
+        # Dynamic webcam visibility setup on start
+        auto_hide = bool(config.get("auto_hide_camera", False))
+        self.toggle_cam_btn.setChecked(auto_hide)
+        self._toggle_camera_visibility()
 
     def toggle_pause(self) -> None:
         if not self._running: return
@@ -235,17 +254,17 @@ class ActiveSessionPage(ThemedPage):
         self._latest_focus_score = focus_score
         self._latest_state = state
         self._latest_sample_ready = model_ready
-        components = payload.get("components") or {}
-        self.gru_state.setText(self._component_text("GRU", components.get("gru")))
-        self.tcn_state.setText(self._component_text("TCN", components.get("tcn")))
-        self.xgb_state.setText(self._component_text("XGBoost", components.get("xgboost")))
-
-    @staticmethod
-    def _component_text(name: str, component: dict | None) -> str:
-        probability = float((component or {}).get("probability", 0.0))
-        return f"{name:<8} : {probability * 100:5.1f}%"
+        components = normalize_components(payload.get("components"))
+        if components:
+            self._latest_components = components
+        display_components = self._latest_components
+        self.final_xgb_state.setText(component_text("Final XGB", display_components.get("final_xgb")))
+        self.boost_xgb_state.setText(component_text("Boost XGB", display_components.get("boost_xgb")))
+        self.targeted_xgb_state.setText(component_text("Targeted XGB", display_components.get("targeted_xgb")))
 
     def _render_frame(self, frame_bgr) -> None:
+        if self.toggle_cam_btn.isChecked():
+            return
         if frame_bgr is None or len(frame_bgr) == 0:
             return
         try:
@@ -259,6 +278,23 @@ class ActiveSessionPage(ThemedPage):
         except Exception as e:
             pass
 
+    def _toggle_camera_visibility(self) -> None:
+        hidden = self.toggle_cam_btn.isChecked()
+        self.toggle_cam_btn.setText("Show" if hidden else "Hide")
+        if hidden:
+            self.camera_preview.setPixmap(QPixmap())
+            self.camera_preview.setText("Camera feed is hidden\n(AI tracking in progress...)")
+            self.camera_preview.setStyleSheet("""
+                background-color: #0b1320;
+                color: #10B981;
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                border-radius: 8px;
+                font-weight: bold;
+            """)
+        else:
+            self.camera_preview.setText("")
+            self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
+
     def _reset_statistics(self) -> None:
         self._latest_focus_score = 0.0
         self._latest_state = "DISTRACTED"
@@ -270,6 +306,7 @@ class ActiveSessionPage(ThemedPage):
         self._best_focus_streak = 0
         self._last_second_state = None
         self._second_samples.clear()
+        self._latest_components = {}
         self.focus_chart.clear()
 
     def _record_second(self) -> None:
@@ -316,8 +353,8 @@ class ActiveSessionPage(ThemedPage):
             self.camera_signal,
             self.camera_state,
             self.cloud_status,
-            self.gru_state,
-            self.tcn_state,
-            self.xgb_state,
+            self.final_xgb_state,
+            self.boost_xgb_state,
+            self.targeted_xgb_state,
         ]:
             label.setStyleSheet(f"color: {p['text_secondary']};")

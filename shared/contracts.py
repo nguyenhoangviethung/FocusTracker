@@ -68,11 +68,16 @@ class InferenceResponse(ContractModel):
     processed_at: datetime = Field(default_factory=utc_now)
     model_name: str
     model_version: str
+    label_space: str | None = None
     state: Literal["FOCUSED", "DISTRACTED", "NO_FACE"]
     ai_state: str
     focus_score: float = Field(ge=0.0, le=1.0)
     components: dict[str, Any] = Field(default_factory=dict)
     weights: dict[str, float] = Field(default_factory=dict)
+    class_labels: list[str] = Field(default_factory=list)
+    class_probabilities: list[float] = Field(default_factory=list)
+    predicted_class: int | None = None
+    predicted_label: str | None = None
     decision: dict[str, Any] = Field(default_factory=dict)
     latency_ms: float = Field(ge=0.0)
 

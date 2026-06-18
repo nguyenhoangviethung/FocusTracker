@@ -11,10 +11,6 @@ def test_onnx_pipeline_smoke() -> None:
     assert spec.sequence_length == 30
     assert spec.raw_feature_dim == 30
     assert spec.enriched_feature_dim == 90
-    assert inferencer._gru_normalizer is not None
-    assert inferencer._tcn_normalizer is not None
-    assert inferencer._gru_normalizer[0].shape == (spec.enriched_feature_dim,)
-    assert inferencer._tcn_normalizer[0].shape == (spec.enriched_feature_dim,)
 
     buffer = FeatureSequenceBuffer(
         sequence_length=spec.sequence_length,
@@ -35,7 +31,18 @@ def test_onnx_pipeline_smoke() -> None:
     assert prediction["state"] in {"ENGAGED", "DISTRACTED"}
 
     components = prediction["components"]
-    assert np.isclose(components["gru"]["probability"], 0.6383630857233988, atol=1e-6)
-    assert np.isclose(components["tcn"]["probability"], 0.5076513131339473, atol=1e-6)
-    assert np.isclose(components["xgboost"]["probability"], 0.2610085904598236, atol=1e-6)
-    assert np.isclose(prediction["probability"], 0.44820775770078986, atol=1e-6)
+    assert "final_xgb" in components
+    assert "boost_xgb" in components
+    assert "targeted_xgb" in components
+
+    # Check component probabilities
+    for name in ["final_xgb", "boost_xgb", "targeted_xgb"]:
+        assert 0.0 <= components[name]["probability"] <= 1.0
+        assert len(components[name]["probabilities"]) == 4
+
+    assert "probabilities_4class" in prediction
+    assert len(prediction["probabilities_4class"]) == 4
+    assert 0 <= prediction["prediction_4class"] < 4
+    assert prediction["decision_rule"] == "argmax_4class"
+    expected_state = "ENGAGED" if prediction["prediction_4class"] in {2, 3} else "DISTRACTED"
+    assert prediction["state"] == expected_state

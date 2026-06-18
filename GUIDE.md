@@ -1,20 +1,27 @@
 # FocusFlow Model Guide
 
-Tài liệu này được kéo về từ repo `engagement-cpu`, source gốc:
+Tài liệu này mô tả model production đang được serve trong FocusTracker.
+Artifact gốc nằm ở repo training:
 
 ```text
-../engagement-cpu/checkpoints/reports/GUIDE.md
+../engagement-cpu/checkpoints/runs/product_4class_fixed_triple_xgb/
 ```
 
-Giữ bản copy trong FocusTracker để bảo trì app mà không cần đọc tài liệu ở thư mục khác.
+Theo `../engagement-cpu/README.md`, artifact này cũng được đóng gói trên
+Hugging Face dataset `Hnug/daisee-processed` tại:
+
+```text
+product_4class_fixed_triple_xgb/product_4class_fixed_triple_xgb.zip
+```
 
 ## Model Đang Dùng
 
 | Mục đích | Model | Ghi chú |
 |---|---|---|
-| Runtime chính | `late_fusion_gru_tcn_xgb` | Ensemble GRU + TCN + XGBoost |
-| Neural temporal | `gru`, `tcn` | Chạy qua ONNXRuntime |
-| Tabular temporal | `xgboost` | Chạy từ `engagement_xgb.json` + preprocessor |
+| Runtime chính | `fixed_triple_xgb_fusion` | 4-class fixed triple-XGBoost fusion |
+| Component 1 | `final_xgb` | nhánh XGBoost mạnh nhất |
+| Component 2 | `boost_xgb` | nhánh boosted bổ sung |
+| Component 3 | `targeted_xgb` | nhánh targeted theo class |
 
 ## Input Contract
 
@@ -22,10 +29,10 @@ Pipeline app:
 
 1. Webcam/video frame -> MediaPipe FaceMesh features.
 2. Feature frame -> `FeatureSequenceBuffer`.
-3. Sequence enriched shape `(30, 90)` -> GRU/TCN ONNX + XGBoost tabular features.
-4. GRU/TCN inputs must be normalized with `feature_mean`/`feature_std` from the source `.pt` checkpoints when `normalize_features=true`.
-5. XGBoost uses the raw enriched sequence to build tsfresh-like tabular features, then applies `engagement_xgb.preprocess.npz`.
-6. Late fusion probability -> model-only `FOCUSED`/`DISTRACTED` decision.
+3. Raw sequence `(30, 30)` -> `tracking.buffer.enrich_raw_sequence()`.
+4. Enriched sequence `(30, 90)` -> tsfresh-like tabular feature vector `2161`.
+5. Mỗi component áp dụng `preprocessor.npz`, chạy XGBoost, rồi trả 4-class probabilities.
+6. Runtime fuse probabilities, calibrate bằng class bias + temperature, rồi map về focus score.
 
 Shape chuẩn:
 
@@ -33,69 +40,84 @@ Shape chuẩn:
 T = 30
 raw frame feature dim = 30
 enriched sequence dim = 90
-model input = (30, 90)
+tabular feature dim = 2161
+class labels = very_low, low, medium, high
 ```
 
 ## Artifacts Trong Repo App
 
 ```text
-models/late_fusion/engagement_gru.onnx
-models/late_fusion/engagement_gru.json
-models/late_fusion/engagement_tcn.onnx
-models/late_fusion/engagement_tcn.json
-models/late_fusion/engagement_xgb.json
-models/late_fusion/engagement_xgb.summary.json
-models/late_fusion/engagement_xgb.preprocess.npz
-models/late_fusion/late_fusion_gru_tcn_xgb_report.json
+models/product_4class_fixed_triple_xgb/
+  README.md
+  summary.json
+  reproduction_config.json
+  final_xgb/model.json
+  final_xgb/preprocessor.npz
+  final_xgb/summary.json
+  boost_xgb/model.json
+  boost_xgb/preprocessor.npz
+  boost_xgb/summary.json
+  targeted_xgb/model.json
+  targeted_xgb/preprocessor.npz
+  targeted_xgb/summary.json
 models/face_landmarker.task
 ```
 
 ## Fusion Contract
 
-Late-fusion model probability:
+Runtime dùng đúng tham số trong `reproduction_config.json`:
 
 ```python
-p_final = (0.30 * p_gru) + (0.30 * p_tcn) + (0.40 * p_xgb)
-prediction = int(p_final >= 0.54)
+mixed = (0.84 * final_xgb_probs) + (0.14 * boost_xgb_probs) + (0.02 * targeted_xgb_probs)
+adjusted = class_bias(mixed, bias_power=0.42, validation_counts=[23, 143, 813, 450])
+adjusted = temperature_calibrate(adjusted, temperature=1.15)
+focus_score = adjusted[2] + adjusted[3]
+prediction = int(adjusted.argmax(axis=-1))
+state = "ENGAGED" if prediction in {2, 3} else "DISTRACTED"
 ```
 
-The app maps the late-fusion result directly to the final focus state. There is
-no OS telemetry or heuristic override.
+The app maps `ENGAGED` to final `FOCUSED`; face absence still wins via the
+face-presence guard. There is no OS telemetry or heuristic override.
 
 ## Runtime Code Map
 
 | File | Responsibility |
 |---|---|
 | `tracking/detector.py` | MediaPipe feature extraction |
-| `tracking/buffer.py` | Builds the 30-frame enriched sequence |
-| `tracking/inference.py` | Loads GRU/TCN ONNX, XGBoost, metadata, and runs late fusion |
-| `tracking/tracker.py` | Camera thread, OS thread, pause/resume, queue telemetry |
-| `main.py` | Final AI + OS decision fusion |
+| `tracking/buffer.py` | Builds and enriches the 30-frame sequence |
+| `tracking/inference.py` | Loads the triple-XGB artifact and runs 4-class fusion |
+| `tracking/tracker.py` | Camera thread, cloud/local/hybrid routing, queue telemetry |
+| `server/core/inference.py` | Cloud API adapter around the same runtime inferencer |
 
 ## Service Response Shape
 
-`ONNXEngagementInferencer.predict()` should return enough trace data to debug production sessions:
+`ONNXEngagementInferencer.predict()` returns:
 
 ```json
 {
-  "model_name": "late_fusion_gru_tcn_xgb",
-  "model_version": "20260608",
-  "threshold": 0.54,
+  "model_name": "fixed_triple_xgb_fusion",
+  "model_version": "product_4class_fixed_triple_xgb",
+  "label_space": "daisee_4class",
+  "decision_rule": "argmax_4class",
   "probability": 0.0,
   "focus_score": 0.0,
   "state": "ENGAGED",
+  "class_labels": ["very_low", "low", "medium", "high"],
+  "probabilities_4class": [0.0, 0.0, 0.0, 0.0],
+  "prediction_4class": 0,
+  "prediction_label": "very_low",
   "sequence_length": 30,
   "raw_feature_dim": 30,
   "enriched_feature_dim": 90,
   "components": {
-    "gru": {"probability": 0.0},
-    "tcn": {"probability": 0.0},
-    "xgboost": {"probability": 0.0}
+    "final_xgb": {"probability": 0.0, "probabilities": [0.0, 0.0, 0.0, 0.0]},
+    "boost_xgb": {"probability": 0.0, "probabilities": [0.0, 0.0, 0.0, 0.0]},
+    "targeted_xgb": {"probability": 0.0, "probabilities": [0.0, 0.0, 0.0, 0.0]}
   },
   "weights": {
-    "gru": 0.30,
-    "tcn": 0.30,
-    "xgboost": 0.40
+    "final_xgb": 0.84,
+    "boost_xgb": 0.14,
+    "targeted_xgb": 0.02
   }
 }
 ```
@@ -106,45 +128,36 @@ no OS telemetry or heuristic override.
 * Không detect face: vẫn render frame, nhưng không tin AI score mới.
 * NaN/Inf trong feature: replace bằng `0.0` trước inference.
 * Thiếu artifact: fail rõ bằng `FileNotFoundError` để biết bundle bị thiếu.
-* Thiếu `feature_mean`/`feature_std` khi `normalize_features=true`: fail rõ bằng `ValueError`, không được chạy inference sai scale.
+* Sai shape `(30, 90)` hoặc sai tabular dim `2161`: fail rõ bằng `ValueError`.
 * Pause session: release camera và reset buffer/inferencer để tiết kiệm CPU.
 
 ## Khi Cập Nhật Model
 
-1. Export ONNX bằng exporter repo app để dùng đúng source model GRU/TCN:
+1. Rebuild artifact trong repo training:
 
 ```bash
-python scripts/export_to_onnx.py \
-  --checkpoint ../engagement-cpu/checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
-  --output models/late_fusion/engagement_gru.onnx
-
-python scripts/export_to_onnx.py \
-  --checkpoint ../engagement-cpu/checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt \
-  --output models/late_fusion/engagement_tcn.onnx
+cd ../engagement-cpu
+bash scripts/reproduce_product_4class.sh
 ```
 
-2. Copy/sync normalization metadata vào repo app:
+2. Copy artifact vào app:
 
 ```bash
-python scripts/sync_late_fusion_metadata.py --engagement-repo ../engagement-cpu
+rsync -a --delete \
+  ../engagement-cpu/checkpoints/runs/product_4class_fixed_triple_xgb/ \
+  models/product_4class_fixed_triple_xgb/
 ```
 
-Runtime chỉ được đọc artifact dưới `models/late_fusion/`; mọi đường dẫn source training trong metadata chỉ là ghi chú bảo trì, không phải dependency deploy.
-
-Trong app live, runtime vẫn infer đủ GRU + TCN + XGBoost. Tuy nhiên nếu GRU và TCN cùng vượt threshold riêng, score chính dùng `neural_consensus_guarded` để tránh XGBoost under-calibrated trên webcam cá nhân kéo tụt confidence; XGBoost vẫn được giữ trong telemetry/trace và vẫn tham gia khi neural chưa đồng thuận.
-
-3. Đảm bảo metadata khai báo đúng `sequence_length`, `raw_feature_dim`, `enriched_feature_dim`, threshold và calibration.
-
-4. Chạy regression test. Test này pin golden output cho GRU + TCN + XGBoost để bắt lỗi export sai kiến trúc hoặc sai calibration:
+3. Chạy regression tests:
 
 ```bash
-pytest tests/test_logic_oonx.py
+pytest tests/test_logic_oonx.py tests/server/test_cloud_inference.py tests/server/test_api.py
 ```
 
-5. Chạy manual test nếu cần xem telemetry:
+4. Chạy manual test nếu cần xem telemetry:
 
 ```bash
-python tests/manual/test_tracker.py --model models/late_fusion/engagement_gru.onnx
+python tests/manual/test_tracker.py --model models/product_4class_fixed_triple_xgb
 ```
 
-6. Cập nhật file này nếu weight, threshold, shape hoặc artifact name thay đổi.
+5. Cập nhật file này nếu weight, calibration, class mapping, shape hoặc artifact name thay đổi.

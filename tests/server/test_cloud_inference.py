@@ -4,7 +4,7 @@ from server.core.inference import CloudInferenceEngine
 from shared.contracts import TelemetryPacket
 
 
-def test_cloud_inference_uses_real_late_fusion_model() -> None:
+def test_cloud_inference_uses_real_product_4class_model() -> None:
     rng = np.random.default_rng(42)
     packet = TelemetryPacket(
         session_id="session-1",
@@ -16,8 +16,18 @@ def test_cloud_inference_uses_real_late_fusion_model() -> None:
 
     response = CloudInferenceEngine().predict(packet)
 
-    assert response.model_name == "late_fusion_gru_tcn_xgb"
+    assert response.model_name == "fixed_triple_xgb_fusion"
+    assert response.model_version == "product_4class_fixed_triple_xgb"
     assert response.state in {"FOCUSED", "DISTRACTED"}
-    assert set(response.components) == {"gru", "tcn", "xgboost"}
+    assert "final_xgb" in response.components
+    assert "boost_xgb" in response.components
+    assert "targeted_xgb" in response.components
+    assert response.class_labels == ["very_low", "low", "medium", "high"]
+    assert len(response.class_probabilities) == 4
+    assert response.predicted_class in {0, 1, 2, 3}
+    assert response.predicted_label in set(response.class_labels)
+    expected_state = "FOCUSED" if response.predicted_class in {2, 3} else "DISTRACTED"
+    assert response.state == expected_state
+    assert response.decision["decision_rule"] == "argmax_4class"
     assert 0.0 <= response.focus_score <= 1.0
-    assert response.decision["source"] == "late_fusion_model"
+    assert response.decision["source"] == "product_4class_model"

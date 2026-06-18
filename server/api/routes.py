@@ -140,9 +140,14 @@ def _live_session_updates(
             "state": response.state,
             "ai_state": response.ai_state,
             "focus_score": response.focus_score,
+            "label_space": response.label_space,
             "face_found": packet.face_found,
             "latency_ms": response.latency_ms,
             "components": response.components,
+            "class_labels": response.class_labels,
+            "class_probabilities": response.class_probabilities,
+            "predicted_class": response.predicted_class,
+            "predicted_label": response.predicted_label,
         },
     }
 
@@ -354,8 +359,8 @@ def _dashboard_html(settings: ServerSettings) -> str:
           <span style="font-family: monospace; font-weight: bold; color: #22C55E;" id="cfg-key">-</span>
         </div>
         <div class="settings-row" style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
-          <span style="font-weight: 600; color: #475569;">Model ONNX Runtime Engine</span>
-          <span style="font-family: monospace; color: #64748B;">Ensemble late_fusion [CPU, ONNX, XGBoost]</span>
+          <span style="font-weight: 600; color: #475569;">4-Class XGBoost Runtime Engine</span>
+          <span style="font-family: monospace; color: #64748B;">fixed_triple_xgb_fusion [CPU, XGBoost]</span>
         </div>
       </div>
     </div>
@@ -671,8 +676,8 @@ def _dashboard_html(settings: ServerSettings) -> str:
     let focusedCount = 0;
     let distractedCount = 0;
     sessions.forEach(s => {{
-      const focus = s.live_metrics?.average_focus ?? s.summary?.average_focus ?? 0.0;
-      if (focus >= 0.54) {{
+      const state = s.live_metrics?.state;
+      if (state === 'FOCUSED') {{
         focusedCount++;
       }} else {{
         distractedCount++;
@@ -698,10 +703,10 @@ def _dashboard_html(settings: ServerSettings) -> str:
       let focusedSessions = 0;
       let focusCount = 0;
       sessions.forEach(s => {{
-        const f = s.live_metrics?.average_focus ?? s.summary?.average_focus;
-        if (f != null) {{
+        const state = s.live_metrics?.state;
+        if (state != null) {{
           focusCount++;
-          if (f >= 0.54) {{
+          if (state === 'FOCUSED') {{
             focusedSessions++;
           }}
         }}

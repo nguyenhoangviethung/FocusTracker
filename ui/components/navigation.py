@@ -70,16 +70,14 @@ class SidebarNavigation(QFrame):
 
         self.system_card = QFrame()
         self.system_card.setObjectName("bg_card")
-        self.system_card.setStyleSheet("QFrame#bg_card { background-color: #F8FAFC; border-radius: 12px; }")
         sc_layout = QVBoxLayout(self.system_card)
         sc_layout.setContentsMargins(16, 16, 16, 16)
-        sc_title = QLabel("System Status")
-        sc_title.setFont(font(12, bold=True))
-        sc_desc = QLabel("Ready for inference\nNo active session")
-        sc_desc.setFont(font(11))
-        sc_desc.setStyleSheet("color: #64748B;")
-        sc_layout.addWidget(sc_title)
-        sc_layout.addWidget(sc_desc)
+        self.sc_title = QLabel("System Status")
+        self.sc_title.setFont(font(12, bold=True))
+        self.sc_desc = QLabel("Ready for inference\nNo active session")
+        self.sc_desc.setFont(font(11))
+        sc_layout.addWidget(self.sc_title)
+        sc_layout.addWidget(self.sc_desc)
         layout.addWidget(self.system_card)
         layout.addSpacing(16)
 
@@ -116,6 +114,9 @@ class SidebarNavigation(QFrame):
         """)
         self.logo.setStyleSheet(f"color: {p['text_primary']};")
         self.user_label.setStyleSheet(f"color: {p['text_secondary']};")
+        self.system_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['btn_neutral']}; border-radius: 12px; }}")
+        self.sc_title.setStyleSheet(f"color: {p['text_primary']};")
+        self.sc_desc.setStyleSheet(f"color: {p['text_secondary']};")
         
         for key, btn in self._buttons.items():
             if key == self.active_key:

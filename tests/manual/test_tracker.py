@@ -21,11 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         type=str,
         default=None,
-        help="Path to ONNX model file. Defaults to models/late_fusion/engagement_gru.onnx",
+        help="Path to the 4-class model directory. Defaults to models/product_4class_fixed_triple_xgb",
     )
     parser.add_argument("--show-landmarks", action="store_true", help="Draw FaceMesh landmarks on frame")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0 = until q)")
-    parser.add_argument("--threshold", type=float, default=None, help="Override engagement threshold")
     parser.add_argument("--smoothing-window", type=int, default=None, help="Override probability smoothing window")
     return parser
 
@@ -36,7 +35,6 @@ def run_cli() -> None:
     logger.info("Starting tracker CLI (camera=%s)", args.camera)
     inferencer = ONNXEngagementInferencer(
         model_file=args.model,
-        threshold=args.threshold,
         smoothing_window=args.smoothing_window,
     )
     spec = inferencer.spec

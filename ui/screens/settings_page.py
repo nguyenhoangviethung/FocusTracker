@@ -1,5 +1,17 @@
 from __future__ import annotations
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QRadioButton, QButtonGroup, QScrollArea, QWidget, QComboBox
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QRadioButton,
+    QButtonGroup,
+    QScrollArea,
+    QWidget,
+    QComboBox,
+    QCheckBox,
+    QPushButton,
+)
 from PyQt6.QtCore import Qt
 
 from ui.screens.base import ThemedPage, PageTitle, Card
@@ -13,7 +25,7 @@ class SettingsPage(ThemedPage):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(24)
         
-        self.header = PageTitle("Settings", "Configure appearance and AI vision.")
+        self.header = PageTitle("Settings", "Configure your focus preferences, notifications, and security.")
         layout.addWidget(self.header)
         
         scroll = QScrollArea()
@@ -24,18 +36,18 @@ class SettingsPage(ThemedPage):
         scroll_content = QWidget()
         scroll_content.setStyleSheet("background: transparent;")
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(0,0,0,0)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
         scroll_layout.setSpacing(24)
         
-        # App & Account
+        # 1. Appearance & Preferences
         self.acc_card = Card()
         scroll_layout.addWidget(self.acc_card)
-        t1 = QLabel("Appearance & Account")
+        t1 = QLabel("Appearance & Device Preferences")
         t1.setFont(font(16, bold=True))
         self.acc_card.layout.addWidget(t1)
         
         theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("Theme:"))
+        theme_layout.addWidget(QLabel("Theme Mode:"))
         self.theme_group = QButtonGroup(self)
         self.rb_light = QRadioButton("Light")
         self.rb_dark = QRadioButton("Dark")
@@ -48,39 +60,60 @@ class SettingsPage(ThemedPage):
         
         self.rb_light.clicked.connect(lambda: self._set_theme("Light"))
         self.rb_dark.clicked.connect(lambda: self._set_theme("Dark"))
-        
-        # New Settings Card for AI Vision Config
-        self.ai_card = Card()
-        scroll_layout.addWidget(self.ai_card)
-        t3 = QLabel("AI Vision Configuration")
-        t3.setFont(font(16, bold=True))
-        self.ai_card.layout.addWidget(t3)
 
-        mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("Inference Mode:"))
-        self.inference_mode = QComboBox()
-        self.inference_mode.addItems(["hybrid", "cloud", "local"])
-        mode_layout.addWidget(self.inference_mode)
-        self.ai_card.layout.addLayout(mode_layout)
+        autohide_layout = QHBoxLayout()
+        self.chk_autohide = QCheckBox("Auto-hide camera preview when starting session")
+        autohide_layout.addWidget(self.chk_autohide)
+        self.acc_card.layout.addLayout(autohide_layout)
 
-        cloud_url_layout = QHBoxLayout()
-        cloud_url_layout.addWidget(QLabel("Cloud API URL:"))
-        self.cloud_api_url = QLineEdit()
-        self.cloud_api_url.setPlaceholderText("https://focusflow-api-...run.app")
-        cloud_url_layout.addWidget(self.cloud_api_url)
-        self.ai_card.layout.addLayout(cloud_url_layout)
+        landmarks_layout = QHBoxLayout()
+        self.chk_landmarks = QCheckBox("Show facial landmarks on camera preview")
+        landmarks_layout.addWidget(self.chk_landmarks)
+        self.acc_card.layout.addLayout(landmarks_layout)
+
+        camera_layout = QHBoxLayout()
+        camera_layout.addWidget(QLabel("Webcam Device:"))
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItems(["Webcam 0 (Default)", "Webcam 1", "Webcam 2", "Webcam 3"])
+        self.camera_combo.setFixedWidth(200)
+        camera_layout.addWidget(self.camera_combo)
+        camera_layout.addStretch()
+        self.acc_card.layout.addLayout(camera_layout)
         
-        from PyQt6.QtWidgets import QDoubleSpinBox, QPushButton
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(QLabel("Camera Distance Scale (Face Width %):"))
-        self.scale_spinbox = QDoubleSpinBox()
-        self.scale_spinbox.setRange(0.05, 0.4)
-        self.scale_spinbox.setSingleStep(0.01)
-        self.scale_spinbox.setDecimals(3)
-        scale_layout.addWidget(self.scale_spinbox)
-        self.ai_card.layout.addLayout(scale_layout)
+        # 2. Focus & Work Goals
+        self.focus_card = Card()
+        scroll_layout.addWidget(self.focus_card)
+        t_focus = QLabel("Focus & Work Goals")
+        t_focus.setFont(font(16, bold=True))
+        self.focus_card.layout.addWidget(t_focus)
+
+        goal_layout = QHBoxLayout()
+        goal_layout.addWidget(QLabel("Daily Focus Goal:"))
+        self.goal_combo = QComboBox()
+        self.goal_combo.addItems(["30 Mins", "60 Mins", "120 Mins", "180 Mins", "240 Mins", "300 Mins"])
+        goal_layout.addWidget(self.goal_combo)
+        self.focus_card.layout.addLayout(goal_layout)
+
+        session_layout = QHBoxLayout()
+        session_layout.addWidget(QLabel("Default Pomodoro Duration:"))
+        self.session_combo = QComboBox()
+        self.session_combo.addItems(["15 Mins", "25 Mins", "45 Mins", "60 Mins", "90 Mins"])
+        session_layout.addWidget(self.session_combo)
+        self.focus_card.layout.addLayout(session_layout)
         
-        # New Change Password Card
+        # 3. Notifications & Sound Alerts
+        self.alerts_card = Card()
+        scroll_layout.addWidget(self.alerts_card)
+        t_alerts = QLabel("Notifications & Sound Alerts")
+        t_alerts.setFont(font(16, bold=True))
+        self.alerts_card.layout.addWidget(t_alerts)
+
+        self.chk_complete = QCheckBox("Play sound when session completes")
+        self.chk_distract = QCheckBox("Play warning sound when distraction is detected")
+        self.alerts_card.layout.addWidget(self.chk_complete)
+        self.alerts_card.layout.addWidget(self.chk_distract)
+        
+        # 4. Security Card
         self.pwd_card = Card()
         scroll_layout.addWidget(self.pwd_card)
         t_pwd = QLabel("Security")
@@ -131,6 +164,8 @@ class SettingsPage(ThemedPage):
         app = self.property("app_reference")
         if app:
             app.update_settings(self.tracker_config())
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Success", "Settings saved successfully.")
 
     def _change_password(self):
         import os
@@ -169,19 +204,34 @@ class SettingsPage(ThemedPage):
 
     def tracker_config(self) -> dict:
         return {
-            "camera_distance_scale": self.scale_spinbox.value(),
-            "inference_mode": self.inference_mode.currentText(),
-            "cloud_api_url": self.cloud_api_url.text().strip(),
+            "daily_focus_goal_minutes": int(self.goal_combo.currentText().split()[0]),
+            "session_minutes": int(self.session_combo.currentText().split()[0]),
+            "sound_session_complete": self.chk_complete.isChecked(),
+            "sound_distraction_alert": self.chk_distract.isChecked(),
+            "auto_hide_camera": self.chk_autohide.isChecked(),
+            "show_landmarks": self.chk_landmarks.isChecked(),
+            "camera_index": self.camera_combo.currentIndex(),
         }
 
     def apply_settings(self, settings: dict) -> None:
-        self.scale_spinbox.setValue(settings.get("camera_distance_scale", 0.18))
-        self.inference_mode.setCurrentText(str(settings.get("inference_mode", "hybrid")))
-        self.cloud_api_url.setText(str(settings.get("cloud_api_url", "")))
         if settings.get("theme_mode") == "Light":
             self.rb_light.setChecked(True)
         else:
             self.rb_dark.setChecked(True)
+            
+        goal = settings.get("daily_focus_goal_minutes", 120)
+        self.goal_combo.setCurrentText(f"{goal} Mins")
+        
+        session_def = settings.get("session_minutes", 25)
+        self.session_combo.setCurrentText(f"{session_def} Mins")
+        
+        self.chk_complete.setChecked(settings.get("sound_session_complete", True))
+        self.chk_distract.setChecked(settings.get("sound_distraction_alert", False))
+        self.chk_autohide.setChecked(settings.get("auto_hide_camera", False))
+
+        self.chk_landmarks.setChecked(settings.get("show_landmarks", True))
+        camera_idx = settings.get("camera_index", 0)
+        self.camera_combo.setCurrentIndex(max(0, min(self.camera_combo.count() - 1, camera_idx)))
 
     def apply_theme(self) -> None:
         super().apply_theme()

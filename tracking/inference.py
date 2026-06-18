@@ -1,40 +1,33 @@
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
 import json
-import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import onnxruntime as ort
+import xgboost as xgb
 
 from utils.logger import get_logger
-from utils.paths import (
-    late_fusion_gru_metadata_path,
-    late_fusion_gru_model_path,
-    late_fusion_report_path,
-    late_fusion_tcn_metadata_path,
-    late_fusion_tcn_model_path,
-    late_fusion_xgb_model_path,
-    late_fusion_xgb_preprocessor_path,
-    late_fusion_xgb_summary_path,
-    model_path,
-)
+from utils.paths import resource_base_dir
 
 logger = get_logger("inference")
 
+MODEL_NAME = "fixed_triple_xgb_fusion"
+MODEL_VERSION = "product_4class_fixed_triple_xgb"
+LABEL_SPACE = "daisee_4class"
+CLASS_LABELS = ("very_low", "low", "medium", "high")
+ENGAGED_CLASS_INDICES = (2, 3)
 
-DEFAULT_THRESHOLD = 0.54
-DEFAULT_WEIGHTS = {
-    "gru": 0.30,
-    "tcn": 0.30,
-    "xgboost": 0.40,
+# Static bias vector from the product reproduction config:
+# class_bias(validation_labels, power=0.42), validation counts [23, 143, 813, 450].
+BIAS_VECTOR = np.array([2.0256370928321137, 0.9402561797523197, 0.4531576365407765, 0.58094909087479], dtype=np.float32)
+TEMPERATURE = 1.15
+WEIGHTS = {
+    "final_xgb": 0.84,
+    "boost_xgb": 0.14,
+    "targeted_xgb": 0.02,
 }
-MODEL_NAME = "late_fusion_gru_tcn_xgb"
-MODEL_VERSION = "20260608"
-
 
 @dataclass(frozen=True)
 class LateFusionSpec:
@@ -42,16 +35,16 @@ class LateFusionSpec:
     sequence_length: int
     raw_feature_dim: int
     enriched_feature_dim: int
-    threshold: float
     smoothing_window: int
     weights: dict[str, float]
-    gru_model_file: Path
-    tcn_model_file: Path
-    xgb_model_file: Path
-    xgb_summary_file: Path
-    xgb_preprocessor_file: Path
-    gru_metadata_file: Path
-    tcn_metadata_file: Path
+    # Placeholders for compatibility
+    gru_model_file: Path | None = None
+    tcn_model_file: Path | None = None
+    xgb_model_file: Path | None = None
+    xgb_summary_file: Path | None = None
+    xgb_preprocessor_file: Path | None = None
+    gru_metadata_file: Path | None = None
+    tcn_metadata_file: Path | None = None
     xgb_feature_mode: str = "tsfresh"
 
     def expected_input_shape(self) -> tuple[int, int]:
@@ -62,295 +55,95 @@ class LateFusionSpec:
 
 
 class ONNXEngagementInferencer:
-    """Late-fusion engagement inferencer for GRU + TCN + XGBoost.
-
-    The class keeps the historic name used by the app, but the runtime now
-    loads the bundled late-fusion ensemble and returns the fused probability.
+    """Multiclass 4-class late fusion XGBoost engagement inferencer.
+    
+    Loads three components: final_xgb, boost_xgb, and targeted_xgb.
+    Generates tsfresh features from the (30, 90) enriched sequence,
+    fuses prediction probabilities, applies validation-based class bias,
+    and performs temperature calibration.
     """
 
     def __init__(
         self,
         model_file: str | Path | None = None,
-        threshold: float = DEFAULT_THRESHOLD,
         smoothing_window: int = 1,
     ) -> None:
-        resolved_model = Path(model_file) if model_file else late_fusion_gru_model_path()
-        if not resolved_model.exists():
-            resolved_model = model_path()
-        self._artifact_dir = resolved_model.parent
-        logger.info(
-            "Initializing late-fusion inferencer (model=%s, threshold=%s, smoothing_window=%s)",
-            resolved_model,
-            threshold,
-            smoothing_window,
-        )
-
-        self._report = self._read_json(self._resolve_report_path())
-        selected = self._report.get("selected", {}) if isinstance(self._report, dict) else {}
-        report_weights = selected.get("weights", {}) if isinstance(selected, dict) else {}
-
-        gru_model = self._resolve_component_path(late_fusion_gru_model_path().name)
-        tcn_model = self._resolve_component_path(late_fusion_tcn_model_path().name)
-        xgb_model = self._resolve_component_path(late_fusion_xgb_model_path().name)
-        xgb_summary = self._resolve_component_path(late_fusion_xgb_summary_path().name)
-        xgb_preprocessor = self._resolve_component_path(late_fusion_xgb_preprocessor_path().name)
-        gru_metadata = self._resolve_component_path(late_fusion_gru_metadata_path().name)
-        tcn_metadata = self._resolve_component_path(late_fusion_tcn_metadata_path().name)
-
-        if not gru_model.exists():
-            raise FileNotFoundError(f"GRU artifact not found at {gru_model}")
-        if not tcn_model.exists():
-            raise FileNotFoundError(f"TCN artifact not found at {tcn_model}")
-        if not xgb_model.exists():
-            raise FileNotFoundError(f"XGBoost artifact not found at {xgb_model}")
-        if not xgb_summary.exists():
-            raise FileNotFoundError(f"XGBoost summary not found at {xgb_summary}")
-        if not xgb_preprocessor.exists():
-            raise FileNotFoundError(f"XGBoost preprocessor not found at {xgb_preprocessor}")
-        if not gru_metadata.exists():
-            raise FileNotFoundError(f"GRU metadata not found at {gru_metadata}")
-        if not tcn_metadata.exists():
-            raise FileNotFoundError(f"TCN metadata not found at {tcn_metadata}")
-
-        self._gru_metadata = self._read_json(gru_metadata)
-        self._tcn_metadata = self._read_json(tcn_metadata)
-        self._xgb_summary = self._read_json(xgb_summary)
-        self._xgb_preprocessor = self._load_npz_preprocessor(xgb_preprocessor)
-        self._gru_normalizer = self._resolve_sequence_normalizer(self._gru_metadata, "GRU")
-        self._tcn_normalizer = self._resolve_sequence_normalizer(self._tcn_metadata, "TCN")
-
-        self._weight_map = self._resolve_weights(report_weights)
-        self.threshold = self._resolve_threshold(threshold, selected)
         self.smoothing_window = max(1, int(smoothing_window))
 
-        self.spec = LateFusionSpec(
-            model_file=gru_model,
-            sequence_length=self._resolve_int(
-                self._gru_metadata.get("sequence_length"),
-                self._tcn_metadata.get("sequence_length"),
-                30,
-            ),
-            raw_feature_dim=self._resolve_int(
-                self._gru_metadata.get("raw_feature_dim"),
-                self._tcn_metadata.get("raw_feature_dim"),
-                30,
-            ),
-            enriched_feature_dim=self._resolve_int(
-                self._gru_metadata.get("enriched_feature_dim"),
-                self._tcn_metadata.get("enriched_feature_dim"),
-                90,
-            ),
-            threshold=self.threshold,
-            smoothing_window=self.smoothing_window,
-            weights=dict(self._weight_map),
-            gru_model_file=gru_model,
-            tcn_model_file=tcn_model,
-            xgb_model_file=xgb_model,
-            xgb_summary_file=xgb_summary,
-            xgb_preprocessor_file=xgb_preprocessor,
-            gru_metadata_file=gru_metadata,
-            tcn_metadata_file=tcn_metadata,
-        )
-
-        self._gru_temperature, self._gru_calibration = self._resolve_component_calibration(self._gru_metadata)
-        self._tcn_temperature, self._tcn_calibration = self._resolve_component_calibration(self._tcn_metadata)
-        self._xgb_threshold = self._resolve_float(self._xgb_summary.get("selected_threshold"), 0.49)
-        self._xgb_feature_mode = str(self._xgb_summary.get("feature_mode") or "tsfresh")
-
-        self._gru_session, self._gru_input_name = self._load_onnx_session(gru_model)
-        self._tcn_session, self._tcn_input_name = self._load_onnx_session(tcn_model)
-
-        self._xgb_model, self._xgb_backend = self._load_tree_model(xgb_model)
-        self._probability_history: deque[float] = deque(maxlen=self.smoothing_window)
+        # Set model directory path
+        if model_file:
+            # If a model directory or file is passed, resolve its parent/directory
+            model_path_obj = Path(model_file)
+            if model_path_obj.is_file():
+                self._model_dir = model_path_obj.parent
+            else:
+                self._model_dir = model_path_obj
+        else:
+            self._model_dir = resource_base_dir() / "models" / "product_4class_fixed_triple_xgb"
 
         logger.info(
-            "Late-fusion inferencer ready: input=%sx%s, threshold=%.3f, weights=%s",
-            self.spec.sequence_length,
-            self.spec.enriched_feature_dim,
-            self.threshold,
-            self._weight_map,
+            "Initializing 4-class multiclass model from %s (decision_rule=argmax_4class, smoothing_window=%s)",
+            self._model_dir,
+            self.smoothing_window,
         )
 
-    @staticmethod
-    def _read_json(path: Path) -> dict[str, Any]:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Unable to read JSON artifact at {path}: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise ValueError(f"JSON artifact must contain an object: {path}")
-        return payload
+        # Load models and preprocessors
+        self._models = {}
+        self._preprocessors = {}
 
-    def _resolve_report_path(self) -> Path:
-        candidate = late_fusion_report_path()
-        if candidate.exists():
-            return candidate
-        return self._artifact_dir / candidate.name
+        components = ["final_xgb", "boost_xgb", "targeted_xgb"]
+        for comp in components:
+            comp_dir = self._model_dir / comp
+            model_path = comp_dir / "model.json"
+            prep_path = comp_dir / "preprocessor.npz"
 
-    def _resolve_component_path(self, filename: str) -> Path:
-        candidate = self._artifact_dir / filename
-        if candidate.exists():
-            return candidate
-        fallback = Path(filename)
-        if fallback.exists():
-            return fallback
-        return candidate
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+            if not prep_path.exists():
+                raise FileNotFoundError(f"Preprocessor file not found: {prep_path}")
 
-    @staticmethod
-    def _resolve_int(*values: Any) -> int:
-        for value in values:
-            if value is None:
-                continue
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                continue
-        raise ValueError("Unable to resolve integer model metadata")
+            # Load booster
+            booster = xgb.Booster()
+            booster.load_model(str(model_path))
+            self._models[comp] = booster
 
-    @staticmethod
-    def _resolve_float(*values: Any) -> float:
-        for value in values:
-            if value is None:
-                continue
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                continue
-        raise ValueError("Unable to resolve float model metadata")
+            # Load preprocessor
+            prep_data = np.load(prep_path, allow_pickle=False)
+            mean = prep_data["mean"]
+            scale = prep_data["scale"]
+            if mean.shape != scale.shape:
+                raise ValueError(f"Preprocessor mean/scale shape mismatch for {comp}: {mean.shape} != {scale.shape}")
+            self._preprocessors[comp] = {
+                "mean": mean,
+                "scale": scale,
+            }
 
-    def _resolve_threshold(self, threshold: float, selected: dict[str, Any]) -> float:
-        if threshold is not None:
-            return float(threshold)
-        if isinstance(selected, dict) and "threshold" in selected:
-            try:
-                return float(selected["threshold"])
-            except (TypeError, ValueError):
-                pass
-        return DEFAULT_THRESHOLD
+        # Setup compatibility Spec
+        self.spec = LateFusionSpec(
+            model_file=self._model_dir / "final_xgb" / "model.json",
+            sequence_length=30,
+            raw_feature_dim=30,
+            enriched_feature_dim=90,
+            smoothing_window=self.smoothing_window,
+            weights=dict(WEIGHTS),
+        )
 
-    def _resolve_weights(self, report_weights: dict[str, Any]) -> dict[str, float]:
-        weights = dict(DEFAULT_WEIGHTS)
-        for key, value in report_weights.items():
-            if key not in weights:
-                continue
-            try:
-                weights[key] = float(value)
-            except (TypeError, ValueError):
-                continue
-        total = sum(weights.values())
-        if total <= 0:
-            return dict(DEFAULT_WEIGHTS)
-        return {name: weight / total for name, weight in weights.items()}
+        logger.info("4-class multiclass models successfully loaded.")
 
     @staticmethod
-    def _load_npz_preprocessor(path: Path) -> dict[str, Any]:
-        payload = np.load(path, allow_pickle=False)
-        config: dict[str, Any] = {key: payload[key] for key in payload.files}
-        config["dim_reduction"] = str(config["dim_reduction"].item()) if "dim_reduction" in config else "none"
-        return config
+    def _normalize(probabilities: np.ndarray) -> np.ndarray:
+        probabilities = probabilities.astype(np.float64)
+        probabilities /= np.clip(probabilities.sum(axis=-1, keepdims=True), 1e-12, None)
+        return probabilities.astype(np.float32)
 
     @staticmethod
-    def _resolve_component_calibration(metadata: dict[str, Any]) -> tuple[float, dict[str, Any]]:
-        temperature = 1.0
-        calibration: dict[str, Any] = {}
-        if isinstance(metadata, dict):
-            try:
-                temperature = float(metadata.get("best_temperature", 1.0))
-            except (TypeError, ValueError):
-                temperature = 1.0
-            raw_calibration = metadata.get("prior_shift_calibration")
-            if isinstance(raw_calibration, dict):
-                calibration = dict(raw_calibration)
-        return temperature, calibration
-
-    @staticmethod
-    def _resolve_sequence_normalizer(metadata: dict[str, Any], component_name: str) -> tuple[np.ndarray, np.ndarray] | None:
-        if not bool(metadata.get("normalize_features", False)):
-            return None
-
-        mean_raw = metadata.get("feature_mean")
-        std_raw = metadata.get("feature_std")
-        if not isinstance(mean_raw, list) or not isinstance(std_raw, list):
-            raise ValueError(
-                f"{component_name} metadata requires feature_mean/feature_std because normalize_features=true."
-            )
-
-        mean = np.asarray(mean_raw, dtype=np.float32)
-        std = np.asarray(std_raw, dtype=np.float32)
-        if mean.ndim != 1 or std.ndim != 1 or mean.shape != std.shape:
-            raise ValueError(f"{component_name} feature normalizer must be matching 1D vectors.")
-        std = np.where(np.abs(std) < 1e-6, 1.0, std).astype(np.float32)
-        return mean, std
-
-    @staticmethod
-    def _apply_sequence_normalizer(chunk: np.ndarray, normalizer: tuple[np.ndarray, np.ndarray] | None) -> np.ndarray:
-        if normalizer is None:
-            return chunk.astype(np.float32, copy=False)
-        mean, std = normalizer
-        if chunk.shape[-1] != mean.shape[0]:
-            raise ValueError(f"Normalizer dim {mean.shape[0]} does not match chunk feature dim {chunk.shape[-1]}")
-        return ((chunk - mean.reshape(1, -1)) / std.reshape(1, -1)).astype(np.float32)
-
-    @staticmethod
-    def _load_onnx_session(model_file: Path) -> tuple[ort.InferenceSession, str]:
-        session = ort.InferenceSession(str(model_file), providers=["CPUExecutionProvider"])
-        inputs = session.get_inputs()
-        if not inputs:
-            raise ValueError(f"ONNX model has no inputs: {model_file}")
-        return session, inputs[0].name
-
-    @staticmethod
-    def _load_tree_model(model_file: Path):
-        try:
-            import xgboost as xgb
-        except Exception as exc:  # pragma: no cover - import guard
-            raise ImportError(
-                "xgboost is required for late-fusion inference. Install the runtime requirements first."
-            ) from exc
-
-        model = xgb.Booster()
-        model.load_model(str(model_file))
-        return model, "xgboost"
-
-    @staticmethod
-    def _sigmoid(value: float) -> float:
-        clipped = float(np.clip(value, -60.0, 60.0))
-        return float(1.0 / (1.0 + np.exp(-clipped)))
-
-    @staticmethod
-    def _logit(probability: float) -> float:
-        clipped = float(np.clip(probability, 1e-6, 1.0 - 1e-6))
-        return float(np.log(clipped / (1.0 - clipped)))
-
-    def _calibrate_probability(
-        self,
-        probability: float,
-        *,
-        temperature: float,
-        calibration: dict[str, Any],
-    ) -> float:
-        temperature = max(1e-3, float(temperature))
-        calibrated = self._sigmoid(self._logit(probability) / temperature)
-
-        if not bool(calibration.get("enabled", False)):
-            return calibrated
-
-        source_prior = calibration.get("source_pos_prior")
-        target_prior = calibration.get("target_pos_prior")
-        if source_prior is None or target_prior is None:
-            return calibrated
-
-        source = float(np.clip(float(source_prior), 1e-4, 1.0 - 1e-4))
-        target = float(np.clip(float(target_prior), 1e-4, 1.0 - 1e-4))
-        if math.isclose(source, target, rel_tol=0.0, abs_tol=1e-8):
-            return calibrated
-
-        source_odds = source / (1.0 - source)
-        target_odds = target / (1.0 - target)
-        odds_multiplier = target_odds / source_odds
-        odds = calibrated / (1.0 - calibrated)
-        adjusted = odds * odds_multiplier
-        return float(np.clip(adjusted / (1.0 + adjusted), 1e-6, 1.0 - 1e-6))
+    def _adjust(probabilities: np.ndarray, bias: np.ndarray | None, temperature: float) -> np.ndarray:
+        adjusted = probabilities.astype(np.float64)
+        if bias is not None:
+            adjusted *= bias.reshape(1, -1)
+        if temperature != 1.0:
+            adjusted = np.power(np.clip(adjusted, 1e-12, None), 1.0 / temperature)
+        return ONNXEngagementInferencer._normalize(adjusted)
 
     @staticmethod
     def _sequence_to_basic_features(sequence: np.ndarray) -> np.ndarray:
@@ -460,148 +253,87 @@ class ONNXEngagementInferencer:
             return cls._sequence_to_basic_features(sequence)
         if mode == "tsfresh":
             return cls._sequence_to_tsfresh_like_features(sequence)
-        raise ValueError(f"Unsupported feature mode for late fusion XGBoost: {feature_mode}")
-
-    def _apply_feature_preprocessor(self, x: np.ndarray) -> np.ndarray:
-        config = self._xgb_preprocessor
-        x = np.asarray(x, dtype=np.float32)
-        x_scaled = (x - config["mean"]) / config["scale"]
-        dim_reduction = str(config.get("dim_reduction", "none"))
-        if dim_reduction == "none":
-            return x_scaled.astype(np.float32)
-
-        centered = x_scaled
-        if dim_reduction == "pca" and "reducer_mean" in config:
-            centered = centered - config["reducer_mean"]
-        return (centered @ config["components"].T).astype(np.float32)
-
-    def _predict_component_probability(
-        self,
-        session: ort.InferenceSession,
-        input_name: str,
-        chunk: np.ndarray,
-        *,
-        temperature: float,
-        calibration: dict[str, Any],
-    ) -> float:
-        data = chunk[np.newaxis, :, :].astype(np.float32, copy=False)
-        outputs = session.run(None, {input_name: data})
-        raw = float(np.asarray(outputs[0]).reshape(-1)[0])
-        return self._calibrate_probability(raw, temperature=temperature, calibration=calibration)
-
-    def _predict_xgboost_probability(self, enriched_chunk: np.ndarray) -> float:
-        features = self._sequence_to_tabular_features(enriched_chunk, feature_mode=self._xgb_feature_mode).reshape(1, -1)
-        features = self._apply_feature_preprocessor(features)
-        import xgboost as xgb
-
-        probability = float(self._xgb_model.predict(xgb.DMatrix(features))[0])
-        return probability
+        raise ValueError(f"Unsupported feature mode: {feature_mode}")
 
     def reset(self) -> None:
-        """Kept for interface compatibility; late fusion itself is stateless."""
-        self._probability_history.clear()
         return None
 
-    def predict(self, enriched_chunk: np.ndarray) -> dict[str, float | str | dict[str, Any]]:
+    def predict(self, enriched_chunk: np.ndarray) -> dict[str, Any]:
         chunk = np.asarray(enriched_chunk, dtype=np.float32)
         chunk = np.nan_to_num(chunk, nan=0.0, posinf=0.0, neginf=0.0)
         expected_shape = self.spec.expected_input_shape()
         if chunk.shape != expected_shape:
             raise ValueError(f"Expected chunk shape {expected_shape}, got {chunk.shape}")
 
-        logger.debug("Running late-fusion inference on chunk shape %s", chunk.shape)
+        # Extract features (2161 dim)
+        features = self._sequence_to_tabular_features(chunk, feature_mode="tsfresh").reshape(1, -1)
 
-        gru_chunk = self._apply_sequence_normalizer(chunk, self._gru_normalizer)
-        tcn_chunk = self._apply_sequence_normalizer(chunk, self._tcn_normalizer)
+        # Get probabilities for each component
+        comp_probs = {}
+        for comp in ["final_xgb", "boost_xgb", "targeted_xgb"]:
+            prep = self._preprocessors[comp]
+            if features.shape[1] != prep["mean"].shape[0]:
+                raise ValueError(
+                    f"Expected {prep['mean'].shape[0]} tabular features for {comp}, got {features.shape[1]}"
+                )
+            x_scaled = (features - prep["mean"]) / prep["scale"]
+            dmat = xgb.DMatrix(x_scaled)
+            # DMatrix prediction shape is (1, 4)
+            prob_raw = self._models[comp].predict(dmat)
+            comp_probs[comp] = prob_raw[0]  # shape (4,)
 
-        gru_probability = self._predict_component_probability(
-            self._gru_session,
-            self._gru_input_name,
-            gru_chunk,
-            temperature=self._gru_temperature,
-            calibration=self._gru_calibration,
+        # Late-fusion weighted probability sum
+        fused_raw = (
+            WEIGHTS["final_xgb"] * comp_probs["final_xgb"]
+            + WEIGHTS["boost_xgb"] * comp_probs["boost_xgb"]
+            + WEIGHTS["targeted_xgb"] * comp_probs["targeted_xgb"]
         )
-        tcn_probability = self._predict_component_probability(
-            self._tcn_session,
-            self._tcn_input_name,
-            tcn_chunk,
-            temperature=self._tcn_temperature,
-            calibration=self._tcn_calibration,
-        )
-        xgb_probability = self._predict_xgboost_probability(chunk)
+        normalized = self._normalize(fused_raw.reshape(1, -1))
+        adjusted = self._adjust(normalized, bias=BIAS_VECTOR, temperature=TEMPERATURE)
 
-        late_fusion_probability = (
-            self._weight_map["gru"] * gru_probability
-            + self._weight_map["tcn"] * tcn_probability
-            + self._weight_map["xgboost"] * xgb_probability
-        )
-        late_fusion_probability = float(np.clip(late_fusion_probability, 0.0, 1.0))
+        # Output predictions
+        probs = adjusted[0].tolist()
+        pred_class = int(np.argmax(adjusted, axis=-1)[0])
 
-        gru_threshold = self._resolve_float(self._gru_metadata.get("best_threshold"), 0.63)
-        tcn_threshold = self._resolve_float(self._tcn_metadata.get("best_threshold"), 0.61)
-        neural_probability = float(np.clip((gru_probability + tcn_probability) / 2.0, 0.0, 1.0))
-        neural_consensus = gru_probability >= gru_threshold and tcn_probability >= tcn_threshold
-        if neural_consensus:
-            # In live webcam use, XGBoost is useful as a conservative guard, but it
-            # can be under-calibrated for a user's own camera/background. When both
-            # neural temporal models agree strongly, keep XGB as telemetry instead
-            # of letting it suppress the engagement score.
-            selected_probability = max(late_fusion_probability, neural_probability)
-            fusion_strategy = "neural_consensus_guarded"
-        else:
-            selected_probability = late_fusion_probability
-            fusion_strategy = "late_fusion"
+        # Continuous focus score is telemetry only. The 4-class prediction uses argmax.
+        raw_focus_score = float(probs[2] + probs[3])
+        state = "ENGAGED" if pred_class in ENGAGED_CLASS_INDICES else "DISTRACTED"
 
-        self._probability_history.append(selected_probability)
-        fused_probability = float(np.mean(self._probability_history, dtype=np.float64))
-        state = "ENGAGED" if fused_probability >= self.threshold else "DISTRACTED"
-
+        # Populate components structure for the UI
         components = {
-            "gru": {
-                "probability": gru_probability,
-                "threshold": gru_threshold,
-                "state": "ENGAGED" if gru_probability >= gru_threshold else "DISTRACTED",
+            "final_xgb": {
+                "probability": float(comp_probs["final_xgb"][2] + comp_probs["final_xgb"][3]),
+                "probabilities": comp_probs["final_xgb"].tolist()
             },
-            "tcn": {
-                "probability": tcn_probability,
-                "threshold": tcn_threshold,
-                "state": "ENGAGED" if tcn_probability >= tcn_threshold else "DISTRACTED",
+            "boost_xgb": {
+                "probability": float(comp_probs["boost_xgb"][2] + comp_probs["boost_xgb"][3]),
+                "probabilities": comp_probs["boost_xgb"].tolist()
             },
-            "xgboost": {
-                "probability": xgb_probability,
-                "threshold": self._xgb_threshold,
-                "state": "ENGAGED" if xgb_probability >= self._xgb_threshold else "DISTRACTED",
-            },
+            "targeted_xgb": {
+                "probability": float(comp_probs["targeted_xgb"][2] + comp_probs["targeted_xgb"][3]),
+                "probabilities": comp_probs["targeted_xgb"].tolist()
+            }
         }
-
-        logger.debug(
-            "Late-fusion result: gru=%.4f tcn=%.4f xgb=%.4f fused=%.4f threshold=%.4f state=%s",
-            gru_probability,
-            tcn_probability,
-            xgb_probability,
-            fused_probability,
-            self.threshold,
-            state,
-        )
 
         return {
             "model_name": MODEL_NAME,
             "model_version": MODEL_VERSION,
-            "probability": fused_probability,
-            "raw_probability": selected_probability,
-            "late_fusion_probability": late_fusion_probability,
-            "neural_probability": neural_probability,
-            "fusion_strategy": fusion_strategy,
-            "focus_score": fused_probability,
+            "label_space": LABEL_SPACE,
+            "probability": raw_focus_score,
+            "raw_probability": raw_focus_score,
+            "focus_score": raw_focus_score,
             "state": state,
             "ready": True,
-            "threshold": self.threshold,
-            "weights": dict(self._weight_map),
+            "decision_rule": "argmax_4class",
+            "weights": dict(WEIGHTS),
             "components": components,
+            "class_labels": list(CLASS_LABELS),
+            "probabilities_4class": probs,
+            "prediction_4class": pred_class,
+            "prediction_label": CLASS_LABELS[pred_class],
+            "engaged_class_indices": list(ENGAGED_CLASS_INDICES),
             "sequence_length": self.spec.sequence_length,
             "raw_feature_dim": self.spec.raw_feature_dim,
             "enriched_feature_dim": self.spec.enriched_feature_dim,
-            "feature_mode": self._xgb_feature_mode,
-            "artifact_dir": str(self._artifact_dir),
-            "model_file": str(self.spec.model_file),
+            "feature_mode": "tsfresh",
         }
