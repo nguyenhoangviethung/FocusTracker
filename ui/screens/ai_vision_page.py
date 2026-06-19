@@ -190,7 +190,6 @@ class AIVisionPage(ThemedPage):
         bar.setRange(0, 1000)
         bar.setValue(max(0, min(1000, int(round(max(0.0, min(1.0, value)) * 1000)))))
 
-    @staticmethod
     def _format_latency(self, key: str, value) -> str:
         try:
             if value is not None:
