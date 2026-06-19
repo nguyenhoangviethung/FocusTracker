@@ -17,7 +17,7 @@ cũ bên dưới còn nhắc GRU/TCN hoặc threshold binary, dùng section này
 | FOCUSFLOW         | PAGE CONTENT                                             |
 |                   |                                                          |
 | Home              | Pomodoro setup, duration, recent activity                |
-| Active            | Main running session: camera, 4-class model, trend       |
+| Active            | Main running session: camera, cloud 4-class model, trend|
 | AI Vision         | Vision diagnostics / local preview explanation           |
 | Report            | Session summary and local/cloud completion history       |
 | Settings          | Theme, camera, focus goals, sounds, security             |
@@ -124,9 +124,8 @@ Latency display in AI Vision:
 
 - `Client Loop Latency`: one tracker loop on the desktop, including camera read,
   feature extraction, buffering, and local bookkeeping.
-- `Model Inference Latency`: model compute time only. In local mode this is the
-  local inferencer time; in cloud mode this is the server processing time
-  echoed back by the response.
+- `Model Inference Latency`: model compute time only, echoed back by the
+  server response.
 - `Cloud Round-Trip Latency`: websocket send-to-receive time for cloud mode.
   It shows `--` when no cloud response has been received.
 
@@ -134,6 +133,11 @@ Recent client fixes:
 
 - Cloud round-trip latency is cached on the AI Vision screen so it does not
   disappear on the next telemetry tick when that packet omits the field.
+- Cloud-only runtime is enforced end-to-end. The desktop no longer falls back
+  to local inference.
+- Frames that fail extraction or yield invalid features are skipped before
+  entering the 30-frame buffer, so a single bad frame does not poison later
+  windows.
 - The Report page now surfaces a `Focus Timeline` card before the summary
   panel, so the chart is visible earlier in the layout.
 - Report history only keeps meaningful sessions with real duration and focus
@@ -182,7 +186,7 @@ Start Session
   -> websocket opens /v1/ws/sessions/{session_id}?device_id=...
   -> camera worker extracts 30-value raw features per frame
   -> FeatureSequenceBuffer builds raw sequence (30, 30)
-  -> cloud/hybrid sends raw_feature_sequence only
+  -> cloud-only sends raw_feature_sequence only
   -> server enriches to (30, 90)
   -> fixed_triple_xgb_fusion returns 4-class probabilities
   -> UI renders focus score, argmax state, component probabilities
@@ -204,8 +208,8 @@ ui/component_metrics.py           component schema normalization for UI
 ui/screens/home_page.py           Home session start and recent activity
 ui/screens/active_session_page.py running session UI and summary creation
 ui/screens/settings_page.py       settings controls and theme-aware combos
-tracking/tracker.py               camera/local/cloud/hybrid orchestration
-tracking/inference.py             4-class local fallback inference
+tracking/tracker.py               camera and cloud-only orchestration
+tracking/inference.py             4-class ensemble reference and tests
 edge/cloud_client.py              REST + WebSocket transport
 shared/contracts.py               v1 wire contracts
 server/core/inference.py          cloud model adapter
@@ -461,13 +465,21 @@ Video frame -> MediaPipe -> 30 numbers/frame -> frame discarded
 | 78.9%                | 10 mins              | 3 transitions                  |
 +----------------------+----------------------+--------------------------------+
 | SESSION TIMELINE                              | RECENT HISTORY                |
+| Focus chart / timeline graph                  | Filters                       |
+| Minute 01  82.0%                              | Search, status, score         |
+| Minute 02  76.1%                              | duration filters              |
+| Minute 03  79.8%                              | 78.9% | 10 min | Open         |
+| ...                                           | 73.4% | 10 min | Open         |
+| Report status: completed                      | 81.2% | 10 min | Open         |
+|                                               | 69.4% | 25 min | Open         |
+|                                               | 64.1% | 15 min | Open         |
+|                                               | 58.2% | 30 min | Open         |
+|                                               | 51.7% | 45 min | Open         |
+|                                               | [Select All]                  |
+|                                               | [Clear Selection] [Delete Selected] |
+|                                               | [Open] [Delete] per item      |
 |                                               |                               |
-| Minute 01  82.0%                              | 78.9% | 10 min | Open         |
-| Minute 02  76.1%                              | 73.4% | 10 min | Open         |
-| Minute 03  79.8%                              | 81.2% | 10 min | Open         |
-| ...                                           |                               |
 |                                               |                               |
-| Report status: completed                      |                               |
 +-----------------------------------------------+-------------------------------+
 ```
 

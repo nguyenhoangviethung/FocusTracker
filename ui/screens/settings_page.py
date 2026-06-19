@@ -226,6 +226,7 @@ class SettingsPage(ThemedPage):
             "auto_hide_camera": self.chk_autohide.isChecked(),
             "show_landmarks": self.chk_landmarks.isChecked(),
             "camera_index": self.camera_combo.currentIndex(),
+            "inference_mode": "cloud",
         }
 
     def apply_settings(self, settings: dict) -> None:

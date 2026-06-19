@@ -94,7 +94,7 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
         "completed": completed,
     }
     if record.get("inference_mode"):
-        normalized["inference_mode"] = str(record.get("inference_mode") or "local")
+        normalized["inference_mode"] = str(record.get("inference_mode") or "cloud")
     if record.get("cloud_session_id"):
         normalized["cloud_session_id"] = str(record.get("cloud_session_id") or "")
     if record.get("report_status"):
@@ -163,6 +163,17 @@ def update_session_record(timestamp: str, updates: dict[str, Any]) -> dict[str, 
 
     save_session_history(history)
     return updated_record
+
+
+def delete_session_record(timestamp: str) -> bool:
+    history = load_session_history()
+    filtered = [record for record in history if str(record.get("timestamp")) != str(timestamp)]
+    if len(filtered) == len(history):
+        logger.warning("Cannot delete session record; timestamp not found: %s", timestamp)
+        return False
+    save_session_history(filtered)
+    logger.info("Deleted session record. Remaining sessions: %s", len(filtered))
+    return True
 
 
 def summarize_history(records: list[dict[str, Any]]) -> dict[str, Any]:

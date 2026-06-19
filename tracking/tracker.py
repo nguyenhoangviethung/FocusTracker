@@ -9,12 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import numpy as np
 
 from edge.cloud_client import CloudClientConfig, FocusFlowCloudClient
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
 from tracking.buffer import FeatureSequenceBuffer
-from tracking.detector import FaceFeatureDetector
-from tracking.inference import ONNXEngagementInferencer
 from utils.logger import get_logger
 
 
@@ -24,9 +23,6 @@ logger = get_logger("tracker")
 INFERENCE_EVERY_N_FRAMES = 3
 PREVIEW_EVERY_N_FRAMES = 2
 CLOUD_TELEMETRY_INTERVAL_SECONDS = 1.0
-VALID_INFERENCE_MODES = {"local", "cloud", "hybrid"}
-
-
 @dataclass(slots=True)
 class TrackerConfig:
     camera_index: int = 0
@@ -35,7 +31,7 @@ class TrackerConfig:
     camera_distance_scale: float = 0.085
     engagement_threshold: float = 0.54
     smoothing_window: int = 5
-    inference_mode: str = "local"
+    inference_mode: str = "cloud"
     cloud_api_url: str = ""
     cloud_api_key: str = ""
     device_id: str = ""
@@ -44,13 +40,6 @@ class TrackerConfig:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "TrackerConfig":
-        inference_mode = str(
-            os.getenv("FOCUSFLOW_INFERENCE_MODE", "")
-            or payload.get("inference_mode")
-            or "hybrid"
-        ).strip().lower()
-        if inference_mode not in VALID_INFERENCE_MODES:
-            inference_mode = "local"
         return cls(
             camera_index=_to_int(payload.get("camera_index"), 0),
             demo_video_path=str(payload.get("demo_video_path") or "").strip(),
@@ -58,7 +47,7 @@ class TrackerConfig:
             camera_distance_scale=_to_float(payload.get("camera_distance_scale"), 0.18),
             engagement_threshold=_to_float(payload.get("engagement_threshold"), 0.54),
             smoothing_window=max(3, min(5, _to_int(payload.get("smoothing_window"), 5))),
-            inference_mode=inference_mode,
+            inference_mode="cloud",
             cloud_api_url=str(
                 os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
                 or payload.get("cloud_api_url")
@@ -119,13 +108,12 @@ class FocusSessionTracker:
     def start(self) -> None:
         self._stop_event.clear()
         self._pause_event.clear()
-        if self.config.inference_mode in {"cloud", "hybrid"}:
-            self._network_thread = threading.Thread(
-                target=self._network_loop,
-                name="focusflow-network",
-                daemon=True,
-            )
-            self._network_thread.start()
+        self._network_thread = threading.Thread(
+            target=self._network_loop,
+            name="focusflow-network",
+            daemon=True,
+        )
+        self._network_thread.start()
         self._camera_thread = threading.Thread(target=self._camera_loop, name="focusflow-camera", daemon=True)
         self._camera_thread.start()
         logger.info(
@@ -190,6 +178,8 @@ class FocusSessionTracker:
             logger.warning("Unable to complete cloud session", exc_info=True)
 
     def _camera_loop(self) -> None:
+        from tracking.detector import FaceFeatureDetector
+
         detector: FaceFeatureDetector | None = None
         cap: cv2.VideoCapture | None = None
         fps_counter = _FpsCounter()
@@ -197,11 +187,6 @@ class FocusSessionTracker:
         last_ai_result: dict[str, Any] | None = None
 
         try:
-            inferencer = None
-            if self.config.inference_mode in {"local", "hybrid"}:
-                inferencer = ONNXEngagementInferencer(
-                    smoothing_window=self.config.smoothing_window,
-                )
             detector = FaceFeatureDetector(
                 draw_landmarks=self.config.show_landmarks,
                 camera_distance_scale=self.config.camera_distance_scale,
@@ -218,8 +203,6 @@ class FocusSessionTracker:
                         cap.release()
                         cap = None
                         buffer.clear()
-                        if inferencer is not None:
-                            inferencer.reset()
                     time.sleep(0.2)
                     continue
 
@@ -239,7 +222,62 @@ class FocusSessionTracker:
                     continue
 
                 frame_index += 1
-                detection = detector.extract(frame)
+                try:
+                    detection = detector.extract(frame)
+                except Exception as exc:
+                    logger.warning("Skipping unreadable frame", exc_info=True)
+                    self._put(
+                        {
+                            "type": "status",
+                            "message": f"Skipped bad frame: {exc.__class__.__name__}",
+                        }
+                    )
+                    continue
+
+                if not self._is_valid_feature_vector(detection.feature):
+                    logger.warning("Skipping invalid feature vector from detector")
+                    continue
+
+                if not detection.face_found:
+                    ai_result = {
+                        "probability": 0.0,
+                        "raw_probability": 0.0,
+                        "focus_score": 0.0,
+                        "state": "NO_FACE",
+                        "ready": True,
+                    }
+                    probability = 0.0
+                    model_ready = True
+                    state = "NO_FACE"
+                    latency_ms = (time.perf_counter() - loop_started_at) * 1000.0
+                    self._put(
+                        {
+                            "type": "telemetry",
+                            "frame": detection.frame if frame_index % PREVIEW_EVERY_N_FRAMES == 0 else None,
+                            "feature": detection.feature.tolist(),
+                            "face_found": detection.face_found,
+                            "latency_ms": latency_ms,
+                            "client_loop_latency_ms": latency_ms,
+                            "model_inference_latency_ms": 0.0,
+                            "cloud_roundtrip_latency_ms": None,
+                            "logit": None,
+                            "probability": probability,
+                            "raw_probability": probability,
+                            "late_fusion_probability": None,
+                            "neural_probability": None,
+                            "fusion_strategy": None,
+                            "focus_score": probability,
+                            "ai_state": ai_result.get("state", "NO_FACE"),
+                            "model_ready": model_ready,
+                            "components": None,
+                            "weights": None,
+                            "inference_source": "cloud",
+                            "state": state,
+                            "fps": fps_counter.tick(),
+                        }
+                    )
+                    continue
+
                 enriched = buffer.append(detection.feature)
                 raw_sequence = buffer.raw_sequence()
                 ai_result: dict[str, Any] = {
@@ -249,33 +287,16 @@ class FocusSessionTracker:
                     "ready": False,
                 }
                 if enriched is not None:
-                    should_infer = last_ai_result is None or frame_index % INFERENCE_EVERY_N_FRAMES == 0
-                    if (
-                        should_infer
-                        and raw_sequence is not None
-                        and self.config.inference_mode in {"cloud", "hybrid"}
-                    ):
+                    should_infer = frame_index % INFERENCE_EVERY_N_FRAMES == 0
+                    if should_infer and raw_sequence is not None:
                         self._queue_cloud_packet(raw_sequence, detection.face_found)
 
                     cloud_result = self._latest_cloud_result()
                     if cloud_result is not None:
                         last_ai_result = cloud_result
                         ai_result = dict(cloud_result)
-                    elif detection.face_found and inferencer is not None:
-                        if should_infer:
-                            last_ai_result = inferencer.predict(enriched)
+                    elif last_ai_result is not None:
                         ai_result = dict(last_ai_result)
-                    elif detection.face_found and last_ai_result is not None:
-                        ai_result = dict(last_ai_result)
-                    elif not detection.face_found:
-                        ai_result = {
-                            "probability": 0.0,
-                            "raw_probability": 0.0,
-                            "focus_score": 0.0,
-                            "state": "NO_FACE",
-                            "ready": True,
-                        }
-                        last_ai_result = ai_result
 
                 probability = float(ai_result.get("focus_score", ai_result.get("probability", 0.0)))
                 model_ready = bool(ai_result.get("ready", False))
@@ -313,7 +334,7 @@ class FocusSessionTracker:
                         "weights": ai_result.get("weights"),
                         "inference_source": ai_result.get(
                             "inference_source",
-                            "local" if inferencer is not None else "cloud",
+                            "cloud",
                         ),
                         "state": state,
                         "fps": fps_counter.tick(),
@@ -469,6 +490,14 @@ class FocusSessionTracker:
                 self.output_queue.put_nowait(payload)
             except queue.Full:
                 pass
+
+    @staticmethod
+    def _is_valid_feature_vector(feature: Any) -> bool:
+        try:
+            vector = np.asarray(feature, dtype=np.float32).reshape(-1)
+        except Exception:
+            return False
+        return vector.shape[0] == 30 and np.isfinite(vector).all()
 
 
 class _FpsCounter:

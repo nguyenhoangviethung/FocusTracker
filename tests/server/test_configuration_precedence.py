@@ -26,5 +26,13 @@ def test_tracker_accepts_server_api_key_for_desktop_cloud_requests(monkeypatch) 
         }
     )
 
-    assert config.inference_mode == "hybrid"
+    assert config.inference_mode == "cloud"
     assert config.cloud_api_key == "shared-api-key"
+
+
+def test_settings_normalize_to_cloud_only(monkeypatch) -> None:
+    monkeypatch.setenv("FOCUSFLOW_INFERENCE_MODE", "local")
+
+    settings = normalize_settings({"inference_mode": "hybrid"})
+
+    assert settings["inference_mode"] == "cloud"

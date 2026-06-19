@@ -21,7 +21,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "theme_mode": "Dark",
     "show_landmarks": True,
     "camera_distance_scale": 0.18,
-    "inference_mode": "hybrid",
+    "inference_mode": "cloud",
     "cloud_api_url": "",
     "device_id": "",
     "demo_video_path": "",
@@ -75,14 +75,7 @@ def normalize_settings(payload: dict[str, Any] | None) -> dict[str, Any]:
     normalized["theme_mode"] = "Light" if mode == "Light" else "Dark"
     normalized["show_landmarks"] = bool(source.get("show_landmarks", True))
     normalized["camera_distance_scale"] = _clamp(_to_float(source.get("camera_distance_scale"), 0.18), 0.05, 0.4)
-    inference_mode = str(
-        os.getenv("FOCUSFLOW_INFERENCE_MODE", "")
-        or source.get("inference_mode")
-        or "hybrid"
-    ).strip().lower()
-    normalized["inference_mode"] = (
-        inference_mode if inference_mode in {"local", "cloud", "hybrid"} else "local"
-    )
+    normalized["inference_mode"] = "cloud"
     normalized["cloud_api_url"] = str(
         os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
         or source.get("cloud_api_url")

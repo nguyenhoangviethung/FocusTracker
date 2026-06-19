@@ -143,10 +143,7 @@ class ActiveSessionPage(ThemedPage):
         self.status_label.setText("STATUS: STARTING")
         self.camera_signal.setText("Signal: Starting camera/model")
         self.camera_state.setText("State : WARMING_UP")
-        mode = str(config.get("inference_mode", "hybrid")).lower()
-        self.cloud_status.setText(
-            "Cloud: connecting..." if mode in {"cloud", "hybrid"} else "Cloud: disabled (local mode)"
-        )
+        self.cloud_status.setText("Cloud: connecting...")
         self.final_xgb_state.setText("Final XGB    : WARMING UP")
         self.boost_xgb_state.setText("Boost XGB    : WARMING UP")
         self.targeted_xgb_state.setText("Targeted XGB : WARMING UP")
@@ -343,7 +340,7 @@ class ActiveSessionPage(ThemedPage):
             "minute_scores": ms, "average_score": avg, "completed": completed,
             "total_seconds": max(0, self._tracked_seconds), "focused_seconds": max(0, self._focused_seconds),
             "distraction_count": max(0, self._distraction_count), "focus_streak_seconds": float(self._best_focus_streak),
-            "inference_mode": str(self._session_config.get("inference_mode", "local")),
+            "inference_mode": str(self._session_config.get("inference_mode", "cloud")),
             "cloud_session_id": (
                 self._tracker.cloud_session_id if self._tracker else ""
             ),
