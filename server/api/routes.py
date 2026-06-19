@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from datetime import timedelta
 import logging
 import secrets
 import threading
@@ -31,6 +32,7 @@ from shared.contracts import (
     SessionSummary,
     TelemetryPacket,
     UserStats,
+    utc_now,
 )
 
 
@@ -99,30 +101,20 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
         return decorated
 
     recent = [decorate(record) for record in recent]
-    unique_recent: list[dict[str, Any]] = []
-    seen_user_keys: set[str] = set()
-    for record in recent:
-        user_key = str(record.get("user_id") or "").strip()
-        dedupe_key = f"user:{user_key}" if user_key else f"session:{record.get('session_id') or ''}"
-        if dedupe_key in seen_user_keys:
-            continue
-        seen_user_keys.add(dedupe_key)
-        unique_recent.append(record)
-
-    status_counts = Counter(str(record.get("status") or "unknown") for record in unique_recent)
-    active_sessions = sum(1 for record in unique_recent if not record.get("ended_at"))
-    latest = unique_recent[0] if unique_recent else None
+    status_counts = Counter(str(record.get("status") or "unknown") for record in recent)
+    active_sessions = sum(1 for record in recent if not record.get("ended_at"))
+    latest = recent[0] if recent else None
     return {
         "environment": settings.environment,
         "repository_backend": settings.repository_backend,
         "event_backend": settings.event_backend,
         "api_key_configured": bool(settings.api_key),
         "ready": engine is not None and repository is not None,
-        "recent_count": len(unique_recent),
+        "recent_count": len(recent),
         "active_sessions": active_sessions,
         "status_counts": dict(status_counts),
         "latest_session": latest,
-        "recent_sessions": unique_recent,
+        "recent_sessions": recent,
         "dashboard_error": dashboard_error,
         "firestore_query_limit": safe_limit,
     }
@@ -161,6 +153,19 @@ def _dashboard_html(settings: ServerSettings) -> str:
     return render_dashboard_html(settings.api_key or "")
 
 
+def _expire_stale_sessions(settings: ServerSettings, repository: SessionRepository) -> list[str]:
+    timeout_seconds = max(60, int(settings.stale_session_timeout_seconds))
+    cutoff = utc_now() - timedelta(seconds=timeout_seconds)
+    expired_ids = repository.expire_stale(cutoff, limit=500)
+    if expired_ids:
+        logger.warning(
+            "Expired stale sessions count=%d timeout_seconds=%d",
+            len(expired_ids),
+            timeout_seconds,
+        )
+    return expired_ids
+
+
 def _services(
     request: Request,
 ) -> tuple[
@@ -188,6 +193,11 @@ def _verify_api_key(settings: ServerSettings, supplied: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+@router.get("/")
+async def root() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
     settings = request.app.state.settings
@@ -199,6 +209,10 @@ async def dashboard(request: Request) -> HTMLResponse:
 async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit or 24), 100))
     cache: DashboardSnapshotCache = request.app.state.dashboard_cache
+    settings, repository, _, _, _ = _services(request)
+    expired_ids = _expire_stale_sessions(settings, repository)
+    if expired_ids:
+        cache.clear()
 
     def load_snapshot() -> tuple[dict[str, Any], bool]:
         return cache.get_or_load(
@@ -206,11 +220,12 @@ async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]
             lambda: _dashboard_snapshot(request, safe_limit),
         )
 
-    snapshot, cache_hit = await asyncio.to_thread(load_snapshot)
+    snapshot, cache_hit = load_snapshot()
     return {
         **snapshot,
         "dashboard_cache_hit": cache_hit,
         "dashboard_cache_seconds": DASHBOARD_CACHE_SECONDS,
+        "expired_stale_sessions": expired_ids,
     }
 
 
@@ -222,15 +237,16 @@ async def dashboard_delete_session(
 ) -> dict[str, str]:
     settings, repository, _, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
-    existing = await asyncio.to_thread(repository.get, session_id)
+    existing = repository.get(session_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    deleted = await asyncio.to_thread(repository.delete, session_id)
+    deleted = repository.delete(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     cache = getattr(request.app.state, "dashboard_cache", None)
     if cache is not None:
         cache.clear()
+    logger.info("Dashboard deleted session session_id=%s", session_id)
     return {"status": "deleted", "session_id": session_id}
 
 
@@ -245,12 +261,17 @@ async def dashboard_batch_delete_sessions(
     session_ids = payload.get("session_ids", [])
     deleted_ids = []
     for sid in session_ids:
-        deleted = await asyncio.to_thread(repository.delete, sid)
+        deleted = repository.delete(sid)
         if deleted:
             deleted_ids.append(sid)
     cache = getattr(request.app.state, "dashboard_cache", None)
     if cache is not None:
         cache.clear()
+    logger.info(
+        "Dashboard batch delete requested=%d deleted=%d",
+        len(session_ids),
+        len(deleted_ids),
+    )
     return {"status": "deleted", "deleted_ids": deleted_ids}
 
 
@@ -261,27 +282,43 @@ async def dashboard_clear_stale_sessions(
 ) -> dict[str, Any]:
     settings, repository, _, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
-    recent = await asyncio.to_thread(repository.list_recent, 100)
-    import datetime
-    from shared.contracts import utc_now
-    now = utc_now()
-    deleted_ids = []
-    for s in recent:
-        if not s.get("ended_at"):
-            started_at_str = s.get("started_at")
-            if started_at_str:
-                try:
-                    # parse started_at with timezone offset
-                    started_at = datetime.datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
-                    if (now - started_at).total_seconds() > 3600:
-                        deleted = await asyncio.to_thread(repository.delete, s["session_id"])
-                        if deleted:
-                            deleted_ids.append(s["session_id"])
-                except Exception:
-                    pass
+    expired_ids = _expire_stale_sessions(settings, repository)
     cache = getattr(request.app.state, "dashboard_cache", None)
     if cache is not None:
         cache.clear()
+    logger.info("Dashboard expired stale sessions count=%d", len(expired_ids))
+    return {"status": "expired", "expired_ids": expired_ids}
+
+
+@router.post("/dashboard/api/sessions/clear-all")
+async def dashboard_clear_all_sessions(
+    request: Request,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+    deleted_ids: list[str] = []
+    seen_ids: set[str] = set()
+    max_rounds = 20
+    for _ in range(max_rounds):
+        recent = repository.list_recent(100)
+        session_ids = [
+            str(session.get("session_id") or "")
+            for session in recent
+            if session.get("session_id")
+        ]
+        session_ids = [sid for sid in session_ids if sid and sid not in seen_ids]
+        if not session_ids:
+            break
+        for sid in session_ids:
+            seen_ids.add(sid)
+            deleted = repository.delete(sid)
+            if deleted:
+                deleted_ids.append(sid)
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+    logger.info("Dashboard cleared all visible sessions deleted=%d", len(deleted_ids))
     return {"status": "cleared", "deleted_ids": deleted_ids}
 
 
@@ -677,9 +714,23 @@ async def session_telemetry(websocket: WebSocket, session_id: str) -> None:
 
     engine: CloudInferenceEngine = websocket.app.state.inference_engine
     await websocket.accept()
+    receive_timeout_seconds = max(60, int(settings.stale_session_timeout_seconds))
     try:
         while True:
-            raw_payload = await websocket.receive_json()
+            try:
+                raw_payload = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=receive_timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                expired_ids = _expire_stale_sessions(settings, repository)
+                logger.warning(
+                    "WebSocket telemetry timed out session_id=%s expired=%s",
+                    session_id,
+                    session_id in expired_ids,
+                )
+                await websocket.close(code=1001, reason="Telemetry timeout")
+                return
             try:
                 packet = TelemetryPacket.model_validate(raw_payload)
             except ValidationError as exc:

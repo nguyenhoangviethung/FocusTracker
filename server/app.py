@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
+from datetime import timedelta
 import logging
 
 from fastapi import FastAPI, Request
@@ -13,9 +15,32 @@ from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import create_session_repository
 from server.repositories.users import create_user_repository
 from server.services.event_publisher import create_event_publisher
+from shared.contracts import utc_now
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _stale_session_cleanup_loop(app: FastAPI) -> None:
+    settings: ServerSettings = app.state.settings
+    repository = app.state.session_repository
+    interval = max(30, int(settings.stale_session_cleanup_interval_seconds))
+    timeout_seconds = max(60, int(settings.stale_session_timeout_seconds))
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            cutoff = utc_now() - timedelta(seconds=timeout_seconds)
+            expired_ids = repository.expire_stale(cutoff, limit=500)
+            if expired_ids:
+                logger.warning(
+                    "Expired stale sessions count=%d timeout_seconds=%d",
+                    len(expired_ids),
+                    timeout_seconds,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Stale session cleanup failed")
 
 
 @asynccontextmanager
@@ -27,7 +52,17 @@ async def lifespan(app: FastAPI):
     app.state.event_publisher = create_event_publisher(settings)
     app.state.inference_engine = CloudInferenceEngine()
     app.state.dashboard_cache = DashboardSnapshotCache()
-    yield
+    app.state.stale_session_cleanup_task = asyncio.create_task(
+        _stale_session_cleanup_loop(app)
+    )
+    try:
+        yield
+    finally:
+        app.state.stale_session_cleanup_task.cancel()
+        try:
+            await app.state.stale_session_cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 def create_app() -> FastAPI:

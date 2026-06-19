@@ -18,6 +18,8 @@ class ServerSettings:
     cors_origins: tuple[str, ...]
     google_oauth_client_id: str
     firestore_users_collection: str
+    stale_session_timeout_seconds: int
+    stale_session_cleanup_interval_seconds: int
 
     @classmethod
     def from_env(cls) -> "ServerSettings":
@@ -50,4 +52,10 @@ class ServerSettings:
                 "FOCUSFLOW_FIRESTORE_USERS_COLLECTION",
                 "focusflow_users",
             ).strip(),
+            stale_session_timeout_seconds=int(
+                os.getenv("FOCUSFLOW_STALE_SESSION_TIMEOUT_SECONDS", "600")
+            ),
+            stale_session_cleanup_interval_seconds=int(
+                os.getenv("FOCUSFLOW_STALE_SESSION_CLEANUP_INTERVAL_SECONDS", "60")
+            ),
         )

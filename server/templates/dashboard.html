@@ -320,7 +320,7 @@
                 <button id="filter-completed" class="pill" onclick="setStatusFilter('completed')">Completed</button>
               </div>
               <button id="batch-delete-btn" class="pill danger" style="display:none" onclick="batchDeleteSelected()">Delete Selected (<span id="selected-count">0</span>)</button>
-              <button class="pill warn" onclick="clearStaleSessions()">Clear Stale (>1h)</button>
+              <button class="pill warn" onclick="clearStaleSessions()">Expire Stale</button>
               <button class="pill danger" onclick="clearAllSessions()">Clear All</button>
             </div>
           </div>
@@ -584,27 +584,31 @@
       headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_ids: Array.from(selectedSessions) })
     });
-    if (resp.ok) { selectedSessions.clear(); refreshDashboard(); }
+    if (!resp.ok) return showDeleteError(resp);
+    selectedSessions.clear();
+    refreshDashboard();
   }
 
   async function clearAllSessions() {
     if (!allSessions.length) return;
-    if (!confirm('Delete all currently loaded sessions?')) return;
-    const resp = await fetch('/dashboard/api/sessions/batch-delete', {
+    if (!confirm('Delete all sessions visible to the dashboard?')) return;
+    const resp = await fetch('/dashboard/api/sessions/clear-all', {
       method: 'POST',
-      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_ids: allSessions.map(s => s.session_id) })
+      headers: { 'X-API-Key': API_KEY }
     });
-    if (resp.ok) { selectedSessions.clear(); refreshDashboard(); }
+    if (!resp.ok) return showDeleteError(resp);
+    selectedSessions.clear();
+    refreshDashboard();
   }
 
   async function clearStaleSessions() {
-    if (!confirm('Delete inactive sessions older than 1 hour?')) return;
+    if (!confirm('Mark stale inactive sessions as cancelled?')) return;
     const resp = await fetch('/dashboard/api/sessions/clear-stale', {
       method: 'POST',
       headers: { 'X-API-Key': API_KEY }
     });
-    if (resp.ok) { refreshDashboard(); }
+    if (!resp.ok) return showDeleteError(resp);
+    refreshDashboard();
   }
 
   async function deleteSession(sessionId) {
@@ -613,7 +617,18 @@
       method: 'DELETE',
       headers: { 'X-API-Key': API_KEY }
     });
-    if (resp.ok) { selectedSessions.delete(sessionId); refreshDashboard(); }
+    if (!resp.ok) return showDeleteError(resp);
+    selectedSessions.delete(sessionId);
+    refreshDashboard();
+  }
+
+  async function showDeleteError(resp) {
+    let detail = 'Request failed with status ' + resp.status;
+    try {
+      const payload = await resp.json();
+      detail = payload.detail || detail;
+    } catch (_) {}
+    alert(detail);
   }
 
   function updateFocusChart(sessions) {

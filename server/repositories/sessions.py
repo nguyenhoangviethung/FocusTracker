@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 from typing import Any, Protocol
 
@@ -24,6 +24,60 @@ class SessionRepository(Protocol):
     def complete(self, session_id: str, summary: SessionSummary) -> dict[str, Any] | None: ...
 
     def update(self, session_id: str, updates: dict[str, Any]) -> dict[str, Any] | None: ...
+
+    def expire_stale(self, cutoff: datetime, limit: int = 500) -> list[str]: ...
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _stale_summary(record: dict[str, Any], ended_at: datetime) -> dict[str, Any]:
+    started_at = _parse_datetime(record.get("started_at")) or ended_at
+    duration_seconds = max(0, int((ended_at - started_at).total_seconds()))
+    planned_seconds = int(record.get("duration_seconds") or duration_seconds or 0)
+    if planned_seconds > 0:
+        duration_seconds = min(duration_seconds, planned_seconds)
+    return {
+        "duration_seconds": duration_seconds,
+        "focused_seconds": 0,
+        "average_focus": 0.0,
+        "distraction_count": 0,
+        "focus_streak_seconds": 0.0,
+        "completed": False,
+        "minute_focus_scores": [],
+    }
+
+
+def _expire_record_if_stale(record: dict[str, Any], cutoff: datetime, now: datetime) -> bool:
+    if record.get("ended_at"):
+        return False
+    last_seen_at = _parse_datetime(record.get("last_seen_at")) or _parse_datetime(record.get("started_at"))
+    if last_seen_at is None or last_seen_at > cutoff:
+        return False
+    ended_at = min(last_seen_at, now)
+    ended_at_iso = ended_at.isoformat()
+    record.update(
+        {
+            "status": "cancelled",
+            "ended_at": ended_at_iso,
+            "last_seen_at": ended_at_iso,
+            "summary": _stale_summary(record, ended_at),
+            "report_status": "stale_timeout",
+            "report_started_at": ended_at_iso,
+            "report_completed_at": ended_at_iso,
+            "cancellation_reason": "stale_timeout",
+        }
+    )
+    return True
 
 
 class InMemorySessionRepository:
@@ -97,6 +151,21 @@ class InMemorySessionRepository:
                 return None
             record.update(updates)
             return dict(record)
+
+    def expire_stale(self, cutoff: datetime, limit: int = 500) -> list[str]:
+        now = utc_now()
+        expired: list[str] = []
+        with self._lock:
+            records = sorted(
+                self._records.values(),
+                key=lambda record: str(record.get("last_seen_at") or record.get("started_at") or ""),
+            )
+            for record in records:
+                if len(expired) >= limit:
+                    break
+                if _expire_record_if_stale(record, cutoff, now):
+                    expired.append(str(record.get("session_id")))
+        return expired
 
 
 class FirestoreSessionRepository:
@@ -178,6 +247,31 @@ class FirestoreSessionRepository:
         reference = self._collection.document(session_id)
         reference.update(updates)
         return dict(updates)
+
+    def expire_stale(self, cutoff: datetime, limit: int = 500) -> list[str]:
+        query = self._collection.where("last_seen_at", "<=", cutoff.isoformat()).limit(limit)
+        now = utc_now()
+        expired: list[str] = []
+        for snapshot in query.stream():
+            if not snapshot.exists:
+                continue
+            record = snapshot.to_dict() or {}
+            if not _expire_record_if_stale(record, cutoff, now):
+                continue
+            snapshot.reference.update(
+                {
+                    "status": record["status"],
+                    "ended_at": record["ended_at"],
+                    "last_seen_at": record["last_seen_at"],
+                    "summary": record["summary"],
+                    "report_status": record["report_status"],
+                    "report_started_at": record["report_started_at"],
+                    "report_completed_at": record["report_completed_at"],
+                    "cancellation_reason": record["cancellation_reason"],
+                }
+            )
+            expired.append(str(record.get("session_id") or snapshot.id))
+        return expired
 
 
 def create_session_repository(settings: ServerSettings) -> SessionRepository:
