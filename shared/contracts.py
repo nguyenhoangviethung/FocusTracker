@@ -66,6 +66,7 @@ class InferenceResponse(ContractModel):
     message_id: str
     session_id: str
     processed_at: datetime = Field(default_factory=utc_now)
+    inference_latency_ms: float | None = Field(default=None, ge=0.0)
     model_name: str
     model_version: str
     label_space: str | None = None

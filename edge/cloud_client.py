@@ -6,6 +6,7 @@ import queue
 import random
 import ssl
 import threading
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse, urlunparse
@@ -82,9 +83,15 @@ class FocusFlowCloudClient:
                                 pending = packets.get(timeout=0.5)
                             except queue.Empty:
                                 continue
+                        sent_at = time.perf_counter()
                         websocket.send(pending.model_dump_json())
                         raw_response = websocket.recv(timeout=self.config.request_timeout_seconds)
-                        self._put_latest(responses, json.loads(raw_response))
+                        received_at = time.perf_counter()
+                        payload = json.loads(raw_response)
+                        server_latency_ms = float(payload.get("inference_latency_ms", payload.get("latency_ms", 0.0)) or 0.0)
+                        payload["model_inference_latency_ms"] = server_latency_ms
+                        payload["cloud_roundtrip_latency_ms"] = (received_at - sent_at) * 1000.0
+                        self._put_latest(responses, payload)
                         pending = None
             except Exception as exc:
                 attempt += 1

@@ -23,6 +23,11 @@ class AIVisionPage(ThemedPage):
         
         self._tracker = None
         self._tracker_queue = None
+        self._latest_latencies: dict[str, float | None] = {
+            "loop": None,
+            "model": None,
+            "roundtrip": None,
+        }
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
@@ -51,7 +56,9 @@ class AIVisionPage(ThemedPage):
         t_title.setFont(font(16, bold=True))
         self.telemetry_labels = {
             "fps": QLabel("Throughput: 0.0 FPS"),
-            "latency": QLabel("E2E Latency: 0 ms"),
+            "loop_latency": QLabel("Client Loop Latency: --"),
+            "model_latency": QLabel("Model Inference Latency: --"),
+            "roundtrip_latency": QLabel("Cloud Round-Trip Latency: --"),
             "pose": QLabel("Pitch: 0.0° | Yaw: 0.0°"),
         }
         self.ear_bar = QProgressBar()
@@ -109,12 +116,14 @@ class AIVisionPage(ThemedPage):
         if self._tracker:
             self._tracker.stop()
             self._tracker = None
+        self._latest_latencies = {"loop": None, "model": None, "roundtrip": None}
         self.camera_preview.setText("Camera Offline")
         self.camera_preview.setPixmap(QPixmap())
 
     def _start_demo(self) -> None:
         if self._tracker: return
         self._tracker_queue = queue.Queue()
+        self._latest_latencies = {"loop": None, "model": None, "roundtrip": None}
         app = self.property("app_reference")
         config_dict = app.settings if app else {}
         config = TrackerConfig.from_dict(config_dict)
@@ -138,7 +147,12 @@ class AIVisionPage(ThemedPage):
             
         fps = payload.get("fps", 0.0)
         self.telemetry_labels["fps"].setText(f"Throughput: {fps:.1f} FPS")
-        self.telemetry_labels["latency"].setText(f"E2E Latency: {int(1000/fps) if fps > 0 else 0} ms")
+        loop_latency_ms = self._format_latency("loop", payload.get("client_loop_latency_ms", payload.get("latency_ms")))
+        model_latency_ms = self._format_latency("model", payload.get("model_inference_latency_ms"))
+        roundtrip_latency_ms = self._format_latency("roundtrip", payload.get("cloud_roundtrip_latency_ms"))
+        self.telemetry_labels["loop_latency"].setText(f"Client Loop Latency: {loop_latency_ms}")
+        self.telemetry_labels["model_latency"].setText(f"Model Inference Latency: {model_latency_ms}")
+        self.telemetry_labels["roundtrip_latency"].setText(f"Cloud Round-Trip Latency: {roundtrip_latency_ms}")
         feature_values = payload.get("feature") or []
         if not isinstance(feature_values, (list, tuple)):
             feature_values = []
@@ -175,3 +189,15 @@ class AIVisionPage(ThemedPage):
     def _set_bar(bar: QProgressBar, value: float) -> None:
         bar.setRange(0, 1000)
         bar.setValue(max(0, min(1000, int(round(max(0.0, min(1.0, value)) * 1000)))))
+
+    @staticmethod
+    def _format_latency(self, key: str, value) -> str:
+        try:
+            if value is not None:
+                self._latest_latencies[key] = float(value)
+        except (TypeError, ValueError):
+            pass
+        cached_value = self._latest_latencies.get(key)
+        if cached_value is None:
+            return "--"
+        return f"{cached_value:.1f} ms"

@@ -29,5 +29,7 @@ def test_cloud_inference_uses_real_product_4class_model() -> None:
     expected_state = "FOCUSED" if response.predicted_class in {2, 3} else "DISTRACTED"
     assert response.state == expected_state
     assert response.decision["decision_rule"] == "argmax_4class"
+    assert response.inference_latency_ms is not None
+    assert response.inference_latency_ms >= 0.0
     assert 0.0 <= response.focus_score <= 1.0
     assert response.decision["source"] == "product_4class_model"

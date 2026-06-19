@@ -50,6 +50,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
         assert set(inferred.json()["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
         assert inferred.json()["class_labels"] == ["very_low", "low", "medium", "high"]
         assert len(inferred.json()["class_probabilities"]) == 4
+        assert inferred.json()["inference_latency_ms"] >= 0.0
         stored_after_rest = client.get(
             f"/v1/sessions/{session_id}",
             headers=headers,
@@ -84,6 +85,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             assert set(streamed["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
             assert streamed["class_labels"] == ["very_low", "low", "medium", "high"]
             assert len(streamed["class_probabilities"]) == 4
+            assert streamed["inference_latency_ms"] >= 0.0
 
         stored_after_websocket = client.get(
             f"/v1/sessions/{session_id}",

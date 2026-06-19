@@ -288,6 +288,8 @@ class FocusSessionTracker:
                 else:
                     state = "WARMING_UP"
                 latency_ms = (time.perf_counter() - loop_started_at) * 1000.0
+                model_inference_latency_ms = ai_result.get("model_inference_latency_ms")
+                cloud_roundtrip_latency_ms = ai_result.get("cloud_roundtrip_latency_ms")
                 self._put(
                     {
                         "type": "telemetry",
@@ -295,6 +297,9 @@ class FocusSessionTracker:
                         "feature": detection.feature.tolist(),
                         "face_found": detection.face_found,
                         "latency_ms": latency_ms,
+                        "client_loop_latency_ms": latency_ms,
+                        "model_inference_latency_ms": model_inference_latency_ms,
+                        "cloud_roundtrip_latency_ms": cloud_roundtrip_latency_ms,
                         "logit": ai_result.get("logit"),
                         "probability": ai_result.get("probability", probability),
                         "raw_probability": ai_result.get("raw_probability", ai_result.get("probability", probability)),

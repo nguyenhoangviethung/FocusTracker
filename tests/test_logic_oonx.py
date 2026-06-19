@@ -44,5 +44,6 @@ def test_onnx_pipeline_smoke() -> None:
     assert len(prediction["probabilities_4class"]) == 4
     assert 0 <= prediction["prediction_4class"] < 4
     assert prediction["decision_rule"] == "argmax_4class"
+    assert prediction["model_inference_latency_ms"] >= 0.0
     expected_state = "ENGAGED" if prediction["prediction_4class"] in {2, 3} else "DISTRACTED"
     assert prediction["state"] == expected_state

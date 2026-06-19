@@ -114,6 +114,17 @@ Response cloud/client hiện tại cần có các field chính:
 không dùng threshold binary; quyết định đúng là `argmax_4class`, sau đó class
 `2/3` map sang `ENGAGED`, class `0/1` map sang `DISTRACTED`.
 
+Ba mức latency nên được hiểu tách bạch:
+
+- `client_loop_latency_ms`: một vòng worker desktop, gồm đọc frame, extract
+  feature, buffer và bookkeeping.
+- `model_inference_latency_ms`: thời gian model compute בלבד. Trong cloud mode
+  đây là thời gian server xử lý được echo ngược về.
+- `cloud_roundtrip_latency_ms`: thời gian websocket send-to-receive. Chỉ có ý
+  nghĩa khi cloud/hybrid thực sự nhận response từ server.
+
+`latency_ms` cũ chỉ giữ tương thích, không nên dùng làm nhãn chính trong UI.
+
 Nếu Cloud Run chưa redeploy và vẫn trả component key cũ `gru/tcn/xgboost`, UI
 desktop sẽ map tạm sang ba dòng XGB mới. Tuy nhiên server production vẫn nên
 được redeploy để trả đúng schema 4-class.

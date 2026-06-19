@@ -120,6 +120,16 @@ Component display safeguards:
   values. It does not reset all three rows to `0.0%`.
 - If no component has ever been received, the UI shows `--`.
 
+Latency display in AI Vision:
+
+- `Client Loop Latency`: one tracker loop on the desktop, including camera read,
+  feature extraction, buffering, and local bookkeeping.
+- `Model Inference Latency`: model compute time only. In local mode this is the
+  local inferencer time; in cloud mode this is the server processing time
+  echoed back by the response.
+- `Cloud Round-Trip Latency`: websocket send-to-receive time for cloud mode.
+  It shows `--` when no cloud response has been received.
+
 ### 0.5 Settings screen hiện tại
 
 ```text

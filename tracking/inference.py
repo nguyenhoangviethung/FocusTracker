@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import time
 
 import numpy as np
 import xgboost as xgb
@@ -259,6 +260,7 @@ class ONNXEngagementInferencer:
         return None
 
     def predict(self, enriched_chunk: np.ndarray) -> dict[str, Any]:
+        started = time.perf_counter()
         chunk = np.asarray(enriched_chunk, dtype=np.float32)
         chunk = np.nan_to_num(chunk, nan=0.0, posinf=0.0, neginf=0.0)
         expected_shape = self.spec.expected_input_shape()
@@ -332,6 +334,7 @@ class ONNXEngagementInferencer:
             "prediction_4class": pred_class,
             "prediction_label": CLASS_LABELS[pred_class],
             "engaged_class_indices": list(ENGAGED_CLASS_INDICES),
+            "model_inference_latency_ms": (time.perf_counter() - started) * 1000.0,
             "sequence_length": self.spec.sequence_length,
             "raw_feature_dim": self.spec.raw_feature_dim,
             "enriched_feature_dim": self.spec.enriched_feature_dim,

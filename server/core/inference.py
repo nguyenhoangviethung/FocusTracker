@@ -49,9 +49,12 @@ class CloudInferenceEngine:
                 "ai_probability": 0.0,
             }
 
+        inference_latency_ms = (time.perf_counter() - started) * 1000.0
+
         return InferenceResponse(
             message_id=packet.message_id,
             session_id=packet.session_id,
+            inference_latency_ms=inference_latency_ms,
             model_name=str(prediction.get("model_name", MODEL_NAME)),
             model_version=str(prediction.get("model_version", MODEL_VERSION)),
             label_space=prediction.get("label_space"),
@@ -65,5 +68,5 @@ class CloudInferenceEngine:
             predicted_class=prediction.get("prediction_4class"),
             predicted_label=prediction.get("prediction_label"),
             decision=decision,
-            latency_ms=(time.perf_counter() - started) * 1000.0,
+            latency_ms=inference_latency_ms,
         )

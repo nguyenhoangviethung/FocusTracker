@@ -143,6 +143,7 @@ def _live_session_updates(
             "label_space": response.label_space,
             "face_found": packet.face_found,
             "latency_ms": response.latency_ms,
+            "model_inference_latency_ms": response.inference_latency_ms,
             "components": response.components,
             "class_labels": response.class_labels,
             "class_probabilities": response.class_probabilities,
