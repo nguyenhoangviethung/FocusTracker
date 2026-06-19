@@ -249,16 +249,15 @@ class FirestoreSessionRepository:
         return dict(updates)
 
     def expire_stale(self, cutoff: datetime, limit: int = 500) -> list[str]:
-        query = self._collection.where("last_seen_at", "<=", cutoff.isoformat()).limit(limit)
         now = utc_now()
         expired: list[str] = []
-        for snapshot in query.stream():
-            if not snapshot.exists:
-                continue
-            record = snapshot.to_dict() or {}
+        for record in self.list_recent(limit):
             if not _expire_record_if_stale(record, cutoff, now):
                 continue
-            snapshot.reference.update(
+            session_id = str(record.get("session_id") or "")
+            if not session_id:
+                continue
+            self._collection.document(session_id).update(
                 {
                     "status": record["status"],
                     "ended_at": record["ended_at"],
@@ -270,7 +269,7 @@ class FirestoreSessionRepository:
                     "cancellation_reason": record["cancellation_reason"],
                 }
             )
-            expired.append(str(record.get("session_id") or snapshot.id))
+            expired.append(session_id)
         return expired
 
 
