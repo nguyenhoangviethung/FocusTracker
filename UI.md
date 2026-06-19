@@ -130,6 +130,18 @@ Latency display in AI Vision:
 - `Cloud Round-Trip Latency`: websocket send-to-receive time for cloud mode.
   It shows `--` when no cloud response has been received.
 
+Recent client fixes:
+
+- Cloud round-trip latency is cached on the AI Vision screen so it does not
+  disappear on the next telemetry tick when that packet omits the field.
+- The Report page now surfaces a `Focus Timeline` card before the summary
+  panel, so the chart is visible earlier in the layout.
+- Report history only keeps meaningful sessions with real duration and focus
+  data. Empty login-only records are filtered out before render and before
+  local cache write.
+- Closing the auth dialog with `X` now exits the app instead of continuing into
+  the main window when sign-in was not successful.
+
 ### 0.5 Settings screen hiện tại
 
 ```text
