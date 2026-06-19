@@ -319,7 +319,7 @@
               </div>
               <button id="batch-delete-btn" class="pill danger" style="display:none" onclick="batchDeleteSelected()">Delete Selected (<span id="selected-count">0</span>)</button>
               <button class="pill warn" onclick="clearStaleSessions()">Expire Stale</button>
-              <button class="pill danger" onclick="clearAllSessions()">Clear All</button>
+              <button class="pill danger" onclick="clearAllSessions()">Delete Visible</button>
             </div>
           </div>
 
@@ -572,7 +572,7 @@
           <td><strong>${Math.round(focus * 100)}%</strong></td>
           <td>${latency !== '-' ? latency + ' ms' : '-'}</td>
           <td>${durationStr}</td>
-          <td style="text-align:right;"><button onclick="deleteSession('${s.session_id}')" class="pill danger">Delete</button></td>
+          <td style="text-align:right;"><button data-delete-session="${encodeURIComponent(s.session_id)}" class="pill danger">Delete</button></td>
         </tr>
       `;
     }).join('');
@@ -586,6 +586,12 @@
     const selectAllCheckbox = document.getElementById('select-all-checkbox');
     if (selectAllCheckbox) selectAllCheckbox.checked = filtered.length > 0 && filtered.every(s => selectedSessions.has(s.session_id));
   }
+
+  document.getElementById('sessions-table-body').addEventListener('click', event => {
+    const button = event.target.closest('[data-delete-session]');
+    if (!button) return;
+    deleteSession(decodeURIComponent(button.dataset.deleteSession));
+  });
 
   function toggleSelectAll(selectAllCheckbox) {
     filteredSessions().forEach(s => {
@@ -617,14 +623,16 @@
   }
 
   async function clearAllSessions() {
-    if (!allSessions.length) return;
-    if (!confirm('Delete all sessions visible to the dashboard?')) return;
-    const resp = await fetch('/dashboard/api/sessions/clear-all', {
+    const targets = filteredSessions().map(s => s.session_id).filter(Boolean);
+    if (!targets.length) return;
+    if (!confirm('Delete ' + targets.length + ' visible session(s)?')) return;
+    const resp = await fetch('/dashboard/api/sessions/batch-delete', {
       method: 'POST',
-      headers: { 'X-API-Key': API_KEY }
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_ids: targets })
     });
     if (!resp.ok) return showDeleteError(resp);
-    selectedSessions.clear();
+    targets.forEach(sessionId => selectedSessions.delete(sessionId));
     refreshDashboard();
   }
 
@@ -640,7 +648,7 @@
 
   async function deleteSession(sessionId) {
     if (!confirm('Delete this session?')) return;
-    const resp = await fetch('/dashboard/api/sessions/' + sessionId, {
+    const resp = await fetch('/dashboard/api/sessions/' + encodeURIComponent(sessionId), {
       method: 'DELETE',
       headers: { 'X-API-Key': API_KEY }
     });

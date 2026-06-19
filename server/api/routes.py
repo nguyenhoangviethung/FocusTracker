@@ -290,12 +290,19 @@ async def dashboard_delete_session(
 @router.post("/dashboard/api/sessions/batch-delete")
 async def dashboard_batch_delete_sessions(
     request: Request,
-    payload: dict[str, list[str]],
+    payload: dict[str, Any],
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     settings, repository, _, _, _ = _services(request)
     _verify_api_key(settings, x_api_key)
-    session_ids = payload.get("session_ids", [])
+    raw_session_ids = payload.get("session_ids")
+    if not isinstance(raw_session_ids, list):
+        raise HTTPException(status_code=422, detail="session_ids must be a list")
+    session_ids = [
+        str(session_id).strip()
+        for session_id in raw_session_ids
+        if str(session_id).strip()
+    ]
     deleted_ids = []
     for sid in session_ids:
         deleted = repository.delete(sid)

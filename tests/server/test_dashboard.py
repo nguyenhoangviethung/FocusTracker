@@ -4,6 +4,8 @@ import asyncio
 from datetime import timedelta
 import re
 
+from fastapi import HTTPException
+
 from server.api.dashboard_ui import render_dashboard_html
 from server.api.routes import (
     DashboardSnapshotCache,
@@ -115,7 +117,8 @@ def test_dashboard_routes_are_available() -> None:
     assert "metricsChart" in html
     assert "focusDistChart" in html
     assert "refreshDashboard()" in html
-    assert "/dashboard/api/sessions/clear-all" in html
+    assert any(getattr(route, "path", None) == "/dashboard/api/sessions/clear-all" for route in app.routes)
+    assert "/dashboard/api/sessions/batch-delete" in html
     assert '"secret-key"' in html
 
 
@@ -125,6 +128,17 @@ def test_dashboard_template_references_existing_dom_ids() -> None:
     referenced_ids = set(re.findall(r"getElementById\('([^']+)'\)", html))
 
     assert referenced_ids - declared_ids == set()
+
+
+def test_dashboard_delete_controls_use_safe_event_binding() -> None:
+    html = render_dashboard_html("secret-key")
+
+    assert 'data-delete-session="' in html
+    assert "addEventListener('click'" in html
+    assert "encodeURIComponent(sessionId)" in html
+    assert "Delete Visible" in html
+    assert "filteredSessions().map" in html
+    assert 'onclick="deleteSession' not in html
 
 
 def test_dashboard_snapshot_cache_batches_repeated_reads() -> None:
@@ -255,6 +269,26 @@ def test_dashboard_batch_delete_deletes_existing_ids_only() -> None:
     assert result == {"status": "deleted", "deleted_ids": ["s1", "s2"]}
     assert repository.records == {}
     assert cache.cleared is True
+
+
+def test_dashboard_batch_delete_rejects_malformed_payload() -> None:
+    repository = MutableRepository([{"session_id": "s1", "started_at": "2026-06-19T01:00:00Z"}])
+
+    try:
+        asyncio.run(
+            dashboard_batch_delete_sessions(
+                DummyRequest(repository, DummyCache()),
+                {"session_ids": "s1"},
+                x_api_key="secret",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 422
+        assert exc.detail == "session_ids must be a list"
+    else:
+        raise AssertionError("Expected malformed batch delete payload to be rejected")
+
+    assert set(repository.records) == {"s1"}
 
 
 def test_dashboard_clear_stale_expires_only_old_active_sessions() -> None:
