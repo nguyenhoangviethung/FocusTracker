@@ -178,6 +178,37 @@ def test_dashboard_snapshot_keeps_all_recent_sessions_for_delete_operations() ->
     ]
 
 
+def test_dashboard_snapshot_normalizes_legacy_firestore_live_metrics() -> None:
+    from server.api.routes import _dashboard_snapshot
+
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "legacy-session",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "completed",
+                "started_at": "2026-06-17T04:03:58+00:00",
+                "ended_at": "2026-06-17T04:10:04+00:00",
+                "live_metrics": {
+                    "ai_state": "DISTRACTED",
+                    "components": {
+                        "gru": {"probability": 0.5325, "state": "DISTRACTED"},
+                        "tcn": {"probability": 0.3917, "state": "DISTRACTED"},
+                        "xgboost": {"probability": 0.4812, "state": "DISTRACTED"},
+                    },
+                },
+            }
+        ]
+    )
+
+    snapshot = _dashboard_snapshot(DummyRequest(repository), limit=100)
+    metrics = snapshot["recent_sessions"][0]["live_metrics"]
+
+    assert metrics["state"] == "DISTRACTED"
+    assert metrics["focus_score"] == (0.5325 + 0.3917 + 0.4812) / 3
+
+
 def test_dashboard_delete_session_deletes_record_and_clears_cache() -> None:
     repository = MutableRepository([{"session_id": "s1", "started_at": "2026-06-19T01:00:00Z"}])
     cache = DummyCache()

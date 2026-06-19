@@ -7,19 +7,19 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg: #0b0f14;
-      --panel: #111820;
-      --panel-2: #0f151d;
-      --panel-soft: #17212b;
-      --border: rgba(148, 163, 184, 0.18);
-      --text: #e5eef8;
-      --muted: #8b9bb0;
-      --accent: #4f8cff;
-      --accent-2: #8b5cf6;
+      --bg: #eef4fb;
+      --panel: #ffffff;
+      --panel-2: #f8fbff;
+      --panel-soft: #edf4ff;
+      --border: rgba(99, 116, 139, 0.18);
+      --text: #152033;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-2: #0ea5e9;
       --good: #22c55e;
       --warn: #f59e0b;
       --danger: #ef4444;
-      --shadow: 0 20px 40px rgba(0, 0, 0, 0.28);
+      --shadow: 0 18px 36px rgba(31, 56, 88, 0.10);
     }
 
     * { box-sizing: border-box; }
@@ -27,15 +27,13 @@
     body {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(79, 140, 255, 0.12), transparent 30%),
-        linear-gradient(180deg, #0a0f14 0%, #0b1118 100%);
+      background: linear-gradient(180deg, #f7fbff 0%, var(--bg) 100%);
       color: var(--text);
     }
 
     .app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
     .sidebar {
-      background: linear-gradient(180deg, rgba(17, 24, 32, 0.98), rgba(11, 16, 23, 0.98));
+      background: linear-gradient(180deg, #ffffff 0%, #f2f7fd 100%);
       border-right: 1px solid var(--border);
       padding: 24px 18px;
       display: flex;
@@ -52,7 +50,7 @@
     .badge {
       display: inline-flex; align-items: center; gap: 6px;
       width: fit-content; padding: 6px 10px; border-radius: 999px;
-      background: rgba(245, 158, 11, 0.14); color: #ffd47d; font-size: 12px; font-weight: 700;
+      background: rgba(245, 158, 11, 0.12); color: #92400e; font-size: 12px; font-weight: 700;
       border: 1px solid rgba(245, 158, 11, 0.2);
     }
 
@@ -78,7 +76,7 @@
 
     .sidebar-card {
       margin-top: auto;
-      background: linear-gradient(180deg, rgba(23, 33, 43, 0.95), rgba(17, 24, 32, 0.95));
+      background: linear-gradient(180deg, #ffffff 0%, #f6f9fd 100%);
       border: 1px solid var(--border);
       border-radius: 18px;
       padding: 16px;
@@ -104,7 +102,7 @@
     .search {
       min-width: 320px; max-width: 460px; width: 40vw;
       display: flex; align-items: center; gap: 10px;
-      background: rgba(17, 24, 32, 0.9);
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 12px 14px;
@@ -118,7 +116,7 @@
       margin-bottom: 18px;
     }
     .stat {
-      background: linear-gradient(180deg, rgba(17, 24, 32, 0.98), rgba(13, 19, 27, 0.98));
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
       border: 1px solid var(--border);
       border-radius: 18px;
       padding: 18px;
@@ -132,7 +130,7 @@
 
     .grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; align-items: start; }
     .panel {
-      background: linear-gradient(180deg, rgba(17, 24, 32, 0.98), rgba(13, 19, 27, 0.98));
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
       border: 1px solid var(--border);
       border-radius: 20px;
       box-shadow: var(--shadow);
@@ -143,20 +141,20 @@
     .panel-sub { color: var(--muted); font-size: 12px; }
 
     .chart-card { padding-bottom: 10px; }
-    .chart-wrap { height: 260px; background: rgba(9, 13, 18, 0.7); border-radius: 16px; padding: 12px; border: 1px solid rgba(148, 163, 184, 0.12); }
+    .chart-wrap { height: 260px; background: #f8fbff; border-radius: 16px; padding: 12px; border: 1px solid rgba(99, 116, 139, 0.12); }
 
     .list { display: flex; flex-direction: column; gap: 12px; }
     .recent-item {
       display: grid; grid-template-columns: auto 1fr auto;
       gap: 12px; align-items: center;
       padding: 14px; border-radius: 16px;
-      background: rgba(9, 13, 18, 0.78);
-      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: #f8fbff;
+      border: 1px solid rgba(99, 116, 139, 0.12);
     }
     .avatar {
       width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center;
       background: linear-gradient(180deg, rgba(79, 140, 255, 0.22), rgba(139, 92, 246, 0.18));
-      color: #dbeafe; font-weight: 800;
+      color: #1d4ed8; font-weight: 800;
       border: 1px solid rgba(79, 140, 255, 0.18);
       flex: none;
     }
@@ -173,7 +171,7 @@
     .pill-group { display: flex; flex-wrap: wrap; gap: 8px; }
     .pill {
       border: 1px solid rgba(148, 163, 184, 0.16);
-      background: rgba(9, 13, 18, 0.6);
+      background: #ffffff;
       color: var(--muted);
       padding: 10px 12px;
       border-radius: 999px;
@@ -182,20 +180,20 @@
       font-size: 13px;
     }
     .pill.active { background: rgba(79, 140, 255, 0.18); color: var(--text); border-color: rgba(79, 140, 255, 0.35); }
-    .danger { background: rgba(239, 68, 68, 0.12); color: #fecaca; border-color: rgba(239, 68, 68, 0.2); }
-    .warn { background: rgba(245, 158, 11, 0.12); color: #fde68a; border-color: rgba(245, 158, 11, 0.2); }
+    .danger { background: rgba(239, 68, 68, 0.10); color: #b91c1c; border-color: rgba(239, 68, 68, 0.22); }
+    .warn { background: rgba(245, 158, 11, 0.12); color: #92400e; border-color: rgba(245, 158, 11, 0.24); }
 
-    .table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.14); background: rgba(9, 13, 18, 0.7); }
+    .table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid rgba(99, 116, 139, 0.14); background: #ffffff; }
     table { width: 100%; border-collapse: collapse; min-width: 980px; }
     th, td { padding: 14px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.10); text-align: left; vertical-align: middle; }
-    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; position: sticky; top: 0; background: rgba(9, 13, 18, 0.95); z-index: 1; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; position: sticky; top: 0; background: #f1f6fc; z-index: 1; }
     td { color: var(--text); font-size: 14px; }
     tr:hover td { background: rgba(148, 163, 184, 0.04); }
     .status { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; }
     .status::before { content: ''; width: 8px; height: 8px; border-radius: 999px; background: currentColor; opacity: 0.9; }
-    .status.active { color: #86efac; background: rgba(34, 197, 94, 0.10); }
-    .status.completed { color: #93c5fd; background: rgba(59, 130, 246, 0.10); }
-    .status.pending { color: #fcd34d; background: rgba(245, 158, 11, 0.10); }
+    .status.active { color: #15803d; background: rgba(34, 197, 94, 0.12); }
+    .status.completed { color: #1d4ed8; background: rgba(59, 130, 246, 0.12); }
+    .status.pending { color: #92400e; background: rgba(245, 158, 11, 0.12); }
 
     .empty { color: var(--muted); padding: 22px; text-align: center; }
     .small { color: var(--muted); font-size: 12px; }
@@ -246,7 +244,7 @@
           <div class="title">FocusFlow Cloud Control Room</div>
           <div class="subtitle">
             Server dashboard for live sessions, recent history, and deployment status.
-            The page follows the same quiet dark language as the desktop client.
+            The page keeps a bright operational layout for scanning Firestore-backed sessions.
           </div>
         </div>
         <div class="search">
@@ -435,16 +433,16 @@
     chart = new Chart(chartCtx, {
       type: 'bar',
       data: { labels: [], datasets: [
-        { label: 'P90 Latency (ms)', data: [], backgroundColor: '#4f8cff', borderRadius: 8 },
-        { label: 'P95 Latency (ms)', data: [], backgroundColor: '#8b5cf6', borderRadius: 8 }
+        { label: 'P90 Latency (ms)', data: [], backgroundColor: '#2563eb', borderRadius: 8 },
+        { label: 'P95 Latency (ms)', data: [], backgroundColor: '#0ea5e9', borderRadius: 8 }
       ] },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: '#cbd5e1' } } },
+        plugins: { legend: { labels: { color: '#475569' } } },
         scales: {
-          x: { ticks: { color: '#8b9bb0' }, grid: { color: 'rgba(148, 163, 184, 0.08)' } },
-          y: { beginAtZero: true, ticks: { color: '#8b9bb0' }, grid: { color: 'rgba(148, 163, 184, 0.08)' } }
+          x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(99, 116, 139, 0.12)' } },
+          y: { beginAtZero: true, ticks: { color: '#64748b' }, grid: { color: 'rgba(99, 116, 139, 0.12)' } }
         }
       }
     });
@@ -456,7 +454,7 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } }
+        plugins: { legend: { position: 'bottom', labels: { color: '#475569' } } }
       }
     });
   }
@@ -481,7 +479,26 @@
   }
 
   function getStatus(s) {
-    return s.ended_at ? 'completed' : 'active';
+    if (s.ended_at) return s.status || 'completed';
+    return s.status || 'active';
+  }
+
+  function focusScore(s) {
+    const direct = s.live_metrics?.focus_score ?? s.summary?.average_focus;
+    if (direct != null && !Number.isNaN(Number(direct))) return Number(direct);
+    const probs = s.live_metrics?.class_probabilities;
+    if (Array.isArray(probs) && probs.length >= 4) return Number(probs[2] || 0) + Number(probs[3] || 0);
+    const components = s.live_metrics?.components || {};
+    const keys = ['final_xgb', 'boost_xgb', 'targeted_xgb', 'gru', 'tcn', 'xgboost'];
+    const values = keys
+      .map(key => components[key]?.probability)
+      .filter(value => value != null && !Number.isNaN(Number(value)))
+      .map(Number);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  }
+
+  function sessionState(s) {
+    return s.live_metrics?.state || s.live_metrics?.ai_state || '';
   }
 
   function matchesSearch(s, query) {
@@ -521,7 +538,7 @@
     }
 
     tbody.innerHTML = filtered.map(s => {
-      const focus = s.live_metrics?.focus_score ?? s.summary?.average_focus ?? 0.0;
+      const focus = focusScore(s);
       const latency = s.live_metrics?.latency_ms ?? '-';
       const status = getStatus(s);
       const statusClass = status === 'active' ? 'active' : (status === 'completed' ? 'completed' : 'pending');
@@ -530,7 +547,9 @@
       if (s.started_at) {
         const start = new Date(s.started_at);
         const end = s.ended_at ? new Date(s.ended_at) : new Date();
-        const diffSecs = Math.max(0, Math.floor((end - start) / 1000));
+        let diffSecs = Math.max(0, Math.floor((end - start) / 1000));
+        if (s.summary?.duration_seconds != null) diffSecs = Number(s.summary.duration_seconds);
+        else if (s.duration_seconds != null && s.ended_at) diffSecs = Number(s.duration_seconds);
         const mins = Math.floor(diffSecs / 60);
         const secs = diffSecs % 60;
         durationStr = `${mins}m ${secs}s`;
@@ -632,8 +651,8 @@
   }
 
   function updateFocusChart(sessions) {
-    const focusedCount = sessions.filter(s => s.live_metrics?.state === 'FOCUSED').length;
-    const distractedCount = sessions.filter(s => s.live_metrics && s.live_metrics.state !== 'FOCUSED').length;
+    const focusedCount = sessions.filter(s => sessionState(s) === 'FOCUSED').length;
+    const distractedCount = sessions.filter(s => s.live_metrics && sessionState(s) !== 'FOCUSED').length;
     distChart.data.datasets[0].data = [focusedCount, distractedCount];
     distChart.update();
   }
@@ -650,7 +669,7 @@
     document.getElementById('sidebar-active').textContent = String(active);
     document.getElementById('sidebar-p95').textContent = p95Value.toFixed(1) + ' ms';
     document.getElementById('val-total').textContent = data.recent_count || 0;
-    document.getElementById('val-map50').textContent = sessions.length ? (sessions.filter(s => s.live_metrics?.state === 'FOCUSED').length / sessions.length).toFixed(2) : '0.00';
+    document.getElementById('val-map50').textContent = sessions.length ? (sessions.filter(s => sessionState(s) === 'FOCUSED').length / sessions.length).toFixed(2) : '0.00';
     document.getElementById('val-p95').textContent = p95Value.toFixed(1);
     document.getElementById('load-val').textContent = p95Value.toFixed(1) + 'ms';
     document.getElementById('load-fill').style.width = Math.min(100, (p95Value / 250) * 100) + '%';
@@ -659,8 +678,18 @@
 
   async function refreshDashboard() {
     const response = await fetch('/dashboard/api/summary?limit=100', { cache: 'no-store' });
+    if (!response.ok) {
+      document.getElementById('recent-list').innerHTML = '<div class="empty">Unable to load Firebase sessions.</div>';
+      document.getElementById('sessions-table-body').innerHTML = '<tr><td colspan="9" class="empty">Unable to load dashboard data.</td></tr>';
+      return;
+    }
     const data = await response.json();
     const sessions = data.recent_sessions || [];
+    if (data.dashboard_error) {
+      document.getElementById('recent-list').innerHTML = '<div class="empty">' + data.dashboard_error + '</div>';
+      document.getElementById('sessions-table-body').innerHTML = '<tr><td colspan="9" class="empty">' + data.dashboard_error + '</td></tr>';
+      return;
+    }
 
     updateBadges(data, sessions);
 

@@ -89,6 +89,7 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
 
     def decorate(record: dict[str, Any]) -> dict[str, Any]:
         decorated = dict(record)
+        _normalize_dashboard_session(decorated)
         user = user_cache.get(str(record.get("user_id") or ""))
         if user:
             decorated["user_display_name"] = user.get("display_name") or user.get("email") or user.get("username") or user.get("user_id")
@@ -118,6 +119,42 @@ def _dashboard_snapshot(request: Request, limit: int = 24) -> dict[str, Any]:
         "dashboard_error": dashboard_error,
         "firestore_query_limit": safe_limit,
     }
+
+
+def _normalize_dashboard_session(record: dict[str, Any]) -> None:
+    live_metrics = record.get("live_metrics")
+    if not isinstance(live_metrics, dict):
+        return
+
+    if not live_metrics.get("state") and live_metrics.get("ai_state"):
+        live_metrics["state"] = str(live_metrics["ai_state"])
+
+    if live_metrics.get("focus_score") is None:
+        class_probabilities = live_metrics.get("class_probabilities")
+        if isinstance(class_probabilities, list) and len(class_probabilities) >= 4:
+            try:
+                live_metrics["focus_score"] = float(class_probabilities[2]) + float(class_probabilities[3])
+            except (TypeError, ValueError):
+                pass
+
+    if live_metrics.get("focus_score") is None:
+        components = live_metrics.get("components")
+        if isinstance(components, dict):
+            probabilities: list[float] = []
+            for key in ("final_xgb", "boost_xgb", "targeted_xgb", "gru", "tcn", "xgboost"):
+                value = components.get(key)
+                if isinstance(value, dict) and value.get("probability") is not None:
+                    try:
+                        probabilities.append(float(value["probability"]))
+                    except (TypeError, ValueError):
+                        continue
+            if probabilities:
+                live_metrics["focus_score"] = sum(probabilities) / len(probabilities)
+
+    if live_metrics.get("focus_score") is None:
+        summary = record.get("summary")
+        if isinstance(summary, dict) and summary.get("average_focus") is not None:
+            live_metrics["focus_score"] = summary.get("average_focus")
 
 
 def _live_session_updates(
