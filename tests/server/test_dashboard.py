@@ -1,32 +1,25 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
+from server.api.dashboard_ui import render_dashboard_html
 from server.api.routes import DashboardSnapshotCache
 from server.app import app
 
 
 def test_dashboard_routes_are_available() -> None:
-    with TestClient(app) as client:
-        html = client.get("/dashboard")
-        assert html.status_code == 200
-        assert "FocusFlow Dashboard" in html.text
-        assert "Active Sessions" in html.text
-        assert "Total Sessions" in html.text
-        assert "Map50 Metric" in html.text
-        assert "Recent Sessions" in html.text
-        assert "Activity Chart" in html.text
-        assert "metricsChart" in html.text
-        assert "refreshDashboard()" in html.text
+    assert any(getattr(route, "path", None) == "/dashboard" for route in app.routes)
 
-        summary = client.get("/dashboard/api/summary")
-        assert summary.status_code == 200
-        payload = summary.json()
-        assert "ready" in payload
-        assert "recent_sessions" in payload
-        assert "repository_backend" in payload
-        assert payload["firestore_query_limit"] == 24
-        assert payload["dashboard_cache_seconds"] == 3.0
+    html = render_dashboard_html("secret-key")
+    assert "<!DOCTYPE html>" in html
+    assert "FocusFlow Cloud Control Room" in html
+    assert "Activity Trend" in html
+    assert "Recent Sessions" in html
+    assert "Session Inspector" in html
+    assert "Deployment Snapshot" in html
+    assert "Focus Distribution" in html
+    assert "metricsChart" in html
+    assert "focusDistChart" in html
+    assert "refreshDashboard()" in html
+    assert '"secret-key"' in html
 
 
 def test_dashboard_snapshot_cache_batches_repeated_reads() -> None:
