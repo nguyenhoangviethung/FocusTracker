@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+import re
 
 from server.api.dashboard_ui import render_dashboard_html
 from server.api.routes import (
@@ -116,6 +117,14 @@ def test_dashboard_routes_are_available() -> None:
     assert "refreshDashboard()" in html
     assert "/dashboard/api/sessions/clear-all" in html
     assert '"secret-key"' in html
+
+
+def test_dashboard_template_references_existing_dom_ids() -> None:
+    html = render_dashboard_html("secret-key")
+    declared_ids = set(re.findall(r'id="([^"]+)"', html))
+    referenced_ids = set(re.findall(r"getElementById\('([^']+)'\)", html))
+
+    assert referenced_ids - declared_ids == set()
 
 
 def test_dashboard_snapshot_cache_batches_repeated_reads() -> None:

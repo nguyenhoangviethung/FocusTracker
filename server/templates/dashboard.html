@@ -665,6 +665,16 @@
     distChart.update();
   }
 
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function setWidth(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = value;
+  }
+
   function updateBadges(data, sessions) {
     const active = sessions.filter(s => !s.ended_at && !isStaleSession(s)).length;
     const p95 = sessions
@@ -672,16 +682,15 @@
       .filter(v => v != null)
       .sort((a, b) => a - b);
     const p95Value = p95.length ? p95[Math.min(p95.length - 1, Math.floor(p95.length * 0.95))] : 0;
-    document.getElementById('val-active').textContent = active;
-    document.getElementById('active-badge').textContent = `${active} active`;
-    document.getElementById('sidebar-active').textContent = String(active);
-    document.getElementById('sidebar-p95').textContent = p95Value.toFixed(1) + ' ms';
-    document.getElementById('val-total').textContent = data.recent_count || 0;
-    document.getElementById('val-map50').textContent = sessions.length ? (sessions.filter(s => sessionState(s) === 'FOCUSED').length / sessions.length).toFixed(2) : '0.00';
-    document.getElementById('val-p95').textContent = p95Value.toFixed(1);
-    document.getElementById('load-val').textContent = p95Value.toFixed(1) + 'ms';
-    document.getElementById('load-fill').style.width = Math.min(100, (p95Value / 250) * 100) + '%';
-    document.getElementById('sidebar-bar').style.width = Math.min(100, (p95Value / 250) * 100) + '%';
+    const p95Width = Math.min(100, (p95Value / 250) * 100) + '%';
+    setText('val-active', active);
+    setText('active-badge', `${active} active`);
+    setText('sidebar-active', String(active));
+    setText('sidebar-p95', p95Value.toFixed(1) + ' ms');
+    setText('val-total', data.recent_count || 0);
+    setText('val-map50', sessions.length ? (sessions.filter(s => sessionState(s) === 'FOCUSED').length / sessions.length).toFixed(2) : '0.00');
+    setText('val-p95', p95Value.toFixed(1));
+    setWidth('sidebar-bar', p95Width);
   }
 
   async function refreshDashboard() {
