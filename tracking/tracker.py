@@ -10,6 +10,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+from collections import deque
 
 from edge.cloud_client import CloudClientConfig, FocusFlowCloudClient
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
@@ -100,6 +101,7 @@ class FocusSessionTracker:
         self._cloud_sequence = 0
         self._last_cloud_packet_at = 0.0
         self._cloud_client: FocusFlowCloudClient | None = None
+        self._recent_features: deque[np.ndarray] = deque(maxlen=5)
 
     @property
     def cloud_session_id(self) -> str:
@@ -203,6 +205,7 @@ class FocusSessionTracker:
                         cap.release()
                         cap = None
                         buffer.clear()
+                        self._recent_features.clear()
                     time.sleep(0.2)
                     continue
 
@@ -236,6 +239,10 @@ class FocusSessionTracker:
 
                 if not self._is_valid_feature_vector(detection.feature):
                     logger.warning("Skipping invalid feature vector from detector")
+                    continue
+
+                if not self._is_feature_stable(detection.feature):
+                    logger.warning("Skipping unstable feature vector that differs too much from recent frames")
                     continue
 
                 if not detection.face_found:
@@ -279,6 +286,7 @@ class FocusSessionTracker:
                     continue
 
                 enriched = buffer.append(detection.feature)
+                self._recent_features.append(np.asarray(detection.feature, dtype=np.float32).reshape(-1).copy())
                 raw_sequence = buffer.raw_sequence()
                 ai_result: dict[str, Any] = {
                     "probability": 0.0,
@@ -498,6 +506,18 @@ class FocusSessionTracker:
         except Exception:
             return False
         return vector.shape[0] == 30 and np.isfinite(vector).all()
+
+    def _is_feature_stable(self, feature: Any) -> bool:
+        vector = np.asarray(feature, dtype=np.float32).reshape(-1)
+        if vector.shape[0] != 30 or not np.isfinite(vector).all():
+            return False
+        if len(self._recent_features) < 3:
+            return True
+        recent = np.stack(tuple(self._recent_features), axis=0)
+        median = np.median(recent, axis=0)
+        mean_abs_delta = float(np.mean(np.abs(vector - median)))
+        max_abs_delta = float(np.max(np.abs(vector - median)))
+        return mean_abs_delta <= 0.35 and max_abs_delta <= 2.5
 
 
 class _FpsCounter:
