@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.components.focus_chart import FocusTrendChart
 from ui.theme import ThemeManager, font
-from utils.session_storage import load_session_history
+from utils.session_storage import is_meaningful_session_record, load_session_history
 
 class ReportPage(ThemedPage):
     def __init__(self, theme: ThemeManager) -> None:
@@ -37,6 +37,20 @@ class ReportPage(ThemedPage):
         metrics_layout.setStretch(0, 1)
         metrics_layout.setStretch(1, 1)
         metrics_layout.setStretch(2, 1)
+
+        self.timeline_card = Card()
+        self.timeline_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        layout.addWidget(self.timeline_card)
+        self.timeline_label = QLabel("Focus Timeline")
+        self.timeline_label.setFont(font(14, bold=True))
+        self.focus_chart = FocusTrendChart(max_points=120, palette=self.theme.palette())
+        self.timeline_summary = QTextEdit()
+        self.timeline_summary.setReadOnly(True)
+        self.timeline_summary.setMaximumHeight(130)
+        self.timeline_summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.timeline_card.layout.addWidget(self.timeline_label)
+        self.timeline_card.layout.addWidget(self.focus_chart)
+        self.timeline_card.layout.addWidget(self.timeline_summary)
         
         body_layout = QHBoxLayout()
         body_layout.setSpacing(18)
@@ -51,20 +65,10 @@ class ReportPage(ThemedPage):
         self.status_label = QLabel("No session data available.")
         self.status_label.setFont(font(14, bold=True))
         self.report_label = QLabel("Report status: pending")
-        self.timeline_label = QLabel("Focus Timeline")
-        self.timeline_label.setFont(font(14, bold=True))
-        self.focus_chart = FocusTrendChart(max_points=120, palette=self.theme.palette())
-        
-        self.summary = QTextEdit()
-        self.summary.setReadOnly(True)
-        self.summary.setMinimumHeight(180)
-        self.summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         self.details_card.layout.addWidget(self.status_label)
         self.details_card.layout.addWidget(self.report_label)
-        self.details_card.layout.addWidget(self.timeline_label)
-        self.details_card.layout.addWidget(self.focus_chart)
-        self.details_card.layout.addWidget(self.summary)
+        self.details_card.layout.addStretch()
         
         self.history_card = Card()
         self.history_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -105,7 +109,7 @@ class ReportPage(ThemedPage):
         return v
 
     def _set_summary_text(self, text: str):
-        self.summary.setPlainText(text)
+        self.timeline_summary.setPlainText(text)
 
     def _render_timeline(self, minute_scores: list[float]) -> None:
         self.focus_chart.clear()
@@ -144,7 +148,7 @@ class ReportPage(ThemedPage):
             if item.widget():
                 item.widget().deleteLater()
                 
-        history = load_session_history()[:8]
+        history = [rec for rec in load_session_history()[:8] if is_meaningful_session_record(rec)]
         if not history:
             self.history_layout.addWidget(QLabel("No sessions found."))
             self.history_layout.addStretch()
@@ -229,7 +233,8 @@ class ReportPage(ThemedPage):
                 "report_status": rec.get("report_status") or "completed",
                 "report_completed_at": rec.get("report_completed_at") or "",
             }
-            local_history.append(mapped)
+            if is_meaningful_session_record(mapped):
+                local_history.append(mapped)
 
         from utils.session_storage import save_session_history
         save_session_history(local_history)

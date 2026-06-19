@@ -171,7 +171,11 @@ class ActiveSessionPage(ThemedPage):
             else: self._tracker.resume()
 
     def end_session(self, completed: bool = False) -> None:
+        if not self._running and not completed:
+            return
         summary = self._build_session_summary(completed=completed)
+        if int(summary.get("total_seconds", 0)) <= 0 and not summary.get("minute_scores"):
+            return
         if self._tracker:
             self._tracker.complete_cloud_session(summary)
         self.stop_timer()

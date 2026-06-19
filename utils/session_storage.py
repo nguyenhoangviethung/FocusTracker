@@ -106,6 +106,17 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def is_meaningful_session_record(record: dict[str, Any]) -> bool:
+    summary = record.get("summary") or {}
+    if not isinstance(summary, dict):
+        summary = {}
+    minute_scores = summary.get("minute_focus_scores") or record.get("minute_focus_scores") or []
+    duration = _safe_int(summary.get("duration_seconds") or record.get("duration_seconds") or 0)
+    focused = _safe_int(summary.get("focused_seconds") or record.get("focused_seconds") or 0)
+    average_focus = _safe_float(summary.get("average_focus") or record.get("average_focus") or 0.0)
+    return duration > 0 and (bool(minute_scores) or focused > 0 or average_focus > 0.0)
+
+
 def save_session_statistics(
     minute_scores: list[float],
     average_score: float,

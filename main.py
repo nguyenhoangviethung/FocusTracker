@@ -52,6 +52,10 @@ def main() -> None:
             settings.get("auth_provider") or "unknown",
             settings.get("auth_user_id") or "unknown",
         )
+    else:
+        logger.info("Authentication dialog closed without successful login; exiting app")
+        sys.exit(0)
+
     window = FocusFlowApp()
     window.show()
     sys.exit(app.exec())
