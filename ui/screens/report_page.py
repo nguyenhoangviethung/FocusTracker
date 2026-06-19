@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from ui.screens.base import ThemedPage, PageTitle, Card
+from ui.components.focus_chart import FocusTrendChart
 from ui.theme import ThemeManager, font
 from utils.session_storage import load_session_history
 
@@ -50,14 +51,19 @@ class ReportPage(ThemedPage):
         self.status_label = QLabel("No session data available.")
         self.status_label.setFont(font(14, bold=True))
         self.report_label = QLabel("Report status: pending")
+        self.timeline_label = QLabel("Focus Timeline")
+        self.timeline_label.setFont(font(14, bold=True))
+        self.focus_chart = FocusTrendChart(max_points=120, palette=self.theme.palette())
         
         self.summary = QTextEdit()
         self.summary.setReadOnly(True)
-        self.summary.setMinimumHeight(260)
+        self.summary.setMinimumHeight(180)
         self.summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         self.details_card.layout.addWidget(self.status_label)
         self.details_card.layout.addWidget(self.report_label)
+        self.details_card.layout.addWidget(self.timeline_label)
+        self.details_card.layout.addWidget(self.focus_chart)
         self.details_card.layout.addWidget(self.summary)
         
         self.history_card = Card()
@@ -101,6 +107,11 @@ class ReportPage(ThemedPage):
     def _set_summary_text(self, text: str):
         self.summary.setPlainText(text)
 
+    def _render_timeline(self, minute_scores: list[float]) -> None:
+        self.focus_chart.clear()
+        for score in minute_scores:
+            self.focus_chart.add_score(float(score))
+
     def show_session(self, record: dict, processing: bool = False) -> None:
         focus = float(record.get("average_focus", 0.0))
         dur = int(record.get("duration_seconds", 0))
@@ -124,6 +135,7 @@ class ReportPage(ThemedPage):
 
         tl = "\n".join(f"Min {i + 1:02d}: {s * 100:.1f}%" for i, s in enumerate(m_scores)) or "Not enough per-minute data."
         self._set_summary_text(f"Timeline:\n{tl}")
+        self._render_timeline(m_scores)
         self._render_history()
 
     def _render_history(self) -> None:
@@ -163,7 +175,9 @@ class ReportPage(ThemedPage):
     def apply_theme(self) -> None:
         super().apply_theme()
         self.header.apply_theme(self.theme)
+        self.focus_chart.apply_theme(self.theme.palette())
         self.report_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
+        self.timeline_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
 
     def refresh(self):
         """Called by app_window.navigate() when switching to this page."""
@@ -247,4 +261,3 @@ class _HistoryWorker(QThread):
             self.history_ready.emit(result)
         except Exception as exc:
             self.history_error.emit(str(exc))
-
