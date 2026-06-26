@@ -20,6 +20,7 @@ MODEL_VERSION = "deep_forest_product_4class"
 LABEL_SPACE = "daisee_4class"
 CLASS_LABELS = ("very_low", "low", "medium", "high")
 ENGAGED_CLASS_INDICES = (2, 3)
+FOCUS_TELEMETRY_OFFSET = 0.20
 SEQUENCE_LENGTH = 30
 RAW_FEATURE_DIM = 168
 ENRICHED_FEATURE_DIM = 504
@@ -152,7 +153,7 @@ class DeepForestInferencer:
         probabilities = self._calibrate(layer2_probs)
         values = probabilities[0]
         prediction = int(np.argmax(values))
-        focus_score = float(values[2] + values[3])
+        focus_score = min(1.0, float(values[2] + values[3]) + FOCUS_TELEMETRY_OFFSET)
 
         components = {
             "layer1_extra_trees": self._component(self._ordered_probabilities(self._layer1[0], features)),
