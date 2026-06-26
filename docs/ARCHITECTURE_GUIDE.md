@@ -2,13 +2,14 @@
 
 ## 1. Mục tiêu hệ thống
 
-FocusFlow AI là hệ thống edge-to-cloud chỉ dùng tín hiệu thị giác:
+FocusFlow AI là hệ thống edge-first chỉ dùng tín hiệu thị giác:
 
 - Desktop đọc webcam và chạy MediaPipe.
 - Desktop không gửi ảnh hoặc video lên cloud.
-- Desktop gửi chuỗi đặc trưng khuôn mặt `(30, 168)` theo schema `depth_robust_v2`.
-- Cloud enrich thành `(30, 504)` bằng raw + velocity + std.
-- Cloud chạy model 4-class DeepForest đã calibration.
+- Desktop enrich chuỗi `(30, 168)` thành `(30, 504)` bằng raw + velocity + std
+  và chạy model 4-class DeepForest đã calibration tại edge.
+- Cloud nhận chuỗi đặc trưng chỉ khi người dùng chọn cloud/hybrid để benchmark,
+  đối chiếu hoặc đồng bộ vận hành.
 - Firestore lưu lifecycle và summary của session.
 - Report completion chỉ ghi trạng thái tổng kết, không còn AI coach hay email mentor.
 
@@ -23,15 +24,13 @@ Webcam frame
   -> 168 raw facial features (geometry, canonical depth landmarks, blendshapes, transform)
   -> sliding window 30 frames
   -> raw sequence (30, 168)
-  -> WebSocket TLS
-  -> Cloud Run API
   -> enrich raw + velocity + std
   -> enriched sequence (30, 504)
   -> basic aggregate values (3529)
   -> layer1 ExtraTrees + layer1 RandomForest + layer2 cascade
   -> class-logit bias + temperature calibration
-  -> argmax over 4 calibrated class probabilities
-  -> class 2/3 = FOCUSED, class 0/1 = DISTRACTED
+  -> edge decision and local UI
+  -> optional WebSocket TLS -> Cloud Run comparison path
 ```
 
 Khi không tìm thấy mặt, face-presence guard trả `NO_FACE` và không tin model
@@ -49,7 +48,8 @@ tabular feature dim:   3529
 components:            layer1 ExtraTrees + RandomForest, layer2 cascade
 temperature:           1.25
 class biases:          [1.5, 2.5, 0.0, 0.5]
-decision rule:         argmax_4class
+raw model decision:    argmax_4class
+UI state policy:       focus_score > 0.50, face guard wins
 class labels:          very_low, low, medium, high
 ```
 
@@ -61,9 +61,9 @@ tracking.buffer.enrich_raw_sequence(raw_sequence)
 
 Không tự viết một phép enrich khác trong server hoặc client.
 
-`focus_score` trong UI/API là telemetry liên tục `P(medium) + P(high)`, dùng
-cho signal và trend chart. Nó không phải threshold decision. Quyết định model
-đến từ `prediction_4class = argmax(probabilities_4class)`.
+`ai_state` giữ nhãn model từ `prediction_4class = argmax(probabilities_4class)`.
+`focus_score` là tín hiệu liên tục cho signal/trend chart; state hiển thị trên
+UI dùng policy vận hành `focus_score > 0.50`, trừ `NO_FACE` luôn thắng.
 
 ## 4. Trách nhiệm từng vùng source
 
@@ -73,8 +73,8 @@ cho signal và trend chart. Nó không phải threshold decision. Quyết địn
 - `ui/`: PyQt6 pages và components.
 - `tracking/detector.py`: frame thành feature vector depth-robust 168 chiều.
 - `tracking/buffer.py`: sliding window và enrich chuẩn.
-- `tracking/inference.py`: calibrated DeepForest adapter dùng bởi cloud inference.
-- `tracking/tracker.py`: camera worker và cloud-only orchestration.
+- `tracking/inference.py`: calibrated DeepForest adapter dùng tại edge và cloud.
+- `tracking/tracker.py`: camera worker, bounded edge-inference worker, và optional cloud transport.
 - `edge/cloud_client.py`: REST lifecycle và WebSocket transport.
 - `ui/component_metrics.py`: normalize component telemetry `layer1_extra_trees`,
   `layer1_random_forest`, và `layer2_cascade` cho UI.
@@ -96,16 +96,16 @@ version mới thay vì sửa âm thầm.
 
 ## 5. Inference runtime
 
-Production sử dụng một luồng `cloud-only`:
+Luồng production mặc định là `edge-first`:
 
 - Desktop xử lý frame và trích xuất vector 168 chiều tại edge.
-- Desktop gửi cửa sổ đặc trưng qua WebSocket, không gửi ảnh hoặc video.
-- Cloud enrich chuỗi thành 504 đặc trưng mỗi frame và chạy calibrated
-  DeepForest.
-- Khi mất kết nối, desktop báo `Reconnecting` và retry bằng backoff; không sinh
-  dự đoán local giả.
-- Runtime production dùng `DeepForestInferencer`; các script binary legacy là
-  công cụ thí nghiệm riêng, không tham gia pipeline production.
+- Desktop enrich cửa sổ đặc trưng và chạy `DeepForestInferencer` trong worker
+  riêng; camera loop và Qt thread không chờ model.
+- Local mode không cần mạng để đưa ra quyết định. Khi được cấu hình, cloud chỉ
+  tạo session/lưu summary.
+- Hybrid có thể gửi window qua WebSocket để đối chiếu hoặc vận hành, nhưng UI
+  giữ edge result là quyết định chính.
+- Cloud-only vẫn tồn tại như mode benchmark để đo end-to-end network latency.
 
 ## 6. Session lifecycle
 

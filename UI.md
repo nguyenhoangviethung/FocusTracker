@@ -3,12 +3,12 @@
 Tài liệu này mô tả giao diện desktop FocusFlow AI hiện tại trong repo,
 để lần sau mở lại không phải đọc toàn bộ code.
 
-Phiên bản này phản ánh luồng **cloud-only** hiện tại:
+Phiên bản này phản ánh luồng **edge-first** hiện tại:
 
 - webcam và feature extraction chạy ở client;
 - raw frame không gửi lên cloud;
-- model quyết định cuối cùng nằm trên cloud;
-- desktop chỉ hiển thị telemetry, preview cục bộ và lịch sử phiên.
+- model quyết định chính chạy trong edge worker trên desktop;
+- cloud lưu lifecycle/report; `cloud` và `hybrid` là mode đo/đối chiếu rõ ràng.
 
 ## 0. Tổng quan nhanh
 
@@ -17,7 +17,7 @@ PyQt6 desktop
   -> Auth dialog
   -> Sidebar shell
   -> Dashboard / Live Session / Vision Settings / History / App Settings
-  -> Cloud API for stats, session lifecycle and inference
+  -> Local DeepForest decision + Cloud API for stats and session lifecycle
 ```
 
 ### 0.1 Sidebar hiện tại
@@ -255,8 +255,8 @@ History hiện có bố cục 2 cột:
 
 Ghi chú:
 
-- app hiện không còn cho chọn `local/cloud/hybrid` trong settings;
-- inference mode được cố định về cloud;
+- Settings cho chọn `Edge (Local)`, `Cloud`, hoặc `Edge + Cloud Sync`;
+- mặc định là `Edge (Local)`; hybrid vẫn giữ edge result làm quyết định chính;
 - combobox và popup phải được style đúng theo theme sáng/tối;
 - phần security cho đổi mật khẩu nếu đang đăng nhập bằng password account.
 
@@ -269,7 +269,8 @@ Ghi chú:
 
 ## 8. Current runtime notes
 
-- desktop luôn chạy cloud inference;
+- desktop mặc định chạy edge inference trong worker bounded, không chặn UI;
+- cloud mode tồn tại để benchmark; hybrid dùng cloud như comparison/sync path;
 - camera preview không upload;
 - model component telemetry là `layer1_extra_trees`, `layer1_random_forest`, `layer2_cascade`;
 - nếu component bị thiếu, UI giữ giá trị cũ thay vì nhảy về `0.0%`;

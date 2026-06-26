@@ -10,12 +10,18 @@ project_root = Path(__file__).resolve().parent
 hiddenimports = [
     "cv2",
     "numpy",
+    "joblib",
+    "sklearn.ensemble._forest",
+    "sklearn.tree._classes",
     "onnxruntime",
     "onnxruntime.capi.onnxruntime_pybind11_state",
     "xgboost",
 ]
 hiddenimports += collect_submodules("mediapipe")
 hiddenimports += collect_submodules("onnxruntime")
+hiddenimports += collect_submodules("sklearn.ensemble")
+hiddenimports += collect_submodules("sklearn.tree")
+hiddenimports += collect_submodules("sklearn.utils")
 
 mediapipe_datas = collect_data_files("mediapipe", include_py_files=False)
 
@@ -27,7 +33,7 @@ def add_data(path: Path, target: str) -> tuple[str, str] | None:
 datas = [
     item
     for item in [
-        add_data(project_root / "models" / "product_4class_fixed_triple_xgb", "models/product_4class_fixed_triple_xgb"),
+        add_data(project_root / "models" / "deep_forest_product_4class", "models/deep_forest_product_4class"),
         add_data(project_root / "models" / "face_landmarker.task", "models"),
         add_data(project_root / "assets", "assets"),
         add_data(project_root / "data", "data"),

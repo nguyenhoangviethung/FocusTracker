@@ -1,7 +1,8 @@
 # FocusFlow AI
 
-FocusFlow AI là hệ thống edge-to-cloud theo dõi mức độ tập trung bằng webcam,
-MediaPipe và model 4-class calibrated DeepForest.
+FocusFlow AI là hệ thống edge-first theo dõi mức độ tập trung bằng webcam,
+MediaPipe và model 4-class calibrated DeepForest. Quyết định mặc định chạy tại
+desktop; cloud giữ lifecycle, history, dashboard và mode benchmark.
 
 ## Tài liệu
 
@@ -18,10 +19,10 @@ Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Work
 
 - `main.py`: điểm vào duy nhất của ứng dụng.
 - `ui/`: giao diện desktop PyQt6.
-- `tracking/`: trích xuất đặc trưng, buffer 30 frame và model adapter dùng phía cloud.
+- `tracking/`: trích xuất đặc trưng, buffer 30 frame và edge inference worker.
 - `edge/`: REST/WebSocket client cho Cloud Run.
 - `shared/`: Pydantic contracts dùng chung.
-- `server/`: FastAPI gateway, cloud inference và persistence adapters.
+- `server/`: FastAPI gateway, optional cloud inference và persistence adapters.
 - `deploy/gcp/`: Docker, Cloud Build và hướng dẫn Google Cloud Console.
 - `models/deep_forest_product_4class/`: artifact runtime chính gồm `model.joblib` và `summary.json`.
 - `models/face_landmarker.task`: model MediaPipe FaceMesh.

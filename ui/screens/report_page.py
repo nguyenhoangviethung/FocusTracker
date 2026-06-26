@@ -455,7 +455,7 @@ class ReportPage(ThemedPage):
             ts = str(rec.get("timestamp", ""))[:16].replace("T", " ")
             timestamp = str(rec.get("timestamp") or "").strip()
             status = str(rec.get("status") or rec.get("report_status") or "completed").strip().lower()
-            mode = str(rec.get("inference_mode") or "cloud").strip().lower()
+            mode = str(rec.get("inference_mode") or "local").strip().lower()
 
             select_row = QHBoxLayout()
             select_box = QCheckBox("Select")
@@ -562,7 +562,7 @@ class ReportPage(ThemedPage):
                 "minute_focus_scores": summary.get("minute_focus_scores") or rec.get("minute_focus_scores") or [],
                 "report_status": rec.get("report_status") or "completed",
                 "report_completed_at": rec.get("report_completed_at") or "",
-                "inference_mode": rec.get("inference_mode") or summary.get("inference_mode") or "cloud",
+                "inference_mode": rec.get("inference_mode") or summary.get("inference_mode") or "local",
                 "cloud_session_id": rec.get("cloud_session_id") or "",
             }
             if is_meaningful_session_record(mapped):

@@ -83,7 +83,7 @@ class ActiveSessionPage(ThemedPage):
         self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
         self.camera_signal = QLabel("Signal: Waiting for Phase 2")
         self.camera_state = QLabel("State : FOCUSED")
-        self.cloud_status = QLabel("Cloud: waiting for session")
+        self.cloud_status = QLabel("Cloud: lifecycle sync pending")
         
         self.camera_card.layout.addLayout(cam_header)
         self.camera_card.layout.addWidget(self.camera_preview)
@@ -143,7 +143,7 @@ class ActiveSessionPage(ThemedPage):
         self.status_label.setText("STATUS: STARTING")
         self.camera_signal.setText("Signal: Starting camera/model")
         self.camera_state.setText("State : WARMING_UP")
-        self.cloud_status.setText("Cloud: connecting...")
+        self.cloud_status.setText("Cloud: preparing lifecycle sync...")
         self.extra_trees_state.setText("Layer 1 ExtraTrees : WARMING UP")
         self.random_forest_state.setText("Layer 1 RandomForest : WARMING UP")
         self.cascade_state.setText("Layer 2 Cascade : WARMING UP")
@@ -247,7 +247,8 @@ class ActiveSessionPage(ThemedPage):
         
         sig_text = f"Signal: {focus_score*100:.1f}% | {face_text} | {fps:.1f} FPS" if model_ready else f"Signal: gathering 30 frames | {face_text} | {fps:.1f} FPS"
         self.camera_signal.setText(sig_text)
-        self.camera_state.setText(f"State : AI={ai_state}")
+        source = str(payload.get("inference_source") or "edge").upper()
+        self.camera_state.setText(f"State : AI={ai_state} | Source: {source}")
         self.status_label.setText(f"STATUS: {state}")
         
         self.status_label.setStyleSheet(f"color: {self.theme.color('accent_focus') if state == 'FOCUSED' else self.theme.color('accent_warn')};")
@@ -340,7 +341,7 @@ class ActiveSessionPage(ThemedPage):
             "minute_scores": ms, "average_score": avg, "completed": completed,
             "total_seconds": max(0, self._tracked_seconds), "focused_seconds": max(0, self._focused_seconds),
             "distraction_count": max(0, self._distraction_count), "focus_streak_seconds": float(self._best_focus_streak),
-            "inference_mode": str(self._session_config.get("inference_mode", "cloud")),
+            "inference_mode": str(self._session_config.get("inference_mode", "local")),
             "cloud_session_id": (
                 self._tracker.cloud_session_id if self._tracker else ""
             ),

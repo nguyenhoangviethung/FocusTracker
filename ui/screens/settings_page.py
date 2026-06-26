@@ -104,6 +104,17 @@ class SettingsPage(ThemedPage):
         self._prepare_combo(self.session_combo)
         session_layout.addWidget(self.session_combo)
         self.focus_card.layout.addLayout(session_layout)
+
+        inference_layout = QHBoxLayout()
+        inference_layout.addWidget(QLabel("Inference Mode:"))
+        self.inference_combo = QComboBox()
+        self.inference_combo.addItem("Edge (Local)", "local")
+        self.inference_combo.addItem("Cloud", "cloud")
+        self.inference_combo.addItem("Edge + Cloud Sync", "hybrid")
+        self._prepare_combo(self.inference_combo)
+        inference_layout.addWidget(self.inference_combo)
+        inference_layout.addStretch()
+        self.focus_card.layout.addLayout(inference_layout)
         
         # 3. Notifications & Sound Alerts
         self.alerts_card = Card()
@@ -171,7 +182,7 @@ class SettingsPage(ThemedPage):
     def _apply_combo_theme(self) -> None:
         combo_style = self.theme.combo_box_stylesheet()
         popup_style = self.theme.combo_popup_stylesheet()
-        for combo in (self.camera_combo, self.goal_combo, self.session_combo):
+        for combo in (self.camera_combo, self.goal_combo, self.session_combo, self.inference_combo):
             combo.setStyleSheet(combo_style)
             combo.view().setStyleSheet(popup_style)
 
@@ -226,7 +237,7 @@ class SettingsPage(ThemedPage):
             "auto_hide_camera": self.chk_autohide.isChecked(),
             "show_landmarks": self.chk_landmarks.isChecked(),
             "camera_index": self.camera_combo.currentIndex(),
-            "inference_mode": "cloud",
+            "inference_mode": str(self.inference_combo.currentData() or "local"),
         }
 
     def apply_settings(self, settings: dict) -> None:
@@ -240,6 +251,9 @@ class SettingsPage(ThemedPage):
         
         session_def = settings.get("session_minutes", 25)
         self.session_combo.setCurrentText(f"{session_def} Mins")
+        inference_mode = str(settings.get("inference_mode") or "local").lower()
+        mode_index = self.inference_combo.findData(inference_mode)
+        self.inference_combo.setCurrentIndex(max(0, mode_index))
         
         self.chk_complete.setChecked(settings.get("sound_session_complete", True))
         self.chk_distract.setChecked(settings.get("sound_distraction_alert", False))

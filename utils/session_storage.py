@@ -94,7 +94,7 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
         "completed": completed,
     }
     if record.get("inference_mode"):
-        normalized["inference_mode"] = str(record.get("inference_mode") or "cloud")
+        normalized["inference_mode"] = str(record.get("inference_mode") or "local")
     if record.get("cloud_session_id"):
         normalized["cloud_session_id"] = str(record.get("cloud_session_id") or "")
     if record.get("report_status"):

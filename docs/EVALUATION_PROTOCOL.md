@@ -86,13 +86,14 @@ interval bootstrap theo video/person.
 
 ## 5. Privacy và offline
 
-Cloud-only demo hiện tại giảm truyền raw video và tập trung lifecycle,
-observability, persistence và scale Cloud Run. Nó không phải "privacy tuyệt
-đối" vì `(30,168)` vẫn là biometric-derived telemetry. Production cần TLS,
-short-lived user token, least-privilege service account, retention/deletion
-policy và consent UI.
+Edge-first runtime hiện tại giữ quyết định local và dùng cloud cho lifecycle,
+observability, persistence, scale benchmark hoặc đối chiếu ở hybrid mode. Nó
+không phải "privacy tuyệt đối" vì `(30,168)` vẫn là biometric-derived telemetry
+khi được gửi trong cloud/hybrid mode. Cloud production vẫn cần TLS, short-lived
+user token, least-privilege service account, retention/deletion policy và
+consent UI.
 
-DeepForest product được benchmark riêng trên CPU, nhưng quyết định local-only
-hay cloud phải dựa trên raw-video E2E, RAM/bundle size, battery, update policy
-và reliability; không chỉ dựa vào model-side latency. Một local/offline mode là
-hướng product hợp lý nếu các benchmark và threat model chứng minh được nó.
+DeepForest product được benchmark riêng trên CPU, nhưng edge-first vẫn phải được
+đánh giá bằng raw-video E2E, RAM/bundle size, battery, update policy và
+reliability; không chỉ dựa vào model-side latency. Cloud mode cũng phải có báo
+cáo round-trip độc lập để không trộn lẫn hai trải nghiệm.

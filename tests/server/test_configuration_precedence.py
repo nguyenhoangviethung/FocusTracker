@@ -13,7 +13,7 @@ def test_cloud_environment_overrides_stale_local_settings(monkeypatch) -> None:
     assert settings["cloud_api_url"] == cloud_url
 
 
-def test_tracker_accepts_server_api_key_for_desktop_cloud_requests(monkeypatch) -> None:
+def test_tracker_preserves_explicit_hybrid_mode_and_accepts_cloud_api_key(monkeypatch) -> None:
     monkeypatch.delenv("FOCUSFLOW_CLOUD_API_KEY", raising=False)
     monkeypatch.setenv("FOCUSFLOW_API_KEY", "shared-api-key")
     monkeypatch.setenv("FOCUSFLOW_INFERENCE_MODE", "hybrid")
@@ -26,13 +26,21 @@ def test_tracker_accepts_server_api_key_for_desktop_cloud_requests(monkeypatch) 
         }
     )
 
-    assert config.inference_mode == "cloud"
+    assert config.inference_mode == "hybrid"
     assert config.cloud_api_key == "shared-api-key"
 
 
-def test_settings_normalize_to_cloud_only(monkeypatch) -> None:
+def test_settings_environment_selects_a_supported_inference_mode(monkeypatch) -> None:
     monkeypatch.setenv("FOCUSFLOW_INFERENCE_MODE", "local")
 
     settings = normalize_settings({"inference_mode": "hybrid"})
 
-    assert settings["inference_mode"] == "cloud"
+    assert settings["inference_mode"] == "local"
+
+
+def test_settings_defaults_to_local_when_no_inference_mode_is_configured(monkeypatch) -> None:
+    monkeypatch.delenv("FOCUSFLOW_INFERENCE_MODE", raising=False)
+
+    settings = normalize_settings({})
+
+    assert settings["inference_mode"] == "local"

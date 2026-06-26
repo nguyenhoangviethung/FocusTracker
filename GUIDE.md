@@ -31,7 +31,9 @@ labels:             very_low, low, medium, high
 The edge extractor is `tracking.detector.FaceFeatureDetector`. It uses
 aspect-correct canonical landmarks, depth proxies, iris measurements,
 MediaPipe blendshapes, and facial transformation matrices. Missing faces do
-not enter the buffer. The server is the only place that loads `model.joblib`.
+not enter the buffer. The same immutable `model.joblib` bundle is loaded by the
+edge worker for local inference and by Cloud Run for explicit cloud/benchmark
+inference.
 
 ## Artifact
 
@@ -55,11 +57,12 @@ state = "ENGAGED" if prediction in {2, 3} else "DISTRACTED"
 ```
 
 The response exposes `layer1_extra_trees`, `layer1_random_forest`, and
-`layer2_cascade` as component telemetry. `focus_score` is telemetry only; the
-state remains the calibrated 4-class argmax result.
+`layer2_cascade` as component telemetry. `ai_state` retains the calibrated
+4-class argmax result. The product UI maps its displayed `state` through the
+documented `focus_score > 0.50` operating policy; face absence still wins via
+the face-presence guard.
 
-The app maps `ENGAGED` to final `FOCUSED`; face absence still wins via the
-face-presence guard. There is no OS telemetry or heuristic override.
+There is no OS telemetry or heuristic override.
 
 ## Runtime Code Map
 
@@ -67,8 +70,8 @@ face-presence guard. There is no OS telemetry or heuristic override.
 |---|---|
 | `tracking/detector.py` | Production `depth_robust_v2` frame extraction |
 | `tracking/buffer.py` | Builds `(30,168)` windows and `(30,504)` enrichment |
-| `tracking/inference.py` | Loads and evaluates the calibrated DeepForest bundle |
-| `tracking/tracker.py` | Camera thread and cloud telemetry queue |
+| `tracking/inference.py` | Loads and evaluates the calibrated DeepForest bundle on edge or cloud |
+| `tracking/tracker.py` | Camera thread, bounded edge inference worker, and optional cloud transport |
 | `server/core/inference.py` | Thread-safe cloud inference adapter |
 
 ## Fallbacks

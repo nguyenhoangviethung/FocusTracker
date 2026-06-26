@@ -9,21 +9,23 @@ Hệ thống cần nhận diện bốn mức engagement từ webcam, phản hồ
 thực trên CPU và không truyền ảnh khuôn mặt ra khỏi thiết bị. Kiến trúc được
 tách thành hai biên triển khai:
 
-- **Edge desktop:** giao diện PyQt6, OpenCV, MediaPipe, bộ đệm 30 khung hình và
-  client REST/WebSocket.
-- **Cloud backend:** FastAPI trên Cloud Run, calibrated DeepForest, Firestore và
-  Pub/Sub.
+- **Edge desktop:** giao diện PyQt6, OpenCV, MediaPipe, bộ đệm 30 khung hình,
+  calibrated DeepForest và client REST/WebSocket.
+- **Cloud backend:** FastAPI trên Cloud Run, optional cloud DeepForest,
+  Firestore và Pub/Sub.
 
-Thiết kế hiện tại là **cloud-only inference**. Khi mất mạng, client hiển thị
-trạng thái kết nối lại và không sinh dự đoán cục bộ giả. Các artifact ONNX trong
-repo là legacy và không thuộc luồng production.
+Thiết kế hiện tại là **edge-first inference**. Local worker chạy artifact
+DeepForest trên desktop và giữ camera/UI độc lập với mạng. Cloud mode còn lại
+cho benchmark; hybrid đồng bộ một luồng so sánh nhưng không thay thế edge result
+trên UI. Các artifact ONNX trong repo là legacy và không thuộc luồng production.
 
 ## 2. Các quyết định kiến trúc
 
 | Quyết định | Lý do |
 | --- | --- |
 | Trích xuất đặc trưng tại edge | Giảm dữ liệu truyền và giữ ảnh ở thiết bị |
-| Hợp nhất API và inference trong một Cloud Run service | Giảm network hop và đơn giản hóa demo |
+| Giữ cloud inference trong một Cloud Run service | Đơn giản hóa benchmark cloud và dashboard |
+| Quyết định primary ở edge | Giảm phụ thuộc mạng và giảm truyền biometric telemetry |
 | Dùng contract Pydantic dùng chung | Tránh lệch schema giữa desktop và server |
 | Repository pattern cho Firestore | Cho phép test bằng in-memory adapter |
 | Hàng đợi bounded, latest-value | Không để UI/network bị backlog vô hạn |
@@ -56,20 +58,19 @@ UI không truy cập Firestore và model trực tiếp. Edge chỉ giao tiếp v
 ## 5. Luồng suy luận
 
 Mỗi frame được MediaPipe chuyển thành vector `depth_robust_v2` 168 chiều. Bộ
-đệm tạo chuỗi `(30,168)`; tracker gửi tối đa một gói mỗi giây qua WebSocket.
-Server kiểm tra API key, phiên, thứ tự gói và shape, sau đó làm giàu thành
-`(30,504)`. Model adapter tạo vector thống kê basic 3529 chiều, chạy cascade
-ExtraTrees + RandomForest hai tầng, rồi áp dụng temperature `1.25` và class
-logit bias `[1.5, 2.5, 0.0, 0.5]` trước argmax bốn lớp.
-`focus_score` chỉ phục vụ đồ thị và thống kê. Sequence diagram nằm tại
-[`04_inference_sequence.mmd`](uml/04_inference_sequence.mmd).
+đệm tạo chuỗi `(30,168)`, edge worker làm giàu thành `(30,504)`, tạo vector
+basic 3529 chiều và chạy cascade ExtraTrees + RandomForest hai tầng. Artifact
+áp dụng temperature `1.25` và class logit bias `[1.5, 2.5, 0.0, 0.5]` trước
+argmax bốn lớp. Ở mode cloud/hybrid, tracker có thể gửi tối đa một gói mỗi giây
+qua WebSocket để đo/đối chiếu. `focus_score` phục vụ đồ thị và thống kê.
+Sequence diagram nằm tại [`04_inference_sequence.mmd`](uml/04_inference_sequence.mmd).
 
 ## 6. Vòng đời phiên
 
-Client chuyển qua các trạng thái `Idle`, `Starting`, `WarmingUp`, `Connecting`,
-`TrackingCloud`, `Reconnecting`, `Paused`, `Completing`, `Report` và `Error`.
-Không có trạng thái `TrackingLocal` trong phiên bản hiện tại. Chi tiết nằm tại
-[`05_session_state.mmd`](uml/05_session_state.mmd).
+Client chuyển qua các trạng thái `Idle`, `Starting`, `WarmingUp`,
+`TrackingEdge`, `TrackingCloud`, `Reconnecting`, `Paused`, `Completing`,
+`Report` và `Error`. `TrackingCloud` chỉ là cloud/hybrid mode; local không bị
+chặn khi cloud unavailable. Chi tiết nằm tại [`05_session_state.mmd`](uml/05_session_state.mmd).
 
 ## 7. API và protocol v1
 
@@ -107,7 +108,8 @@ giữa contract và entity được mô tả tại
 
 ## 10. Giới hạn hiện tại
 
-- Chưa có suy luận local khi mất mạng.
+- Local inference cần benchmark trên nhiều cấu hình máy để xác định bundle size,
+  CPU, RAM và battery impact thực tế.
 - Raw-video end-to-end phải được benchmark theo `docs/EVALUATION_PROTOCOL.md`;
   không dùng model-side latency thay thế trải nghiệm người dùng.
 - Chưa có generalization study subject-disjoint ngoài DAiSEE.

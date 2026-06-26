@@ -24,6 +24,7 @@ logger = get_logger("tracker")
 INFERENCE_EVERY_N_FRAMES = 3
 PREVIEW_EVERY_N_FRAMES = 2
 CLOUD_TELEMETRY_INTERVAL_SECONDS = 1.0
+FOCUS_THRESHOLD = 0.5
 @dataclass(slots=True)
 class TrackerConfig:
     camera_index: int = 0
@@ -32,7 +33,7 @@ class TrackerConfig:
     camera_distance_scale: float = 0.085
     engagement_threshold: float = 0.54
     smoothing_window: int = 5
-    inference_mode: str = "cloud"
+    inference_mode: str = "local"
     cloud_api_url: str = ""
     cloud_api_key: str = ""
     device_id: str = ""
@@ -48,7 +49,9 @@ class TrackerConfig:
             camera_distance_scale=_to_float(payload.get("camera_distance_scale"), 0.18),
             engagement_threshold=_to_float(payload.get("engagement_threshold"), 0.54),
             smoothing_window=max(3, min(5, _to_int(payload.get("smoothing_window"), 5))),
-            inference_mode="cloud",
+            inference_mode=_normalize_inference_mode(
+                os.getenv("FOCUSFLOW_INFERENCE_MODE", "") or payload.get("inference_mode")
+            ),
             cloud_api_url=str(
                 os.getenv("FOCUSFLOW_CLOUD_API_URL", "")
                 or payload.get("cloud_api_url")
@@ -95,6 +98,9 @@ class FocusSessionTracker:
         self._pause_event = threading.Event()
         self._camera_thread: threading.Thread | None = None
         self._network_thread: threading.Thread | None = None
+        self._local_thread: threading.Thread | None = None
+        self._local_packets: queue.Queue[np.ndarray] = queue.Queue(maxsize=2)
+        self._local_responses: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=2)
         self._cloud_packets: queue.Queue[TelemetryPacket] = queue.Queue(maxsize=2)
         self._cloud_responses: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=4)
         self._cloud_session_id = ""
@@ -110,6 +116,13 @@ class FocusSessionTracker:
     def start(self) -> None:
         self._stop_event.clear()
         self._pause_event.clear()
+        if self._uses_local_inference:
+            self._local_thread = threading.Thread(
+                target=self._local_inference_loop,
+                name="focusflow-local-inference",
+                daemon=True,
+            )
+            self._local_thread.start()
         self._network_thread = threading.Thread(
             target=self._network_loop,
             name="focusflow-network",
@@ -139,10 +152,18 @@ class FocusSessionTracker:
     def stop(self) -> None:
         self._stop_event.set()
         self._pause_event.clear()
-        for thread in [self._camera_thread, self._network_thread]:
+        for thread in [self._camera_thread, self._local_thread, self._network_thread]:
             if thread and thread.is_alive():
                 thread.join(timeout=1.5)
         logger.info("FocusSessionTracker stopped")
+
+    @property
+    def _uses_local_inference(self) -> bool:
+        return self.config.inference_mode in {"local", "hybrid"}
+
+    @property
+    def _uses_cloud_inference(self) -> bool:
+        return self.config.inference_mode in {"cloud", "hybrid"}
 
     def complete_cloud_session(self, summary: dict[str, Any]) -> None:
         if self._cloud_client is None or not self._cloud_session_id:
@@ -275,7 +296,7 @@ class FocusSessionTracker:
                             "model_ready": model_ready,
                             "components": None,
                             "weights": None,
-                            "inference_source": "cloud",
+                            "inference_source": "edge" if self._uses_local_inference else "cloud",
                             "state": state,
                             "fps": fps_counter.tick(),
                         }
@@ -293,13 +314,24 @@ class FocusSessionTracker:
                 }
                 if enriched is not None:
                     should_infer = frame_index % INFERENCE_EVERY_N_FRAMES == 0
-                    if should_infer and raw_sequence is not None:
-                        self._queue_cloud_packet(raw_sequence, detection.face_found)
+                    if should_infer:
+                        if self._uses_local_inference:
+                            self._queue_local_sequence(enriched)
+                        if self._uses_cloud_inference and raw_sequence is not None:
+                            self._queue_cloud_packet(raw_sequence, detection.face_found)
 
+                    local_result = self._latest_local_result()
                     cloud_result = self._latest_cloud_result()
-                    if cloud_result is not None:
-                        last_ai_result = cloud_result
-                        ai_result = dict(cloud_result)
+                    # Hybrid is edge-first: cloud responses are a synchronized
+                    # comparison path and a recovery path if local loading fails.
+                    selected_result = (
+                        local_result if self._uses_local_inference and local_result is not None
+                        else cloud_result if self._uses_cloud_inference and cloud_result is not None
+                        else None
+                    )
+                    if selected_result is not None:
+                        last_ai_result = selected_result
+                        ai_result = dict(selected_result)
                     elif last_ai_result is not None:
                         ai_result = dict(last_ai_result)
 
@@ -329,7 +361,7 @@ class FocusSessionTracker:
                         "probability": ai_result.get("probability", probability),
                         "raw_probability": ai_result.get("raw_probability", ai_result.get("probability", probability)),
                         "focus_score": probability,
-                        "ai_state": ai_result.get("state", "WARMING_UP"),
+                        "ai_state": ai_result.get("ai_state", ai_result.get("state", "WARMING_UP")),
                         "model_ready": model_ready,
                         "components": ai_result.get("components"),
                         "weights": ai_result.get("weights"),
@@ -352,6 +384,15 @@ class FocusSessionTracker:
 
     def _network_loop(self) -> None:
         if not self.config.cloud_api_url or not self.config.cloud_api_key or not self.config.device_id:
+            if self.config.inference_mode == "local":
+                self._put(
+                    {
+                        "type": "network_status",
+                        "status": "local_only",
+                        "message": "Edge inference is active; cloud sync is not configured.",
+                    }
+                )
+                return
             missing = [
                 name
                 for name, value in (
@@ -410,16 +451,26 @@ class FocusSessionTracker:
                 )
                 self._stop_event.wait(delay)
 
-        if self._cloud_session_id and not self._stop_event.is_set():
+        if self._cloud_session_id and not self._stop_event.is_set() and self._uses_cloud_inference:
             client.run_telemetry_loop(
                 self._cloud_session_id,
                 self._cloud_packets,
                 self._cloud_responses,
                 self._stop_event,
             )
+        elif self._cloud_session_id and not self._stop_event.is_set():
+            self._put(
+                {
+                    "type": "network_status",
+                    "status": "session_created",
+                    "session_id": self._cloud_session_id,
+                    "message": "Edge inference active; cloud stores lifecycle and summary only.",
+                }
+            )
+            self._stop_event.wait()
 
     def _queue_cloud_packet(self, raw_sequence, face_found: bool) -> None:
-        if not self._cloud_session_id:
+        if not self._uses_cloud_inference or not self._cloud_session_id:
             return
         now = time.monotonic()
         if now - self._last_cloud_packet_at < CLOUD_TELEMETRY_INTERVAL_SECONDS:
@@ -450,6 +501,66 @@ class FocusSessionTracker:
             except queue.Full:
                 pass
 
+    def _queue_local_sequence(self, enriched_sequence: np.ndarray) -> None:
+        try:
+            self._local_packets.put_nowait(np.asarray(enriched_sequence, dtype=np.float32).copy())
+        except queue.Full:
+            try:
+                self._local_packets.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._local_packets.put_nowait(np.asarray(enriched_sequence, dtype=np.float32).copy())
+            except queue.Full:
+                pass
+
+    def _local_inference_loop(self) -> None:
+        try:
+            from tracking.inference import DeepForestInferencer
+
+            inferencer = DeepForestInferencer()
+        except Exception as exc:
+            logger.exception("Unable to load edge DeepForest model")
+            self._put(
+                {
+                    "type": "status",
+                    "message": f"Edge model unavailable: {exc.__class__.__name__}",
+                }
+            )
+            return
+
+        while not self._stop_event.is_set():
+            try:
+                sequence = self._local_packets.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            try:
+                prediction = inferencer.predict(sequence)
+                focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
+                self._put_latest(
+                    self._local_responses,
+                    {
+                        **prediction,
+                        "probability": focus_score,
+                        "focus_score": focus_score,
+                        "state": "FOCUSED" if focus_score > FOCUS_THRESHOLD else "DISTRACTED",
+                        "ai_state": prediction.get("state", "DISTRACTED"),
+                        "inference_source": "edge",
+                        "cloud_roundtrip_latency_ms": None,
+                    },
+                )
+            except Exception:
+                logger.exception("Edge DeepForest inference failed")
+                self._put({"type": "status", "message": "Edge inference failed; waiting for next window."})
+
+    def _latest_local_result(self) -> dict[str, Any] | None:
+        latest: dict[str, Any] | None = None
+        while True:
+            try:
+                latest = self._local_responses.get_nowait()
+            except queue.Empty:
+                return latest
+
     def _latest_cloud_result(self) -> dict[str, Any] | None:
         latest: dict[str, Any] | None = None
         while True:
@@ -470,6 +581,20 @@ class FocusSessionTracker:
                     "inference_source": "cloud",
                 }
         return latest
+
+    @staticmethod
+    def _put_latest(target: queue.Queue[Any], payload: Any) -> None:
+        try:
+            target.put_nowait(payload)
+        except queue.Full:
+            try:
+                target.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                target.put_nowait(payload)
+            except queue.Full:
+                pass
 
     def _open_capture(self) -> cv2.VideoCapture | None:
         source = self.config.capture_source()
@@ -540,6 +665,11 @@ def _to_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
     return bool(value)
+
+
+def _normalize_inference_mode(value: Any) -> str:
+    mode = str(value or "local").strip().lower()
+    return mode if mode in {"local", "cloud", "hybrid"} else "local"
 
 
 def _to_float(value: Any, default: float) -> float:

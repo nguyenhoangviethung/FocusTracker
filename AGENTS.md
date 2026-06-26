@@ -6,12 +6,13 @@ FocusFlow AI is a privacy-oriented distributed focus monitoring system.
 
 The product has two runtime sides:
 
-- **Edge desktop client:** PyQt6, OpenCV, and MediaPipe. It captures webcam
-  frames, extracts a 168-value depth-robust facial feature vector per frame, renders the
-  local preview, and sends feature sequences to the cloud.
-- **Google Cloud backend:** FastAPI on Cloud Run. It enriches raw sequences,
-  runs the deployed calibrated 4-class DeepForest model, stores session
-  summaries, and records report completion metadata.
+- **Edge desktop client:** PyQt6, OpenCV, MediaPipe, and the bundled calibrated
+  DeepForest artifact. It captures webcam frames, extracts a 168-value
+  depth-robust facial feature vector per frame, enriches local windows, runs the
+  primary decision locally, and renders the preview.
+- **Google Cloud backend:** FastAPI on Cloud Run. It provides session lifecycle,
+  optional cloud/shadow inference, durable summaries, dashboard data, and report
+  completion metadata.
 
 The project is intentionally **vision-only**.
 
@@ -45,14 +46,15 @@ production model is:
 ```text
 raw frame features:       168 values (depth_robust_v2)
 raw temporal sequence:    (30, 168)
-enriched model sequence:  (30, 504)
+enriched model sequence:  (30, 504), on edge and cloud
 tabular model features:   3529 basic aggregate values
 components:               layer1 ExtraTrees + RandomForest, layer2 cascade
 calibration:              temperature=1.25, class biases=[1.5, 2.5, 0.0, 0.5]
-decision rule:            argmax over calibrated 4-class probabilities
+raw model decision:       argmax over calibrated 4-class probabilities
+UI state policy:          focus score > 0.50, except face-presence guard
 runtime:                  CPU, scikit-learn/joblib
 class labels:             very_low, low, medium, high
-focus score:              P(medium) + P(high), telemetry only
+focus score:              P(medium) + P(high), presentation telemetry
 ```
 
 `tracking.buffer.enrich_raw_sequence()` is the canonical transformation from
@@ -66,8 +68,9 @@ focus score:              P(medium) + P(high), telemetry only
 │   │                                                                 │
 │   ├── Camera worker: OpenCV -> MediaPipe -> raw feature [168]       │
 │   ├── Sliding buffer: 30 frames -> raw sequence [30, 168]           │
+│   ├── Local DeepForest: enrich [30,168] -> [30,504] -> decision     │
 │   ├── Preview renderer: local frames only                           │
-│   └── Network worker: session REST + telemetry WebSocket            │
+│   └── Network worker: session REST + optional cloud/shadow stream   │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ TLS
                                 │ JSON v1 initially
@@ -78,9 +81,9 @@ focus score:              P(medium) + P(high), telemetry only
 │   ├── FastAPI REST session lifecycle                                │
 │   ├── WebSocket telemetry ingestion                                 │
 │   ├── shape/schema/idempotency validation                           │
-│   ├── enrich [30,168] -> [30,504]                                   │
-│   ├── calibrated DeepForest 4-class CPU inference                   │
-│   └── model-only focus decision                                     │
+│   ├── optional enrich [30,168] -> [30,504] + cloud inference        │
+│   ├── session/report persistence and dashboard snapshots             │
+│   └── benchmark and operational comparison path                      │
 │                                                                     │
 │ Firestore                                                           │
 │   ├── session metadata and status                                   │
@@ -322,14 +325,16 @@ because that would become a hot document at large scale.
 
 ## 8. Desktop Runtime Modes
 
-During migration the desktop supports:
+The desktop supports:
 
-- `local`: current bundled model inference, no cloud required;
-- `cloud`: edge feature extraction, cloud inference;
-- `hybrid`: cloud preferred, local fallback after network timeout.
+- `local`: bundled model inference at the edge; cloud lifecycle sync is optional;
+- `cloud`: edge feature extraction with cloud inference, for benchmark and
+  operational comparison;
+- `hybrid`: edge inference is the primary decision; cloud receives optional
+  synchronized windows for comparison and durable lifecycle data.
 
-Production target is `cloud`. Thesis demos should keep `hybrid` available so a
-network interruption does not destroy the demonstration.
+Production target is `local`. Thesis demos may use `hybrid` to compare edge and
+cloud behavior without making a network round trip part of the user decision.
 
 The UI thread must never perform camera capture, inference, HTTP, or WebSocket
 I/O directly.

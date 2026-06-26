@@ -125,7 +125,7 @@ class FocusFlowApp(QMainWindow):
             focus_streak_seconds=float(summary.get("focus_streak_seconds", 0.0)),
         )
         record.update({
-            "inference_mode": str(summary.get("inference_mode") or "cloud"),
+            "inference_mode": str(summary.get("inference_mode") or "local"),
             "cloud_session_id": str(summary.get("cloud_session_id") or ""),
         })
         
