@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 from server.api.dashboard_ui import render_dashboard_html
+from server.api.release_ui import render_release_html
 from server.config import ServerSettings
 from server.core.inference import CloudInferenceEngine
 from server.repositories.sessions import SessionRepository
@@ -202,6 +203,10 @@ def _dashboard_html(settings: ServerSettings) -> str:
     return render_dashboard_html(settings.api_key or "")
 
 
+def _release_html(settings: ServerSettings) -> str:
+    return render_release_html(settings)
+
+
 def _expire_stale_sessions(settings: ServerSettings, repository: SessionRepository) -> list[str]:
     timeout_seconds = max(60, int(settings.stale_session_timeout_seconds))
     cutoff = utc_now() - timedelta(seconds=timeout_seconds)
@@ -245,6 +250,11 @@ def _verify_api_key(settings: ServerSettings, supplied: str | None) -> None:
 @router.get("/")
 async def root() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/download", response_class=HTMLResponse, include_in_schema=False)
+async def download_portal(request: Request) -> HTMLResponse:
+    return HTMLResponse(_release_html(request.app.state.settings))
 
 
 @router.get("/dashboard", response_class=HTMLResponse)

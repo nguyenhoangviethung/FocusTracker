@@ -9,16 +9,22 @@ Use a Cloud Storage bucket configured for static website hosting and upload:
 - `index.html`
 - `404.html`
 - `style.css`
-- `downloads/windows/FocusFlowAI-Windows.exe`
-- `downloads/macos/FocusFlowAI-macOS.dmg`
-- `downloads/linux/FocusFlowAI-Linux.AppImage`
+- `releases/latest/FocusFlowAI-Windows.exe`
+- `releases/latest/FocusFlowAI-macOS.dmg`
+- `releases/latest/FocusFlowAI-Linux.tar.gz`
+- `releases/latest/SHA256SUMS.txt`
 - `docs/QuickStart.pdf`
-- `docs/Checksums.txt`
 
 ## Public links
 
-The landing page links to the release files using relative paths so the same
-structure works both locally and in Cloud Storage.
+The Cloud Run `/download` page can point to the same objects with:
+
+```text
+FOCUSFLOW_RELEASE_BASE_URL=https://storage.googleapis.com/<bucket>/releases/latest
+```
+
+The static landing page can still be uploaded to the bucket for a pure Cloud
+Storage download portal. The release binary layout stays the same.
 
 ## Notes
 

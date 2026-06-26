@@ -110,20 +110,21 @@ Cloud Build trigger.
 
 ## 9. Create Public Download Portal Bucket
 
-For thesis demo distribution, create a public Cloud Storage bucket for the
-static landing page and release artifacts.
+For thesis demo distribution, create a public Cloud Storage bucket for release
+artifacts. Cloud Run can serve `/download` and link directly to these objects.
 
 1. Open **Cloud Storage > Buckets**.
 2. Create a bucket in `asia-southeast1`.
-3. Name it something like `focusflow-downloads`.
+3. Name it `${PROJECT_ID}-focusflow-releases` if you want to use the default
+   Cloud Build substitution.
 4. Keep object access public for demo builds only.
-5. Upload the contents of `deploy/gcp/static-site/`.
-6. Upload OS release files under:
-   - `downloads/windows/`
-   - `downloads/macos/`
-   - `downloads/linux/`
-7. Upload release notes and checksums under `docs/`.
-8. If you use static website hosting, set:
+5. Upload OS release files under `releases/latest/`:
+   - `FocusFlowAI-Windows.exe`
+   - `FocusFlowAI-macOS.dmg`
+   - `FocusFlowAI-Linux.tar.gz`
+   - `SHA256SUMS.txt`
+6. Optionally upload the contents of `deploy/gcp/static-site/`.
+7. If you use static website hosting, set:
    - Main page suffix: `index.html`
    - 404 page: `404.html`
 

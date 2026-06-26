@@ -267,20 +267,28 @@ gcloud run services describe focusflow-api \
 
 ### Step 16: Public download portal
 
-Nếu muốn demo tải app ngay từ browser mà không cần auth tải xuống, tạo thêm
-bucket Cloud Storage public cho landing page và release artifacts.
+Nếu muốn demo tải app ngay từ browser mà không cần auth tải xuống, dùng Cloud
+Storage làm nơi chứa file nặng. Cloud Run chỉ cần render trang `/download` và
+trỏ tới public object URL.
 
-1. Tạo bucket public, ví dụ `focusflow-downloads`.
-2. Upload `deploy/gcp/static-site/index.html`, `404.html`, `style.css`.
-3. Upload file build theo OS:
-   - `downloads/windows/FocusFlowAI-Windows.exe`
-   - `downloads/macos/FocusFlowAI-macOS.dmg`
-   - `downloads/linux/FocusFlowAI-Linux.AppImage`
-4. Upload `docs/QuickStart.pdf` và `docs/Checksums.txt` nếu có.
-5. Bật static website hosting cho bucket và set:
+1. Tạo bucket public, ví dụ `my-thesis-496702-focusflow-releases`.
+2. Upload file build theo OS:
+   - `releases/latest/FocusFlowAI-Windows.exe`
+   - `releases/latest/FocusFlowAI-macOS.dmg`
+   - `releases/latest/FocusFlowAI-Linux.tar.gz`
+   - `releases/latest/SHA256SUMS.txt`
+3. Cloud Build hiện set mặc định:
+
+```text
+FOCUSFLOW_RELEASE_BASE_URL=https://storage.googleapis.com/${PROJECT_ID}-focusflow-releases/releases/latest
+```
+
+4. Nếu muốn host landing page tĩnh hoàn toàn trong bucket, upload thêm
+   `deploy/gcp/static-site/index.html`, `404.html`, `style.css`.
+5. Với static website hosting, set:
    - Main page suffix: `index.html`
    - 404 page: `404.html`
-6. Dùng link public của bucket hoặc custom domain cho trang download.
+6. Dùng link public của bucket, custom domain, hoặc Cloud Run `/download`.
 
 ## Phase I: End-to-end verification
 
