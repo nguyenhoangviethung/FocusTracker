@@ -94,6 +94,7 @@ class DummyApp:
                 "inference_engine": DummyEngine(),
                 "event_publisher": None,
                 "dashboard_cache": cache,
+                "query_limit": 100,
             },
         )()
 
@@ -335,4 +336,50 @@ def test_dashboard_clear_all_deletes_every_recent_session() -> None:
 
     assert result == {"status": "cleared", "deleted_ids": ["s3", "s2", "s1"]}
     assert repository.records == {}
+    assert cache.cleared is True
+
+
+def test_dashboard_update_settings() -> None:
+    from server.api.routes import dashboard_update_settings
+    class DummyCacheWithTtl:
+        def __init__(self) -> None:
+            self.ttl_seconds = 3.0
+            self.cleared = False
+        def clear(self) -> None:
+            self.cleared = True
+
+    class MutableApp:
+        def __init__(self, cache) -> None:
+            self.state = type(
+                "State",
+                (),
+                {
+                    "settings": DummySettings(),
+                    "session_repository": None,
+                    "user_repository": None,
+                    "inference_engine": DummyEngine(),
+                    "event_publisher": None,
+                    "dashboard_cache": cache,
+                    "query_limit": 100,
+                },
+            )()
+
+    class MutableRequest:
+        def __init__(self, cache) -> None:
+            self.app = MutableApp(cache)
+
+    cache = DummyCacheWithTtl()
+    req = MutableRequest(cache)
+
+    result = asyncio.run(
+        dashboard_update_settings(
+            req,
+            {"cache_seconds": 5.0, "query_limit": 50},
+            x_api_key="secret",
+        )
+    )
+
+    assert result == {"status": "success", "cache_seconds": 5.0, "query_limit": 50}
+    assert req.app.state.dashboard_cache.ttl_seconds == 5.0
+    assert req.app.state.query_limit == 50
     assert cache.cleared is True

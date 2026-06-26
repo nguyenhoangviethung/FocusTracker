@@ -14,7 +14,17 @@ def test_summarize_latencies() -> None:
 
 def test_build_summary_counts_results() -> None:
     results = [
-        ClientResult(device_id="a", session_id="1", status="ok", ws_latency_ms=10.0, complete_latency_ms=12.0, state="FOCUSED"),
+        ClientResult(
+            device_id="a",
+            session_id="1",
+            status="ok",
+            ws_latency_ms=10.0,
+            complete_latency_ms=12.0,
+            telemetry_latencies_ms=[8.0, 12.0],
+            packets_attempted=2,
+            packets_succeeded=2,
+            state="FOCUSED",
+        ),
         ClientResult(
             device_id="b",
             session_id="2",
@@ -34,3 +44,8 @@ def test_build_summary_counts_results() -> None:
     assert summary.err == 1
     assert summary.states["FOCUSED"] == 1
     assert summary.failure_stages == {"websocket_stream": 1}
+    assert summary.telemetry_latency_ms["p50"] == 10.0
+    assert summary.packets_attempted == 2
+    assert summary.packets_succeeded == 2
+    assert summary.telemetry_success_rate_pct == 100.0
+    assert summary.telemetry_throughput_rps == 1.333

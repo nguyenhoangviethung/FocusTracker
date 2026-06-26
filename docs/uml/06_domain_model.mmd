@@ -1,0 +1,80 @@
+classDiagram
+    direction TB
+
+    class User {
+        +string user_id
+        +string auth_provider
+        +string username
+        +string email
+        +string display_name
+        +datetime created_at
+        +datetime last_login_at
+    }
+
+    class SessionRecord {
+        +string session_id
+        +string device_id
+        +string user_id
+        +string status
+        +datetime started_at
+        +datetime ended_at
+        +LiveMetrics live_metrics
+        +SessionSummary summary
+    }
+
+    class TelemetryPacket {
+        +string protocol_version
+        +uuid message_id
+        +string session_id
+        +string device_id
+        +int sequence_number
+        +float~30x30~ raw_feature_sequence
+        +bool face_found
+    }
+
+    class InferenceResponse {
+        +uuid message_id
+        +string model_name
+        +float focus_score
+        +string state
+        +float~4~ class_probabilities
+        +int predicted_class
+        +map components
+        +float latency_ms
+    }
+
+    class LiveMetrics {
+        +float current_score
+        +string current_state
+        +int sequence_number
+        +float latency_ms
+        +datetime updated_at
+    }
+
+    class SessionSummary {
+        +int duration_seconds
+        +int focused_seconds
+        +float average_focus
+        +int distraction_count
+        +float focus_streak_seconds
+        +bool completed
+    }
+
+    %% Relationships
+    User "1" --> "*" SessionRecord : owns
+    SessionRecord "1" --> "0..*" TelemetryPacket : receives
+    TelemetryPacket "1" --> "1" InferenceResponse : correlates by message_id
+    SessionRecord "1" --> "1" LiveMetrics : embeds
+    SessionRecord "1" --> "1" SessionSummary : embeds
+
+    %% Styling
+    classDef entityStyle fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#065F46
+    classDef dtoStyle fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E40AF
+    classDef valueStyle fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#92400E
+
+    class User entityStyle
+    class SessionRecord entityStyle
+    class TelemetryPacket dtoStyle
+    class InferenceResponse dtoStyle
+    class LiveMetrics valueStyle
+    class SessionSummary valueStyle

@@ -1,0 +1,51 @@
+stateDiagram-v2
+    [*] --> Idle : Launch application
+
+    Idle --> Starting : Trigger 'Start Session'
+    
+    Starting --> WarmingUp : Webcam stream active
+    Starting --> ErrorState : Stream/Hardware failure (timeout)
+
+    ErrorState --> Idle : Reset/Acknowledge error dialog
+
+    WarmingUp --> ActiveSession : Window buffer filled (30 frames accumulated)
+
+    state ActiveSession {
+        [*] --> Connecting
+        Connecting --> TrackingCloud : Authenticated & WSS connection established
+        
+        state TrackingCloud {
+            [*] --> Streaming
+            Streaming --> FeatureExtracted : Capture frame (1 Hz)
+            FeatureExtracted --> ResponseReceived : Telemetry sent & response processed
+            ResponseReceived --> Streaming : Success
+        }
+
+        TrackingCloud --> Reconnecting : Socket heartbeat lost (WSS disconnected)
+        Reconnecting --> TrackingCloud : Socket re-established
+        Reconnecting --> Connecting : Timeout / Retry limit reached
+    }
+
+    ActiveSession --> Paused : User triggers 'Pause'
+    Paused --> ActiveSession : User triggers 'Resume'
+    
+    ActiveSession --> Completing : User triggers 'Stop' / Target timer ended
+    Paused --> Completing : User triggers 'Stop'
+
+    Completing --> ReportGenerated : Session payload processed & stored
+
+    ReportGenerated --> Idle : Dismiss report summary
+    ReportGenerated --> [*] : Terminate application
+
+    %% Node Styles
+    classDef normalState fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155
+    classDef greenState fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#065F46
+    classDef blueState fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
+    classDef redState fill:#FFF1F2,stroke:#F43F5E,stroke-width:2px,color:#9F1239
+    classDef compositeState fill:#FAF5FF,stroke:#8B5CF6,stroke-width:2px,color:#5B21B6
+
+    class Idle,Paused normalState
+    class Starting,WarmingUp,Connecting,Reconnecting,Completing blueState
+    class TrackingCloud,Streaming,FeatureExtracted,ResponseReceived,ReportGenerated greenState
+    class ErrorState redState
+    class ActiveSession compositeState

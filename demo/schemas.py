@@ -92,6 +92,9 @@ class ClientResult:
     status: str
     ws_latency_ms: float | None = None
     complete_latency_ms: float | None = None
+    telemetry_latencies_ms: list[float] = field(default_factory=list)
+    packets_attempted: int = 0
+    packets_succeeded: int = 0
     state: str | None = None
     focus_score: float | None = None
     error_stage: str | None = None
@@ -122,7 +125,12 @@ class BenchmarkSummary:
     err: int
     wall_seconds: float
     websocket_latency_ms: dict[str, float | None]
+    telemetry_latency_ms: dict[str, float | None]
     completion_latency_ms: dict[str, float | None]
+    packets_attempted: int
+    packets_succeeded: int
+    telemetry_success_rate_pct: float | None
+    telemetry_throughput_rps: float
     states: dict[str, int]
     failure_stages: dict[str, int]
     errors: list[tuple[str, int]]

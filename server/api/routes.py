@@ -243,8 +243,12 @@ async def dashboard(request: Request) -> HTMLResponse:
 
 
 @router.get("/dashboard/api/summary")
-async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]:
-    safe_limit = max(1, min(int(limit or 24), 100))
+async def dashboard_summary(request: Request, limit: int | None = None) -> dict[str, Any]:
+    query_limit = getattr(request.app.state, "query_limit", 100)
+    if limit is not None:
+        query_limit = limit
+    safe_limit = max(1, min(int(query_limit), 100))
+
     cache: DashboardSnapshotCache = request.app.state.dashboard_cache
     settings, repository, _, _, _ = _services(request)
     expired_ids = _expire_stale_sessions(settings, repository)
@@ -261,8 +265,51 @@ async def dashboard_summary(request: Request, limit: int = 24) -> dict[str, Any]
     return {
         **snapshot,
         "dashboard_cache_hit": cache_hit,
-        "dashboard_cache_seconds": DASHBOARD_CACHE_SECONDS,
+        "dashboard_cache_seconds": cache.ttl_seconds,
         "expired_stale_sessions": expired_ids,
+    }
+
+
+@router.post("/dashboard/api/settings")
+async def dashboard_update_settings(
+    request: Request,
+    payload: dict[str, Any],
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, _, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+
+    cache_seconds = payload.get("cache_seconds")
+    query_limit = payload.get("query_limit")
+
+    if cache_seconds is not None:
+        try:
+            val = float(cache_seconds)
+            if val < 0.5 or val > 60.0:
+                raise HTTPException(status_code=422, detail="Cache window must be between 0.5 and 60 seconds")
+            request.app.state.dashboard_cache.ttl_seconds = val
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid cache_seconds value") from exc
+
+    if query_limit is not None:
+        try:
+            val = int(query_limit)
+            if val < 1 or val > 100:
+                raise HTTPException(status_code=422, detail="Query limit must be between 1 and 100")
+            request.app.state.query_limit = val
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid query_limit value") from exc
+
+    request.app.state.dashboard_cache.clear()
+    logger.info(
+        "Dashboard settings updated cache_seconds=%s query_limit=%s",
+        cache_seconds,
+        query_limit,
+    )
+    return {
+        "status": "success",
+        "cache_seconds": request.app.state.dashboard_cache.ttl_seconds,
+        "query_limit": getattr(request.app.state, "query_limit", 100),
     }
 
 

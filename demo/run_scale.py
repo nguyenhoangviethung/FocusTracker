@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--users-manifest", type=Path, default=Path("demo/results/user-manifest.json"))
     parser.add_argument("--stages", default="")
     parser.add_argument("--stream-interval-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--source",
+        choices=("auto", "fixture", "video"),
+        default="auto",
+        help="Use fixture for sustained server-only load or video for full edge processing.",
+    )
     parser.add_argument("--playback-speed", type=float, default=1.0)
     parser.add_argument("--request-timeout-seconds", type=float, default=120.0)
     parser.add_argument("--output", type=Path, default=Path("demo/results"))
@@ -97,7 +103,10 @@ def main() -> None:
     playback_speed = max(0.01, float(args.playback_speed))
     request_timeout_seconds = max(30.0, float(args.request_timeout_seconds))
     verbose = os.getenv("DEMO_VERBOSE", "").strip().lower() in {"1", "true", "yes", "on"}
-    fixtures = load_fixtures(args.features) if stream_interval_seconds <= 0 else []
+    use_fixtures = args.source == "fixture" or (args.source == "auto" and stream_interval_seconds <= 0)
+    fixtures = load_fixtures(args.features) if use_fixtures else []
+    if args.source == "fixture" and not fixtures:
+        raise SystemExit(f"No feature fixtures found in {args.features}")
     if not manifest_entries and not fixtures:
         raise SystemExit(
             f"No video manifest entries found in {args.manifest} and no feature fixtures found in {args.features}"
@@ -127,24 +136,14 @@ def main() -> None:
                     tui.write(f"[{config.device_id}] {message}")
 
             try:
-                if stream_interval_seconds > 0 and source_video:
-                    from demo.virtual_client import replay_video_session
-
-                    outcome = replay_video_session(
-                        config,
-                        Path(source_video),
-                        user_id=str(user_entry.get("user_id") or "") if user_entry else None,
-                        packet_interval_seconds=stream_interval_seconds,
-                        playback_speed=playback_speed,
-                        log=log_step,
-                    )
-                elif fixture is not None:
+                if fixture is not None:
                     raw_seq = [f[:30] for f in fixture["raw_feature_sequence"]]
                     outcome = replay_session(
                         config,
                         raw_feature_sequence=raw_seq,
                         face_found=bool(fixture.get("face_found", True)),
                         session_duration_seconds=stage.duration_seconds,
+                        packet_interval_seconds=stream_interval_seconds,
                         user_id=str(user_entry.get("user_id") or "") if user_entry else None,
                         log=log_step,
                     )
@@ -167,6 +166,9 @@ def main() -> None:
                     status="ok",
                     ws_latency_ms=float(outcome["ws_latency_ms"]),
                     complete_latency_ms=float(outcome["complete_latency_ms"]),
+                    telemetry_latencies_ms=[float(value) for value in outcome.get("telemetry_latencies_ms", [])],
+                    packets_attempted=int(outcome.get("packets_attempted", 0)),
+                    packets_succeeded=int(outcome.get("packets_succeeded", 0)),
                     state=str(outcome["response"].get("state", "")),
                     focus_score=float(outcome["response"].get("focus_score", 0.0)),
                 )
@@ -179,6 +181,11 @@ def main() -> None:
                     device_id=config.device_id,
                     session_id=str(getattr(exc, "session_id", "") or ""),
                     status="err",
+                    telemetry_latencies_ms=[
+                        float(value) for value in getattr(exc, "telemetry_latencies_ms", [])
+                    ],
+                    packets_attempted=int(getattr(exc, "packets_attempted", 0)),
+                    packets_succeeded=int(getattr(exc, "packets_succeeded", 0)),
                     error_stage=str(getattr(exc, "stage", "unknown")),
                     error=f"{type(exc).__name__}: {exc}",
                     traceback=tb,
@@ -209,10 +216,20 @@ def main() -> None:
 
         tui.newline()
         elapsed = perf_counter() - stage_start
+        stage_summary = build_summary(
+            api_url=args.api_url,
+            profile=f"scale-{stage.name}",
+            target_clients=stage.clients,
+            results=stage_results,
+            wall_seconds=elapsed,
+        )
+        write_summary_bundle(args.output / "stages" / stage.name, stage_summary, stage_results)
         tui.write(
             f"stage={stage.name} finished in {elapsed:.1f}s "
             f"ok={sum(1 for r in stage_results if r.status == 'ok')} "
-            f"err={sum(1 for r in stage_results if r.status != 'ok')}"
+            f"err={sum(1 for r in stage_results if r.status != 'ok')} "
+            f"telemetry_p95={stage_summary.telemetry_latency_ms['p95']}ms "
+            f"throughput={stage_summary.telemetry_throughput_rps}req/s"
         )
 
     summary = build_summary(

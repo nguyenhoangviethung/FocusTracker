@@ -16,10 +16,21 @@ from tracking.buffer import FeatureSequenceBuffer
 
 
 class DemoStepError(RuntimeError):
-    def __init__(self, stage: str, message: str, *, session_id: str | None = None) -> None:
+    def __init__(
+        self,
+        stage: str,
+        message: str,
+        *,
+        session_id: str | None = None,
+        telemetry_latencies_ms: list[float] | None = None,
+        packets_attempted: int = 0,
+    ) -> None:
         super().__init__(message)
         self.stage = stage
         self.session_id = session_id
+        self.telemetry_latencies_ms = list(telemetry_latencies_ms or [])
+        self.packets_attempted = packets_attempted
+        self.packets_succeeded = len(self.telemetry_latencies_ms)
 
 
 def _log(log: Callable[[str], None] | None, message: str) -> None:
@@ -99,6 +110,7 @@ def replay_session(
     raw_feature_sequence: list[list[float]],
     face_found: bool,
     session_duration_seconds: int,
+    packet_interval_seconds: float = 0.0,
     user_id: str | None = None,
     log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
@@ -126,15 +138,8 @@ def replay_session(
         except Exception as exc:
             raise DemoStepError("create_session", f"{type(exc).__name__}: {exc}") from exc
 
-    packet = TelemetryPacket(
-        session_id=session_id,
-        device_id=config.device_id,
-        sequence_number=1,
-        raw_feature_sequence=raw_feature_sequence,
-        face_found=face_found,
-        configuration={"demo": True},
-    )
-
+    telemetry_latencies_ms: list[float] = []
+    packets_attempted = 0
     try:
         _log(log, "websocket:open:start")
         ws_started = perf_counter()
@@ -145,13 +150,43 @@ def replay_session(
             close_timeout=config.request_timeout_seconds,
         ) as websocket:
             _log(log, "websocket:open:ok")
-            websocket.send(packet.model_dump_json())
-            _log(log, "websocket:stream:sent")
-            response = json.loads(websocket.recv())
-            _log(log, "websocket:stream:recv")
+            stream_started = perf_counter()
+            interval = max(0.0, float(packet_interval_seconds))
+            next_send_at = stream_started
+            response: dict[str, Any] = {}
+            while True:
+                packets_attempted += 1
+                packet = TelemetryPacket(
+                    session_id=session_id,
+                    device_id=config.device_id,
+                    sequence_number=packets_attempted,
+                    raw_feature_sequence=raw_feature_sequence,
+                    face_found=face_found,
+                    captured_at=utc_now(),
+                    configuration={"demo": True, "interval_seconds": interval},
+                )
+                packet_started = perf_counter()
+                websocket.send(packet.model_dump_json())
+                _log(log, f"websocket:stream:sent packet={packets_attempted}")
+                response = json.loads(websocket.recv())
+                telemetry_latencies_ms.append((perf_counter() - packet_started) * 1000.0)
+                _log(log, f"websocket:stream:recv packet={packets_attempted}")
+                if interval <= 0:
+                    break
+                next_send_at += interval
+                if next_send_at >= stream_started + session_duration_seconds:
+                    sleep(max(0.0, stream_started + session_duration_seconds - perf_counter()))
+                    break
+                sleep(max(0.0, next_send_at - perf_counter()))
         ws_latency_ms = (perf_counter() - ws_started) * 1000.0
     except Exception as exc:
-        raise DemoStepError("websocket_stream", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
+        raise DemoStepError(
+            "websocket_stream",
+            f"{type(exc).__name__}: {exc}",
+            session_id=session_id,
+            telemetry_latencies_ms=telemetry_latencies_ms,
+            packets_attempted=packets_attempted,
+        ) from exc
 
     summary = SessionSummary(
         duration_seconds=session_duration_seconds,
@@ -179,7 +214,13 @@ def replay_session(
         complete_latency_ms = (perf_counter() - complete_started) * 1000.0
         _log(log, f"complete_session:ok latency_ms={complete_latency_ms:.1f}")
     except Exception as exc:
-        raise DemoStepError("complete_session", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
+        raise DemoStepError(
+            "complete_session",
+            f"{type(exc).__name__}: {exc}",
+            session_id=session_id,
+            telemetry_latencies_ms=telemetry_latencies_ms,
+            packets_attempted=packets_attempted,
+        ) from exc
 
     return {
         "session_id": session_id,
@@ -188,6 +229,9 @@ def replay_session(
         "create_latency_ms": create_latency_ms,
         "ws_latency_ms": ws_latency_ms,
         "complete_latency_ms": complete_latency_ms,
+        "telemetry_latencies_ms": telemetry_latencies_ms,
+        "packets_attempted": packets_attempted,
+        "packets_succeeded": len(telemetry_latencies_ms),
     }
 
 
@@ -223,6 +267,8 @@ def replay_video_session(
         face_found = False
         frame_count = 0
         packets: list[dict[str, Any]] = []
+        telemetry_latencies_ms: list[float] = []
+        packets_attempted = 0
         latest_response: dict[str, Any] = {}
         next_send_at = max(0.0, float(packet_interval_seconds))
 
@@ -294,8 +340,11 @@ def replay_video_session(
                             },
                         )
                         _log(log, f"websocket:stream:send packet={len(packets) + 1} frame={frame_count}")
+                        packets_attempted += 1
+                        packet_started = perf_counter()
                         websocket.send(packet.model_dump_json())
                         latest_response = json.loads(websocket.recv())
+                        telemetry_latencies_ms.append((perf_counter() - packet_started) * 1000.0)
                         packets.append(latest_response)
                         _log(log, f"websocket:stream:recv packet={len(packets)} state={latest_response.get('state')}")
                         next_send_at = current_time + max(0.1, float(packet_interval_seconds))
@@ -309,7 +358,13 @@ def replay_video_session(
                     video_capture.release()
             ws_latency_ms = (perf_counter() - ws_started) * 1000.0
         except Exception as exc:
-            raise DemoStepError("websocket_stream", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
+            raise DemoStepError(
+                "websocket_stream",
+                f"{type(exc).__name__}: {exc}",
+                session_id=session_id,
+                telemetry_latencies_ms=telemetry_latencies_ms,
+                packets_attempted=packets_attempted,
+            ) from exc
     finally:
         detector.close()
 
@@ -344,7 +399,13 @@ def replay_video_session(
         complete_latency_ms = (perf_counter() - complete_started) * 1000.0
         _log(log, f"complete_session:ok latency_ms={complete_latency_ms:.1f}")
     except Exception as exc:
-        raise DemoStepError("complete_session", f"{type(exc).__name__}: {exc}", session_id=session_id) from exc
+        raise DemoStepError(
+            "complete_session",
+            f"{type(exc).__name__}: {exc}",
+            session_id=session_id,
+            telemetry_latencies_ms=telemetry_latencies_ms,
+            packets_attempted=packets_attempted,
+        ) from exc
 
     return {
         "session_id": session_id,
@@ -354,5 +415,8 @@ def replay_video_session(
         "ws_latency_ms": (perf_counter() - ws_started) * 1000.0,
         "complete_latency_ms": complete_latency_ms,
         "packets_sent": len(packets),
+        "telemetry_latencies_ms": telemetry_latencies_ms,
+        "packets_attempted": packets_attempted,
+        "packets_succeeded": len(telemetry_latencies_ms),
         "frame_count": frame_count,
     }

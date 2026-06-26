@@ -1,0 +1,80 @@
+graph TB
+    %% USER HARDWARE & CLIENT NODE
+    subgraph NODE_USER["🖥️ THIẾT BỊ NGƯỜI DÙNG (Client Workstation)"]
+        direction LR
+        CAM["📷 Webcam<br/>«video source»"]
+        
+        subgraph DESKTOP_ENV["Phần mềm FocusFlow Application"]
+            direction TB
+            APP["FocusFlow Desktop App<br/>«PyQt6 Client Process»"]
+            CACHE[("Local Memory Cache<br/>«SQLite DB»")]
+            APP -->|"save state"| CACHE
+        end
+
+        CAM -->|"raw video frames"| APP
+    end
+
+    %% NETWORK TRANSPORT
+    subgraph BOUNDARY_NET["🔒 MẠNG TRUYỀN TẢI (Secure Network Boundary)"]
+        direction LR
+        TLS["HTTPS Management API<br/>WSS Feature Telemetry Stream<br/>«TLS v1.3 encrypted»"]
+    end
+
+    %% CLOUD RUNTIME TOPOLOGY
+    subgraph GCP["☁️ HẠ TẦNG GOOGLE CLOUD PLATFORM"]
+        direction TB
+
+        subgraph RUNTIME_TIER["⚡ Tầng Thực Thi (Execution Tier)"]
+            CR["FastAPI Application Server<br/>«Google Cloud Run»"]
+            XGB["Inference Instance<br/>«Fixed Triple-XGBoost»"]
+            CR -->|"model call"| XGB
+        end
+
+        subgraph DATA_TIER["🔐 Tầng Dữ Liệu & Bảo Mật (State & Secrets)"]
+            FS[("Firestore NoSQL DB<br/>«persistence»")]
+            PUBSUB["Pub/Sub Event Bus<br/>«asynchronous telemetry»"]
+            SECRET["Secret Manager<br/>«credentials store»"]
+        end
+
+        subgraph OPERATIONAL_TIER["🔧 Tầng Vận Hành (CI/CD & Storage)"]
+            CB["Cloud Build<br/>«CI/CD pipeline»"]
+            AR["Artifact Registry<br/>«docker registry»"]
+            CS["Cloud Storage<br/>«release assets bucket»"]
+            CB -->|"push image"| AR
+        end
+
+        AR -->|"deploy tag"| CR
+        CR -->|"read/write"| FS
+        CR -->|"publish events"| PUBSUB
+        SECRET -.->|"inject API keys"| CR
+    end
+
+    %% Warning box
+    NOTE["⚠️ CHÚ THÍCH BẢO MẬT:\nẢnh webcam được xử lý trực tiếp tại biên và giải phóng lập tức.\nHệ thống tuyệt đối không truyền ảnh hay landmark khuôn mặt lên đám mây."]
+
+    %% Connectivity
+    APP -->|"send metrics"| TLS
+    TLS --> CR
+
+    %% Themes & Styles Definitions
+    classDef clientStyle fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#0F172A;
+    classDef cloudStyle fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#0F172A;
+    classDef networkStyle fill:#FAF5FF,stroke:#8B5CF6,stroke-width:2px,color:#0F172A;
+    classDef noteStyle fill:#FFFBEB,stroke:#F59E0B,stroke-width:1.5px,color:#78350F,font-style:italic;
+    classDef systemBoxStyle fill:#F8FAFC,stroke:#94A3B8,stroke-width:1.5px,color:#1E293B;
+
+    classDef nodeApp fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#1E40AF,rx:8px,ry:8px;
+    classDef nodeCloud fill:#D1FAE5,stroke:#059669,stroke-width:1.5px,color:#065F46,rx:8px,ry:8px;
+    classDef nodeDb fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#92400E,rx:8px,ry:8px;
+    classDef nodeTls fill:#FFF1F2,stroke:#F43F5E,stroke-width:2px,color:#9F1239,rx:12px,ry:12px;
+
+    class NODE_USER clientStyle;
+    class GCP cloudStyle;
+    class BOUNDARY_NET networkStyle;
+    class NOTE noteStyle;
+    class DESKTOP_ENV,RUNTIME_TIER,DATA_TIER,OPERATIONAL_TIER systemBoxStyle;
+
+    class APP,CAM nodeApp;
+    class CR,XGB,CB,AR,CS nodeCloud;
+    class CACHE,FS,PUBSUB,SECRET nodeDb;
+    class TLS nodeTls;

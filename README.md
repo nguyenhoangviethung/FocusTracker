@@ -18,7 +18,7 @@ Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Work
 
 - `main.py`: điểm vào duy nhất của ứng dụng.
 - `ui/`: giao diện desktop PyQt6.
-- `tracking/`: trích xuất đặc trưng, buffer 30 frame và local fallback inference.
+- `tracking/`: trích xuất đặc trưng, buffer 30 frame và model adapter dùng phía cloud.
 - `edge/`: REST/WebSocket client cho Cloud Run.
 - `shared/`: Pydantic contracts dùng chung.
 - `server/`: FastAPI gateway, cloud inference và persistence adapters.
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Cloud/hybrid mode đọc API key từ:
+Cloud mode đọc API key từ:
 
 ```bash
 export FOCUSFLOW_CLOUD_API_KEY="..."

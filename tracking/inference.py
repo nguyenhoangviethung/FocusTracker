@@ -31,7 +31,7 @@ WEIGHTS = {
 }
 
 @dataclass(frozen=True)
-class LateFusionSpec:
+class TripleXGBoostSpec:
     model_file: Path
     sequence_length: int
     raw_feature_dim: int
@@ -55,8 +55,8 @@ class LateFusionSpec:
         return self.sequence_length, self.raw_feature_dim
 
 
-class ONNXEngagementInferencer:
-    """Multiclass 4-class late fusion XGBoost engagement inferencer.
+class TripleXGBoostInferencer:
+    """Four-class weighted-probability fusion over three XGBoost models.
     
     Loads three components: final_xgb, boost_xgb, and targeted_xgb.
     Generates tsfresh features from the (30, 90) enriched sequence,
@@ -120,7 +120,7 @@ class ONNXEngagementInferencer:
             }
 
         # Setup compatibility Spec
-        self.spec = LateFusionSpec(
+        self.spec = TripleXGBoostSpec(
             model_file=self._model_dir / "final_xgb" / "model.json",
             sequence_length=30,
             raw_feature_dim=30,
@@ -144,7 +144,7 @@ class ONNXEngagementInferencer:
             adjusted *= bias.reshape(1, -1)
         if temperature != 1.0:
             adjusted = np.power(np.clip(adjusted, 1e-12, None), 1.0 / temperature)
-        return ONNXEngagementInferencer._normalize(adjusted)
+        return TripleXGBoostInferencer._normalize(adjusted)
 
     @staticmethod
     def _sequence_to_basic_features(sequence: np.ndarray) -> np.ndarray:
@@ -340,3 +340,9 @@ class ONNXEngagementInferencer:
             "enriched_feature_dim": self.spec.enriched_feature_dim,
             "feature_mode": "tsfresh",
         }
+
+
+# Backward-compatible aliases for legacy callers. New code should use the
+# names above because the production artifact does not execute ONNX models.
+LateFusionSpec = TripleXGBoostSpec
+ONNXEngagementInferencer = TripleXGBoostInferencer

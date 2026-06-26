@@ -233,7 +233,7 @@
         <div class="sidebar-card-title">Live Health</div>
         <div class="sidebar-metric"><span>Active clients</span><strong id="sidebar-active">0</strong></div>
         <div class="sidebar-metric"><span>P95 latency</span><strong id="sidebar-p95">0 ms</strong></div>
-        <div class="sidebar-metric"><span>Cache</span><strong id="sidebar-cache">3s</strong></div>
+        <div class="sidebar-metric" style="display: none;"><span>Cache</span><strong id="sidebar-cache">3s</strong></div>
         <div class="sidebar-bar"><div id="sidebar-bar"></div></div>
       </div>
     </aside>
@@ -284,7 +284,7 @@
                 <div class="panel-title">Activity Trend</div>
                 <div class="panel-sub">P90/P95 latency over the last refresh windows</div>
               </div>
-              <div class="small" id="cfg-env-chip">environment</div>
+              <div class="small" id="cfg-env-chip" style="display: none;">environment</div>
             </div>
             <div class="chart-wrap"><canvas id="metricsChart"></canvas></div>
           </section>
@@ -347,8 +347,8 @@
       </section>
 
       <section id="tab-metrics" class="tab-content" style="display:none; margin-top: 16px;">
-        <div class="grid" style="grid-template-columns: 1fr 1fr;">
-          <div class="panel">
+        <div class="grid" style="grid-template-columns: 1fr; max-width: 680px; margin: 0 auto;">
+          <div class="panel" style="display: none;">
             <div class="panel-head">
               <div>
                 <div class="panel-title">Deployment Snapshot</div>
@@ -396,23 +396,46 @@
           <div class="panel-head">
             <div>
               <div class="panel-title">Server Policy</div>
-              <div class="panel-sub">Read-only operational flags pulled from the current deployment</div>
+              <div class="panel-sub">Manage live operational parameters for the focus telemetry pipeline</div>
             </div>
           </div>
-          <div class="list" style="gap:10px;">
-            <div class="recent-item" style="grid-template-columns: 1fr auto;">
-              <div class="recent-meta"><div class="recent-name">Ready State</div><div class="recent-time">inference engine + repository available</div></div>
+          <div class="list" style="gap:16px;">
+            <div class="recent-item" style="grid-template-columns: 1fr auto; align-items: center;">
+              <div class="recent-meta">
+                <div class="recent-name">Ready State</div>
+                <div class="recent-time">Inference engine + repository status</div>
+              </div>
               <div class="status active" id="cfg-ready">-</div>
             </div>
-            <div class="recent-item" style="grid-template-columns: 1fr auto;">
-              <div class="recent-meta"><div class="recent-name">Cache Window</div><div class="recent-time">dashboard summary cache</div></div>
-              <div class="status completed" id="cfg-cache">3s</div>
+            
+            <div class="recent-item" style="grid-template-columns: 1fr auto; align-items: center;">
+              <div class="recent-meta">
+                <div class="recent-name">Cache Window</div>
+                <div class="recent-time">Dashboard summary cache TTL (0.5 to 60 seconds)</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="number" id="input-cache" step="0.5" min="0.5" max="60" style="width: 80px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-weight: 700; outline: none; background: var(--panel-2); color: var(--text);" />
+                <span style="font-weight: 600; color: var(--muted); font-size: 13px;">seconds</span>
+                <span id="cfg-cache" style="display: none;">3s</span>
+              </div>
             </div>
-            <div class="recent-item" style="grid-template-columns: 1fr auto;">
-              <div class="recent-meta"><div class="recent-name">Query Limit</div><div class="recent-time">max recent sessions per snapshot</div></div>
-              <div class="status pending" id="cfg-limit">100</div>
+            
+            <div class="recent-item" style="grid-template-columns: 1fr auto; align-items: center;">
+              <div class="recent-meta">
+                <div class="recent-name">Query Limit</div>
+                <div class="recent-time">Max sessions to retrieve in snapshot (1 to 100)</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="number" id="input-limit" min="1" max="100" style="width: 80px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-weight: 700; outline: none; background: var(--panel-2); color: var(--text);" />
+                <span id="cfg-limit" style="display: none;">100</span>
+              </div>
             </div>
-            <div class="small">This page is intentionally operational only. Session editing and cleanup happen in the Sessions tab.</div>
+            
+            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+              <button class="pill active" onclick="saveServerSettings()" style="cursor: pointer; padding: 10px 20px; font-weight: 600; font-size: 13px; border-radius: 8px; border: none; transition: opacity 0.2s;">Save Settings</button>
+            </div>
+            
+            <div class="small" style="margin-top: 10px;">This page allows dynamic tuning of control room thresholds. Changes take effect immediately.</div>
           </div>
         </div>
       </section>
@@ -701,8 +724,49 @@
     setWidth('sidebar-bar', p95Width);
   }
 
+  async function saveServerSettings() {
+    const cacheVal = parseFloat(document.getElementById('input-cache').value);
+    const limitVal = parseInt(document.getElementById('input-limit').value);
+
+    if (isNaN(cacheVal) || cacheVal < 0.5 || cacheVal > 60.0) {
+      alert('Cache window must be between 0.5 and 60 seconds.');
+      return;
+    }
+    if (isNaN(limitVal) || limitVal < 1 || limitVal > 100) {
+      alert('Query limit must be between 1 and 100.');
+      return;
+    }
+
+    try {
+      const resp = await fetch('/dashboard/api/settings', {
+        method: 'POST',
+        headers: {
+          'X-API-Key': API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          cache_seconds: cacheVal,
+          query_limit: limitVal
+        })
+      });
+      if (!resp.ok) {
+        let detail = 'Failed to save settings.';
+        try {
+          const payload = await resp.json();
+          detail = payload.detail || detail;
+        } catch (_) {}
+        alert(detail);
+        return;
+      }
+      alert('Settings updated successfully!');
+      refreshDashboard();
+    } catch (err) {
+      alert('Error updating settings: ' + err);
+    }
+  }
+
   async function refreshDashboard() {
-    const response = await fetch('/dashboard/api/summary?limit=100', { cache: 'no-store' });
+    const response = await fetch('/dashboard/api/summary', { cache: 'no-store' });
     if (!response.ok) {
       document.getElementById('recent-list').innerHTML = '<div class="empty">Unable to load Firebase sessions.</div>';
       document.getElementById('sessions-table-body').innerHTML = '<tr><td colspan="9" class="empty">Unable to load dashboard data.</td></tr>';
@@ -740,6 +804,15 @@
     document.getElementById('cfg-cache').textContent = (data.dashboard_cache_seconds || 3.0) + 's';
     document.getElementById('cfg-limit').textContent = String(data.firestore_query_limit || 100);
     document.getElementById('cfg-env-chip').textContent = String(data.environment || '-');
+
+    const cacheInput = document.getElementById('input-cache');
+    const limitInput = document.getElementById('input-limit');
+    if (cacheInput && document.activeElement !== cacheInput) {
+      cacheInput.value = data.dashboard_cache_seconds || 3.0;
+    }
+    if (limitInput && document.activeElement !== limitInput) {
+      limitInput.value = data.firestore_query_limit || 100;
+    }
 
     updateSessionsTable(sessions);
     updateFocusChart(sessions);

@@ -52,6 +52,7 @@ async def lifespan(app: FastAPI):
     app.state.event_publisher = create_event_publisher(settings)
     app.state.inference_engine = CloudInferenceEngine()
     app.state.dashboard_cache = DashboardSnapshotCache()
+    app.state.query_limit = 100
     app.state.stale_session_cleanup_task = asyncio.create_task(
         _stale_session_cleanup_loop(app)
     )

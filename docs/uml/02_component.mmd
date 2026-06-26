@@ -1,0 +1,97 @@
+graph TB
+    %% EDGE SYSTEM PACKAGE
+    subgraph EDGE["🖥️ PHÂN HỆ BIÊN (Edge Desktop App)"]
+        direction TB
+
+        subgraph EDGE_PRES["🎨 Lớp Trình Diễn (Presentation)"]
+            UI["PyQt6 UI Component<br/>«view»"]
+        end
+
+        subgraph EDGE_APP["⚙️ Lớp Ứng Dụng (Application)"]
+            ST["Session Coordinator<br/>«orchestrator»"]
+        end
+
+        subgraph EDGE_INFRA["🔌 Lớp Hạ Tầng (Infrastructure/Adapters)"]
+            MP["MediaPipe Detector<br/>«adapter»"]
+            CC["Cloud Client (WSS)<br/>«adapter»"]
+            LOCAL[("Local Store<br/>«sqlite»")]
+        end
+
+        UI --> ST
+        ST --> MP
+        ST --> CC
+        ST -.-> LOCAL
+    end
+
+    %% NETWORK BOUNDARY
+    subgraph NETWORK["🔒 Ranh Giới Mạng (Network Border)"]
+        direction LR
+        PROTO["WSS Telemetry Stream<br/>HTTPS Management API"]
+    end
+
+    %% CLOUD SYSTEM PACKAGE
+    subgraph CLOUD["☁️ PHÂN HỆ ĐÁM MÂY (Cloud Run Platform)"]
+        direction TB
+
+        subgraph CLOUD_GW["🌐 Cổng Giao Tiếp (Gateway)"]
+            API["FastAPI API Gateway<br/>«controller»"]
+        end
+
+        subgraph CLOUD_APP["🧠 Lớp Ứng Dụng & Suy Luận"]
+            INF["Inference Engine<br/>«service»"]
+            ENRICH["Feature Enricher<br/>«domain service»"]
+        end
+
+        subgraph CLOUD_MODEL["🌲 Lớp Học Máy (ML Models)"]
+            XGB["Fixed Triple-XGBoost<br/>«model classifier»"]
+        end
+
+        subgraph CLOUD_PORTS["📡 Cổng Giao Tiếp Ngoại Vi (Ports)"]
+            REPO["Repository Port<br/>«port»"]
+            EVT["Event Publisher<br/>«port»"]
+        end
+
+        API --> INF
+        API --> REPO
+        API --> EVT
+        INF --> ENRICH
+        ENRICH --> XGB
+    end
+
+    %% BACKEND SERVICES PACKAGE
+    subgraph BACKEND["🔧 Lớp Dịch Vụ Nền Tảng (Managed Backend)"]
+        direction TB
+        SM["Secret Manager<br/>«credentials»"]
+        FS[("Firestore Database<br/>«nosql»")]
+        PS["Pub/Sub Broker<br/>«message bus»"]
+    end
+
+    %% Global Connections
+    CC --> PROTO
+    PROTO --> API
+    REPO --> FS
+    EVT --> PS
+    SM -.->|"inject secrets"| API
+
+    %% Theme Styling Definitions
+    classDef edgeBg fill:#F8FAFC,stroke:#3B82F6,stroke-width:2px,color:#0F172A;
+    classDef cloudBg fill:#F0FDF4,stroke:#10B981,stroke-width:2px,color:#0F172A;
+    classDef borderBg fill:#FAF5FF,stroke:#8B5CF6,stroke-width:2.5px,color:#0F172A,stroke-dasharray: 4 4;
+    classDef backendBg fill:#F1F5F9,stroke:#64748B,stroke-width:1.5px,color:#0F172A;
+
+    classDef presNode fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E40AF,rx:8px,ry:8px;
+    classDef appNode fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#065F46,rx:8px,ry:8px;
+    classDef infraNode fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155,rx:8px,ry:8px;
+    classDef modelNode fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#92400E,rx:8px,ry:8px;
+    classDef networkNode fill:#FFF1F2,stroke:#F43F5E,stroke-width:2px,color:#9F1239,rx:12px,ry:12px;
+
+    class EDGE,EDGE_PRES,EDGE_APP,EDGE_INFRA edgeBg;
+    class CLOUD,CLOUD_GW,CLOUD_APP,CLOUD_MODEL,CLOUD_PORTS cloudBg;
+    class NETWORK borderBg;
+    class BACKEND backendBg;
+
+    class UI,API presNode;
+    class ST,INF appNode;
+    class MP,CC,REPO,EVT,LOCAL,FS,PS,SM,LOCAL,FS,PS infraNode;
+    class XGB modelNode;
+    class PROTO networkNode;

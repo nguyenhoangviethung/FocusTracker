@@ -75,8 +75,8 @@ cho signal và trend chart. Nó không phải threshold decision. Quyết địn
 - `ui/`: PyQt6 pages và components.
 - `tracking/detector.py`: frame thành feature vector 30 chiều.
 - `tracking/buffer.py`: sliding window và enrich chuẩn.
-- `tracking/inference.py`: local fallback inference.
-- `tracking/tracker.py`: camera worker, local/cloud/hybrid orchestration.
+- `tracking/inference.py`: Triple-XGBoost adapter dùng bởi cloud inference.
+- `tracking/tracker.py`: camera worker và cloud-only orchestration.
 - `edge/cloud_client.py`: REST lifecycle và WebSocket transport.
 - `ui/component_metrics.py`: normalize component telemetry cho UI, gồm cả
   fallback từ key legacy `gru/tcn/xgboost` sang `final_xgb/boost_xgb/targeted_xgb`.
@@ -96,25 +96,18 @@ version mới thay vì sửa âm thầm.
 - `server/repositories/sessions.py`: memory repository và Firestore repository.
 - `server/services/event_publisher.py`: logging/Pub/Sub adapter.
 
-## 5. Inference modes
+## 5. Inference runtime
 
-### `local`
+Production sử dụng một luồng `cloud-only`:
 
-- Model chạy trên desktop.
-- Không cần cloud.
-- Dùng để phát triển và fallback.
-
-### `cloud`
-
-- Desktop chỉ extract feature.
-- Cloud quyết định focus.
-- Cần URL, API key và kết nối mạng.
-
-### `hybrid`
-
-- Desktop ưu tiên response cloud.
-- Khi cloud chưa sẵn sàng, local model vẫn quyết định.
-- Đây là mode phù hợp nhất cho demo luận văn.
+- Desktop xử lý frame và trích xuất vector 30 chiều tại edge.
+- Desktop gửi cửa sổ đặc trưng qua WebSocket, không gửi ảnh hoặc video.
+- Cloud enrich chuỗi thành 90 đặc trưng mỗi frame và chạy Fixed
+  Triple-XGBoost.
+- Khi mất kết nối, desktop báo `Reconnecting` và retry bằng backoff; không sinh
+  dự đoán local giả.
+- `ONNXEngagementInferencer` chỉ là alias tương thích ngược về tên lớp, không
+  biểu thị một ONNX runtime đang được dùng.
 
 ## 6. Session lifecycle
 
@@ -146,8 +139,8 @@ FocusFlow dùng Google OAuth2 ở desktop chỉ để định danh người dùn
 
 - Google sign-in là luồng installed-app / loopback redirect.
 - `user_id` trong session có thể lấy từ Google subject hoặc email.
-- Nếu login chưa sẵn sàng hoặc mạng lỗi, desktop vẫn có thể chạy local hoặc
-  hybrid mà không cần identity hoàn chỉnh.
+- Khi login hoặc mạng chưa sẵn sàng, desktop không bắt đầu suy luận; UI phải
+  hiển thị lỗi kết nối/xác thực rõ ràng để người dùng thử lại.
 - Không dùng service-account key trên desktop.
 
 ## 8. Dữ liệu được và không được lưu

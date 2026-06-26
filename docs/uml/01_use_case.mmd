@@ -1,0 +1,64 @@
+graph LR
+    %% Actors
+    subgraph ACTORS["Tác nhân (Actors)"]
+        direction TB
+        A1["👤 Người học<br/><i>(Learner)</i>"]
+        A2["👥 Giám sát<br/><i>(Supervisor)</i>"]
+        A3["🔑 Quản trị viên<br/><i>(Administrator)</i>"]
+    end
+
+    %% System Boundary
+    subgraph SYSTEM["HỆ THỐNG FOCUSFLOW AI"]
+        direction TB
+
+        subgraph PKG1["📋 Phân hệ Cá nhân (Personal Session Management)"]
+            UC1(["Cấu hình phiên học"])
+            UC2(["Bắt đầu phiên theo dõi"])
+            UC3(["Phân tích sự tập trung"])
+            UC4(["Tạm dừng / Tiếp tục"])
+            UC5(["Kết thúc và lưu trữ"])
+            UC6(["Xem báo cáo cá nhân"])
+        end
+
+        subgraph PKG2["🛡️ Phân hệ Xác thực (Security & Identity)"]
+            UC7(["Đăng nhập / Đăng ký"])
+        end
+
+        subgraph PKG3["📊 Phân hệ Quản trị (Administration & Monitoring)"]
+            UC8(["Giám sát học viên realtime"])
+            UC9(["Xem dashboard tổng hợp"])
+            UC10(["Quản trị tài khoản & phiên"])
+        end
+    end
+
+    %% Relationships
+    A1 --- UC1
+    A1 --- UC2
+    A1 --- UC3
+    A1 --- UC4
+    A1 --- UC5
+    A1 --- UC6
+
+    UC2 -.->|"«include»"| UC7
+    UC5 -.->|"«include»"| UC6
+
+    A2 --- UC8
+    A2 --- UC9
+    A3 --- UC10
+
+    UC8 -.->|"«include»"| UC9
+
+    %% Styling
+    classDef actorStyle fill:#F8FAFC,stroke:#475569,stroke-width:2px,color:#0F172A,rx:6px,ry:6px;
+    classDef useCaseStyle fill:#EFF6FF,stroke:#2563EB,stroke-width:1.5px,color:#1E40AF,rx:20px,ry:20px;
+    classDef includeStyle fill:#F0FDF4,stroke:#16A34A,stroke-width:1.5px,color:#166534,rx:20px,ry:20px;
+    classDef systemStyle fill:#FCFDFE,stroke:#0F172A,stroke-width:2.5px,color:#0F172A;
+    classDef pkgStyle fill:#F8FAFC,stroke:#CBD5E1,stroke-width:1.5px,stroke-dasharray: 5 5,color:#334155;
+    classDef actorsStyle fill:#F1F5F9,stroke:#64748B,stroke-width:1.5px,color:#334155;
+
+    class A1,A2,A3 actorStyle;
+    class UC1,UC2,UC3,UC4,UC5 useCaseStyle;
+    class UC6,UC7,UC8,UC9,UC10 includeStyle;
+    class SYSTEM systemStyle;
+    class PKG1,PKG2,PKG3 pkgStyle;
+    class ACTORS actorsStyle;

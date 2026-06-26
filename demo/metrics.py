@@ -48,6 +48,7 @@ def build_summary(
     errors: dict[str, int] = {}
     failure_stages: dict[str, int] = {}
     ws_latencies = []
+    telemetry_latencies = []
     completion_latencies = []
     for result in results:
         if result.status == "ok":
@@ -61,7 +62,15 @@ def build_summary(
             errors[result.error] = errors.get(result.error, 0) + 1
             stage = str(result.error_stage or "unknown")
             failure_stages[stage] = failure_stages.get(stage, 0) + 1
+        telemetry_latencies.extend(float(value) for value in result.telemetry_latencies_ms)
 
+    packets_attempted = sum(result.packets_attempted for result in results)
+    packets_succeeded = sum(result.packets_succeeded for result in results)
+    success_rate = (
+        round((packets_succeeded / packets_attempted) * 100.0, 3)
+        if packets_attempted
+        else None
+    )
     return BenchmarkSummary(
         generated_at=utc_now_iso(),
         api_url=api_url,
@@ -71,7 +80,12 @@ def build_summary(
         err=err,
         wall_seconds=round(wall_seconds, 3),
         websocket_latency_ms=summarize_latencies(ws_latencies),
+        telemetry_latency_ms=summarize_latencies(telemetry_latencies),
         completion_latency_ms=summarize_latencies(completion_latencies),
+        packets_attempted=packets_attempted,
+        packets_succeeded=packets_succeeded,
+        telemetry_success_rate_pct=success_rate,
+        telemetry_throughput_rps=round(packets_succeeded / wall_seconds, 3) if wall_seconds > 0 else 0.0,
         states=states,
         failure_stages=failure_stages,
         errors=sorted(errors.items(), key=lambda item: (-item[1], item[0]))[:10],
@@ -106,7 +120,11 @@ def write_summary_bundle(output_dir: Path, summary: BenchmarkSummary, results: l
                 f"Ok / Err:              {summary.ok} / {summary.err}",
                 f"Wall seconds:          {summary.wall_seconds}",
                 f"WebSocket latency:     {summary.websocket_latency_ms}",
+                f"Telemetry latency:     {summary.telemetry_latency_ms}",
                 f"Completion latency:    {summary.completion_latency_ms}",
+                f"Telemetry packets:     {summary.packets_succeeded} / {summary.packets_attempted}",
+                f"Telemetry success:     {summary.telemetry_success_rate_pct}%",
+                f"Telemetry throughput:  {summary.telemetry_throughput_rps} req/s",
                 f"States:                {summary.states}",
                 f"Failure stages:        {summary.failure_stages}",
                 f"Top errors:            {summary.errors}",

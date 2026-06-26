@@ -7,14 +7,14 @@ import numpy as np
 
 from shared.contracts import InferenceResponse, TelemetryPacket
 from tracking.buffer import enrich_raw_sequence
-from tracking.inference import MODEL_NAME, MODEL_VERSION, ONNXEngagementInferencer
+from tracking.inference import MODEL_NAME, MODEL_VERSION, TripleXGBoostInferencer
 
 
 class CloudInferenceEngine:
     """Thread-safe adapter around the bundled CPU late-fusion ensemble."""
 
     def __init__(self) -> None:
-        self._inferencer = ONNXEngagementInferencer(smoothing_window=1)
+        self._inferencer = TripleXGBoostInferencer(smoothing_window=1)
         self._lock = threading.Lock()
 
     def predict(self, packet: TelemetryPacket) -> InferenceResponse:

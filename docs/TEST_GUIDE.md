@@ -180,7 +180,7 @@ Kiểm tra giao diện:
 Kiểm tra hành vi:
 
 1. Chờ đủ 30 frames.
-2. Xem có số liệu GRU / TCN / XGBoost.
+2. Xem có số liệu Final XGB / Boost XGB / Targeted XGB.
 3. Pause phải release camera.
 4. Resume phải mở camera lại.
 5. End phải tạo history record.
@@ -239,6 +239,43 @@ Kiểm tra:
 - end session vẫn tạo summary cục bộ.
 
 ## 7. Test cloud video demo
+
+### Benchmark latency và tải bền vững
+
+Không dùng `ping` làm bằng chứng latency ứng dụng. `ping` chỉ đo ICMP và không
+đi qua WebSocket, inference hoặc persistence. Để đo tải server mà không để
+MediaPipe trên máy phát tải trở thành nút thắt, phát lặp lại feature fixture:
+
+```bash
+python -m demo.run_scale \
+  --source fixture \
+  --features demo/features \
+  --api-url "$FOCUSFLOW_CLOUD_API_URL" \
+  --api-key "$FOCUSFLOW_CLOUD_API_KEY" \
+  --stages "1:60,10:60,25:120,50:120,100:600" \
+  --stream-interval-seconds 1 \
+  --output demo/results/load-test
+```
+
+Stage `100:600` giữ 100 WebSocket client trong 10 phút và mỗi client gửi tối
+đa một telemetry mỗi giây. Benchmark ghi RTT riêng quanh từng cặp
+`websocket.send()`/`websocket.recv()` và xuất:
+
+- `telemetry_latency_ms`: mean, p50, p95 và max của mọi packet;
+- `packets_attempted` và `packets_succeeded`;
+- `telemetry_success_rate_pct`;
+- `telemetry_throughput_rps`;
+- client lỗi theo từng bước create/WebSocket/complete.
+
+Mỗi stage có report JSON/CSV/TXT riêng dưới
+`demo/results/load-test/stages/<clients>x<seconds>/`. Khi viết luận văn, lấy số
+liệu trong stage `100x600`; không lấy summary chung vì summary chung trộn cả
+warm-up và các mức tải thấp.
+
+Nên chạy load generator trên một GCE VM riêng. Chạy một lần ở cùng region để
+đo năng lực backend và một lần từ mạng người dùng mục tiêu để đo end-to-end
+latency. Đồng thời theo dõi Cloud Monitoring: instance count, CPU, memory, 5xx
+và p95 request latency.
 
 Khi bạn muốn test luồng demo 100 video:
 

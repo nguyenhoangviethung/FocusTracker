@@ -86,12 +86,12 @@ face-presence guard. There is no OS telemetry or heuristic override.
 | `tracking/detector.py` | MediaPipe feature extraction |
 | `tracking/buffer.py` | Builds and enriches the 30-frame sequence |
 | `tracking/inference.py` | Loads the triple-XGB artifact and runs 4-class fusion |
-| `tracking/tracker.py` | Camera thread, cloud/local/hybrid routing, queue telemetry |
+| `tracking/tracker.py` | Camera thread, cloud routing và queue telemetry |
 | `server/core/inference.py` | Cloud API adapter around the same runtime inferencer |
 
 ## Service Response Shape
 
-`ONNXEngagementInferencer.predict()` returns:
+`TripleXGBoostInferencer.predict()` returns:
 
 ```json
 {
