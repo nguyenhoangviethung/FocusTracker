@@ -7,7 +7,7 @@ from pathlib import Path
 import cv2
 
 from demo.validate_videos import collect_videos
-from tracking.buffer import FeatureSequenceBuffer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
 from utils.logger import setup_logging
 
 
@@ -51,7 +51,10 @@ def main() -> None:
                 print(f"skip={source_video} reason=unreadable")
                 continue
 
-            buffer = FeatureSequenceBuffer(sequence_length=30, frame_feature_dim=30)
+            buffer = FeatureSequenceBuffer(
+                sequence_length=SEQUENCE_LENGTH,
+                frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+            )
             sequence = None
             face_found = False
             frame_count = 0

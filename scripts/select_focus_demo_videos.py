@@ -16,8 +16,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from demo.schemas import utc_now_iso
-from tracking.buffer import FeatureSequenceBuffer, enrich_raw_sequence
-from tracking.inference import ONNXEngagementInferencer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH, enrich_raw_sequence
+from tracking.inference import DeepForestInferencer
 
 
 def natural_key(path: Path) -> list[Any]:
@@ -59,7 +59,10 @@ def extract_raw_sequence(path: Path) -> dict[str, Any]:
         detector.close()
         raise RuntimeError(f"Cannot open video: {path}")
 
-    buffer = FeatureSequenceBuffer(sequence_length=30, frame_feature_dim=30)
+    buffer = FeatureSequenceBuffer(
+        sequence_length=SEQUENCE_LENGTH,
+        frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+    )
     face_found = False
     frame_count = 0
     try:
@@ -92,7 +95,7 @@ def extract_raw_sequence(path: Path) -> dict[str, Any]:
     }
 
 
-def score_video(inferencer: ONNXEngagementInferencer, path: Path) -> dict[str, Any]:
+def score_video(inferencer: DeepForestInferencer, path: Path) -> dict[str, Any]:
     extracted = extract_raw_sequence(path)
     enriched = enrich_raw_sequence(extracted["raw_sequence"])
     prediction = inferencer.predict(enriched)
@@ -137,7 +140,7 @@ def main() -> None:
     if not candidates:
         raise SystemExit(f"No mp4 files found in {args.input}")
 
-    inferencer = ONNXEngagementInferencer(smoothing_window=1)
+    inferencer = DeepForestInferencer()
     scored: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
 

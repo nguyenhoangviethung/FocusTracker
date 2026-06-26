@@ -6,22 +6,25 @@ import time
 import numpy as np
 
 from shared.contracts import InferenceResponse, TelemetryPacket
-from tracking.buffer import enrich_raw_sequence
-from tracking.inference import MODEL_NAME, MODEL_VERSION, TripleXGBoostInferencer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, enrich_raw_sequence
+from tracking.inference import DeepForestInferencer, MODEL_NAME, MODEL_VERSION
 
 
 class CloudInferenceEngine:
-    """Thread-safe adapter around the bundled CPU late-fusion ensemble."""
+    """Thread-safe adapter around the calibrated DeepForest product bundle."""
 
     def __init__(self) -> None:
-        self._inferencer = TripleXGBoostInferencer(smoothing_window=1)
+        self._inferencer = DeepForestInferencer()
         self._lock = threading.Lock()
 
     def predict(self, packet: TelemetryPacket) -> InferenceResponse:
         started = time.perf_counter()
         if packet.face_found:
             raw = np.asarray(packet.raw_feature_sequence, dtype=np.float32)
-            enriched = enrich_raw_sequence(raw, expected_frame_feature_dim=30)
+            enriched = enrich_raw_sequence(
+                raw,
+                expected_frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+            )
             with self._lock:
                 prediction = self._inferencer.predict(enriched)
             focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
@@ -29,8 +32,8 @@ class CloudInferenceEngine:
             state = "FOCUSED" if ai_state == "ENGAGED" else "DISTRACTED"
             decision = {
                 "state": state,
-                "source": "product_4class_model",
-                "reason": "Decision produced by the fixed triple-XGBoost 4-class fusion model.",
+                "source": "deep_forest_product_4class",
+                "reason": "Decision produced by the calibrated DeepForest 4-class cascade.",
                 "ai_probability": focus_score,
                 "decision_rule": prediction.get("decision_rule", "argmax_4class"),
                 "predicted_class": prediction.get("prediction_4class"),

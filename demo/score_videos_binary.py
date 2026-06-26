@@ -14,7 +14,6 @@ import xgboost as xgb
 from demo.validate_videos import natural_key, read_video_metadata
 from tracking.buffer import FeatureSequenceBuffer
 from tracking.detector import FaceFeatureDetector
-from tracking.inference import ONNXEngagementInferencer
 from utils.logger import setup_logging
 
 
@@ -70,10 +69,11 @@ class BinaryLateFusionInferencer:
         return float(np.asarray(output, dtype=np.float32).reshape(-1)[0])
 
     def _xgb_probability(self, enriched: np.ndarray) -> float:
-        features = ONNXEngagementInferencer._sequence_to_tabular_features(
-            np.asarray(enriched, dtype=np.float32),
-            feature_mode="tsfresh",
-        ).reshape(1, -1)
+        raise RuntimeError(
+            "The binary GRU/TCN/XGBoost scorer is archived and cannot consume "
+            "the production depth_robust_v2 feature schema. Use demo/score_videos.py "
+            "for the calibrated DeepForest product model."
+        )
         if features.shape[1] != self.xgb_mean.shape[0]:
             raise ValueError(f"Expected {self.xgb_mean.shape[0]} XGB features, got {features.shape[1]}")
         scaled = (features - self.xgb_mean) / self.xgb_scale
@@ -260,6 +260,10 @@ def _write_balanced_manifest(
 
 
 def main() -> None:
+    raise SystemExit(
+        "This is an archived binary-model experiment. It is intentionally disabled "
+        "because production now uses the distinct 168D DeepForest pipeline."
+    )
     setup_logging()
     args = build_parser().parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)

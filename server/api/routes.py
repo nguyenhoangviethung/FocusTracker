@@ -141,7 +141,19 @@ def _normalize_dashboard_session(record: dict[str, Any]) -> None:
         components = live_metrics.get("components")
         if isinstance(components, dict):
             probabilities: list[float] = []
-            for key in ("final_xgb", "boost_xgb", "targeted_xgb", "gru", "tcn", "xgboost"):
+            for key in (
+                "layer1_extra_trees",
+                "layer1_random_forest",
+                "layer2_cascade",
+                # Historical Firestore snapshots predate the DeepForest
+                # migration and remain readable in the dashboard.
+                "final_xgb",
+                "boost_xgb",
+                "targeted_xgb",
+                "gru",
+                "tcn",
+                "xgboost",
+            ):
                 value = components.get(key)
                 if isinstance(value, dict) and value.get("probability") is not None:
                     try:

@@ -10,15 +10,15 @@ import cv2
 import numpy as np
 
 from demo.validate_videos import natural_key, read_video_metadata
-from tracking.buffer import FeatureSequenceBuffer
-from tracking.detector import FaceFeatureDetector
-from tracking.inference import ONNXEngagementInferencer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
+from tracking.detector import FRAME_FEATURE_DIM, FaceFeatureDetector
+from tracking.inference import DeepForestInferencer
 from utils.logger import setup_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Score demo videos with the deployed 4-class XGBoost reference model."
+        description="Score demo videos with the deployed calibrated 4-class DeepForest model."
     )
     parser.add_argument("--input", type=Path, default=Path("demo/Data"))
     parser.add_argument("--scorecard-output", type=Path, default=Path("demo/results/video-scorecard.json"))
@@ -33,13 +33,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _is_valid_feature(feature: np.ndarray) -> bool:
     feature = np.asarray(feature, dtype=np.float32).reshape(-1)
-    return feature.shape == (30,) and np.isfinite(feature).all() and not np.allclose(feature, 0.0)
+    return feature.shape == (FRAME_FEATURE_DIM,) and np.isfinite(feature).all() and not np.allclose(feature, 0.0)
 
 
 def _score_video(
     video_path: Path,
     detector: FaceFeatureDetector,
-    inferencer: ONNXEngagementInferencer,
+    inferencer: DeepForestInferencer,
     *,
     max_windows_per_video: int,
     window_stride_valid_frames: int,
@@ -53,7 +53,10 @@ def _score_video(
     if not capture.isOpened():
         return None, {"source_video": str(video_path), "reason": "unreadable"}
 
-    buffer = FeatureSequenceBuffer(sequence_length=30, frame_feature_dim=30)
+    buffer = FeatureSequenceBuffer(
+        sequence_length=SEQUENCE_LENGTH,
+        frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+    )
     windows: list[dict] = []
     decoded_frames = 0
     valid_frames = 0
@@ -185,7 +188,7 @@ def _build_balanced_manifest(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "input_dir": str(input_dir),
         "selection_method": "local_model_score_non_overlapping_30_valid_frame_windows",
-        "model_version": "product_4class_fixed_triple_xgb",
+        "model_version": "deep_forest_product_4class",
         "scorecard": str(output_path),
         "target_total": target_total,
         "target_focus": target_focus,
@@ -209,7 +212,7 @@ def main() -> None:
         draw_landmarks=False,
         camera_distance_scale=args.camera_distance_scale,
     )
-    inferencer = ONNXEngagementInferencer()
+    inferencer = DeepForestInferencer()
 
     scorecard: list[dict] = []
     skipped: list[dict] = []

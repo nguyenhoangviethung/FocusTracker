@@ -3,8 +3,8 @@ uvicorn[standard]>=0.34,<1
 pydantic>=2.12,<3
 python-dotenv>=1.0,<2
 numpy
-onnxruntime
-xgboost-cpu==3.2.0
+joblib>=1.4,<2
+scikit-learn==1.8.0
 google-cloud-firestore>=2.20,<3
 google-cloud-pubsub>=2.29,<3
 google-auth>=2.0,<3

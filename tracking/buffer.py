@@ -10,10 +10,14 @@ from utils.logger import get_logger
 
 logger = get_logger("buffer")
 
+SEQUENCE_LENGTH = 30
+DEPTH_ROBUST_V2_FRAME_FEATURE_DIM = 168
+DEPTH_ROBUST_V2_ENRICHED_FEATURE_DIM = 504
+
 
 def enrich_raw_sequence(
     raw_sequence: np.ndarray,
-    expected_frame_feature_dim: int = 30,
+    expected_frame_feature_dim: int = DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
 ) -> np.ndarray:
     """Expand raw facial features with velocity and sequence-level std."""
     raw_frames = np.asarray(raw_sequence, dtype=np.float32)
@@ -36,9 +40,13 @@ def enrich_raw_sequence(
 
 
 class FeatureSequenceBuffer:
-    """Maintains a sliding raw-feature window and enriches it for inference."""
+    """Maintains the production raw window and its velocity/std enrichment."""
 
-    def __init__(self, sequence_length: int = 60, frame_feature_dim: int = 30) -> None:
+    def __init__(
+        self,
+        sequence_length: int = SEQUENCE_LENGTH,
+        frame_feature_dim: int = DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+    ) -> None:
         logger.debug(f"Initializing FeatureSequenceBuffer (sequence_length={sequence_length}, frame_feature_dim={frame_feature_dim})")
         self.sequence_length = sequence_length
         self.frame_feature_dim = frame_feature_dim

@@ -14,7 +14,7 @@ from collections import deque
 
 from edge.cloud_client import CloudClientConfig, FocusFlowCloudClient
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
-from tracking.buffer import FeatureSequenceBuffer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
 from utils.logger import get_logger
 
 
@@ -194,8 +194,8 @@ class FocusSessionTracker:
                 camera_distance_scale=self.config.camera_distance_scale,
             )
             buffer = FeatureSequenceBuffer(
-                sequence_length=30,
-                frame_feature_dim=30,
+                sequence_length=SEQUENCE_LENGTH,
+                frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
             )
 
             while not self._stop_event.is_set():
@@ -270,9 +270,6 @@ class FocusSessionTracker:
                             "logit": None,
                             "probability": probability,
                             "raw_probability": probability,
-                            "late_fusion_probability": None,
-                            "neural_probability": None,
-                            "fusion_strategy": None,
                             "focus_score": probability,
                             "ai_state": ai_result.get("state", "NO_FACE"),
                             "model_ready": model_ready,
@@ -329,12 +326,8 @@ class FocusSessionTracker:
                         "client_loop_latency_ms": latency_ms,
                         "model_inference_latency_ms": model_inference_latency_ms,
                         "cloud_roundtrip_latency_ms": cloud_roundtrip_latency_ms,
-                        "logit": ai_result.get("logit"),
                         "probability": ai_result.get("probability", probability),
                         "raw_probability": ai_result.get("raw_probability", ai_result.get("probability", probability)),
-                        "late_fusion_probability": ai_result.get("late_fusion_probability"),
-                        "neural_probability": ai_result.get("neural_probability"),
-                        "fusion_strategy": ai_result.get("fusion_strategy"),
                         "focus_score": probability,
                         "ai_state": ai_result.get("state", "WARMING_UP"),
                         "model_ready": model_ready,
@@ -439,7 +432,11 @@ class FocusSessionTracker:
             sequence_number=self._cloud_sequence,
             raw_feature_sequence=raw_sequence.tolist(),
             face_found=face_found,
-            configuration={"decision_rule": "argmax_4class"},
+            configuration={
+                "decision_rule": "argmax_4class",
+                "feature_schema": "depth_robust_v2",
+                "temporal_enrichment": "velocity_std",
+            },
         )
         try:
             self._cloud_packets.put_nowait(packet)
@@ -505,11 +502,11 @@ class FocusSessionTracker:
             vector = np.asarray(feature, dtype=np.float32).reshape(-1)
         except Exception:
             return False
-        return vector.shape[0] == 30 and np.isfinite(vector).all()
+        return vector.shape[0] == DEPTH_ROBUST_V2_FRAME_FEATURE_DIM and np.isfinite(vector).all()
 
     def _is_feature_stable(self, feature: Any) -> bool:
         vector = np.asarray(feature, dtype=np.float32).reshape(-1)
-        if vector.shape[0] != 30 or not np.isfinite(vector).all():
+        if vector.shape[0] != DEPTH_ROBUST_V2_FRAME_FEATURE_DIM or not np.isfinite(vector).all():
             return False
         if len(self._recent_features) < 3:
             return True

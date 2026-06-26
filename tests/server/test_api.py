@@ -2,6 +2,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from server.app import create_app
+from shared.contracts import RAW_FRAME_FEATURE_DIM, SEQUENCE_LENGTH
 
 
 class FailingEventPublisher:
@@ -41,13 +42,13 @@ def test_session_inference_and_completion(monkeypatch) -> None:
                 "session_id": session_id,
                 "device_id": "device-1",
                 "sequence_number": 1,
-                "raw_feature_sequence": rng.random((30, 30), dtype=np.float32).tolist(),
+                "raw_feature_sequence": rng.random((SEQUENCE_LENGTH, RAW_FRAME_FEATURE_DIM), dtype=np.float32).tolist(),
                 "face_found": True,
             },
             headers=headers,
         )
         assert inferred.status_code == 200
-        assert set(inferred.json()["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
+        assert set(inferred.json()["components"]) == {"layer1_extra_trees", "layer1_random_forest", "layer2_cascade"}
         assert inferred.json()["class_labels"] == ["very_low", "low", "medium", "high"]
         assert len(inferred.json()["class_probabilities"]) == 4
         assert inferred.json()["inference_latency_ms"] >= 0.0
@@ -74,7 +75,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
                     "device_id": "device-1",
                     "sequence_number": 2,
                     "raw_feature_sequence": rng.random(
-                        (30, 30),
+                        (SEQUENCE_LENGTH, RAW_FRAME_FEATURE_DIM),
                         dtype=np.float32,
                     ).tolist(),
                     "face_found": True,
@@ -82,7 +83,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             )
             streamed = websocket.receive_json()
             assert streamed["session_id"] == session_id
-            assert set(streamed["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
+            assert set(streamed["components"]) == {"layer1_extra_trees", "layer1_random_forest", "layer2_cascade"}
             assert streamed["class_labels"] == ["very_low", "low", "medium", "high"]
             assert len(streamed["class_probabilities"]) == 4
             assert streamed["inference_latency_ms"] >= 0.0

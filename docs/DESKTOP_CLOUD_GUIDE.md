@@ -82,17 +82,17 @@ Sau Start Session:
 3. WebSocket connect.
 4. Camera tích lũy 30 frames.
 5. Sequence gửi lên cloud.
-6. Cloud enrich `(30,30)` thành `(30,90)` và chạy model 4-class.
+6. Cloud enrich `(30,168)` thành `(30,504)` và chạy calibrated DeepForest 4-class.
 7. UI source chuyển thành `CLOUD`.
-8. Component card hiển thị `final_xgb`, `boost_xgb`, `targeted_xgb`.
+8. Component card hiển thị layer-1 ExtraTrees, layer-1 RandomForest và layer-2 Cascade.
 9. Header hiển thị Google account đã đăng nhập.
 
 Response cloud/client hiện tại cần có các field chính:
 
 ```json
 {
-  "model_name": "fixed_triple_xgb_fusion",
-  "model_version": "product_4class_fixed_triple_xgb",
+  "model_name": "deep_forest_product_4class",
+  "model_version": "deep_forest_product_4class",
   "label_space": "daisee_4class",
   "decision_rule": "argmax_4class",
   "state": "FOCUSED",
@@ -103,9 +103,9 @@ Response cloud/client hiện tại cần có các field chính:
   "predicted_class": 3,
   "predicted_label": "high",
   "components": {
-    "final_xgb": {"probability": 0.77},
-    "boost_xgb": {"probability": 0.91},
-    "targeted_xgb": {"probability": 0.77}
+    "layer1_extra_trees": {"probability": 0.77},
+    "layer1_random_forest": {"probability": 0.91},
+    "layer2_cascade": {"probability": 0.77}
   }
 }
 ```

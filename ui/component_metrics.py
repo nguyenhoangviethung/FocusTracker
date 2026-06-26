@@ -8,9 +8,9 @@ def normalize_components(raw_components: Any) -> dict[str, dict]:
         return {}
 
     aliases = {
-        "final_xgb": ("final_xgb", "gru"),
-        "boost_xgb": ("boost_xgb", "tcn"),
-        "targeted_xgb": ("targeted_xgb", "xgboost"),
+        "layer1_extra_trees": ("layer1_extra_trees",),
+        "layer1_random_forest": ("layer1_random_forest",),
+        "layer2_cascade": ("layer2_cascade",),
     }
     normalized = {}
     for target, keys in aliases.items():

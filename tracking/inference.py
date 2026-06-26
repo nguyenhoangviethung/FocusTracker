@@ -1,52 +1,38 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+import os
 from pathlib import Path
-from typing import Any
 import time
+from typing import Any, Iterable
 
+import joblib
 import numpy as np
-import xgboost as xgb
 
 from utils.logger import get_logger
 from utils.paths import resource_base_dir
 
+
 logger = get_logger("inference")
 
-MODEL_NAME = "fixed_triple_xgb_fusion"
-MODEL_VERSION = "product_4class_fixed_triple_xgb"
+MODEL_NAME = "deep_forest_product_4class"
+MODEL_VERSION = "deep_forest_product_4class"
 LABEL_SPACE = "daisee_4class"
 CLASS_LABELS = ("very_low", "low", "medium", "high")
 ENGAGED_CLASS_INDICES = (2, 3)
+SEQUENCE_LENGTH = 30
+RAW_FEATURE_DIM = 168
+ENRICHED_FEATURE_DIM = 504
+FEATURE_MODE = "basic"
 
-# Static bias vector from the product reproduction config:
-# class_bias(validation_labels, power=0.42), validation counts [23, 143, 813, 450].
-BIAS_VECTOR = np.array([2.0256370928321137, 0.9402561797523197, 0.4531576365407765, 0.58094909087479], dtype=np.float32)
-TEMPERATURE = 1.15
-WEIGHTS = {
-    "final_xgb": 0.84,
-    "boost_xgb": 0.14,
-    "targeted_xgb": 0.02,
-}
 
 @dataclass(frozen=True)
-class TripleXGBoostSpec:
+class DeepForestSpec:
     model_file: Path
-    sequence_length: int
-    raw_feature_dim: int
-    enriched_feature_dim: int
-    smoothing_window: int
-    weights: dict[str, float]
-    # Placeholders for compatibility
-    gru_model_file: Path | None = None
-    tcn_model_file: Path | None = None
-    xgb_model_file: Path | None = None
-    xgb_summary_file: Path | None = None
-    xgb_preprocessor_file: Path | None = None
-    gru_metadata_file: Path | None = None
-    tcn_metadata_file: Path | None = None
-    xgb_feature_mode: str = "tsfresh"
+    sequence_length: int = SEQUENCE_LENGTH
+    raw_feature_dim: int = RAW_FEATURE_DIM
+    enriched_feature_dim: int = ENRICHED_FEATURE_DIM
+    feature_mode: str = FEATURE_MODE
 
     def expected_input_shape(self) -> tuple[int, int]:
         return self.sequence_length, self.enriched_feature_dim
@@ -55,103 +41,49 @@ class TripleXGBoostSpec:
         return self.sequence_length, self.raw_feature_dim
 
 
-class TripleXGBoostInferencer:
-    """Four-class weighted-probability fusion over three XGBoost models.
-    
-    Loads three components: final_xgb, boost_xgb, and targeted_xgb.
-    Generates tsfresh features from the (30, 90) enriched sequence,
-    fuses prediction probabilities, applies validation-based class bias,
-    and performs temperature calibration.
-    """
+class DeepForestInferencer:
+    """CPU adapter for the calibrated two-layer DeepForest product bundle."""
 
-    def __init__(
-        self,
-        model_file: str | Path | None = None,
-        smoothing_window: int = 1,
-    ) -> None:
-        self.smoothing_window = max(1, int(smoothing_window))
+    def __init__(self, model_dir: str | Path | None = None) -> None:
+        configured_dir = os.getenv("FOCUSFLOW_DEEP_FOREST_MODEL_DIR", "").strip()
+        self._model_dir = Path(model_dir or configured_dir or resource_base_dir() / "models" / MODEL_VERSION)
+        model_file = self._model_dir / "model.joblib"
+        if not model_file.exists():
+            raise FileNotFoundError(
+                f"DeepForest product artifact is missing: {model_file}. "
+                "Download deep_forest_product_4class.zip from Hugging Face before starting the server."
+            )
 
-        # Set model directory path
-        if model_file:
-            # If a model directory or file is passed, resolve its parent/directory
-            model_path_obj = Path(model_file)
-            if model_path_obj.is_file():
-                self._model_dir = model_path_obj.parent
-            else:
-                self._model_dir = model_path_obj
-        else:
-            self._model_dir = resource_base_dir() / "models" / "product_4class_fixed_triple_xgb"
-
-        logger.info(
-            "Initializing 4-class multiclass model from %s (decision_rule=argmax_4class, smoothing_window=%s)",
-            self._model_dir,
-            self.smoothing_window,
-        )
-
-        # Load models and preprocessors
-        self._models = {}
-        self._preprocessors = {}
-
-        components = ["final_xgb", "boost_xgb", "targeted_xgb"]
-        for comp in components:
-            comp_dir = self._model_dir / comp
-            model_path = comp_dir / "model.json"
-            prep_path = comp_dir / "preprocessor.npz"
-
-            if not model_path.exists():
-                raise FileNotFoundError(f"Model file not found: {model_path}")
-            if not prep_path.exists():
-                raise FileNotFoundError(f"Preprocessor file not found: {prep_path}")
-
-            # Load booster
-            booster = xgb.Booster()
-            booster.load_model(str(model_path))
-            self._models[comp] = booster
-
-            # Load preprocessor
-            prep_data = np.load(prep_path, allow_pickle=False)
-            mean = prep_data["mean"]
-            scale = prep_data["scale"]
-            if mean.shape != scale.shape:
-                raise ValueError(f"Preprocessor mean/scale shape mismatch for {comp}: {mean.shape} != {scale.shape}")
-            self._preprocessors[comp] = {
-                "mean": mean,
-                "scale": scale,
-            }
-
-        # Setup compatibility Spec
-        self.spec = TripleXGBoostSpec(
-            model_file=self._model_dir / "final_xgb" / "model.json",
-            sequence_length=30,
-            raw_feature_dim=30,
-            enriched_feature_dim=90,
-            smoothing_window=self.smoothing_window,
-            weights=dict(WEIGHTS),
-        )
-
-        logger.info("4-class multiclass models successfully loaded.")
+        logger.info("Loading calibrated DeepForest product bundle from %s", self._model_dir)
+        artifact = joblib.load(model_file)
+        self._layer1 = self._require_model_pair(artifact, "layer1")
+        self._layer2 = self._require_model_pair(artifact, "layer2")
+        self._selected_layer = int(artifact.get("selected_layer", 2))
+        if self._selected_layer != 2:
+            raise ValueError(f"DeepForest product requires selected_layer=2, got {self._selected_layer}")
+        self._temperature = float(artifact.get("temperature", 1.25))
+        self._prior_blend = float(artifact.get("prior_blend", 0.0))
+        self._class_prior = np.asarray(artifact.get("class_prior", np.zeros(4)), dtype=np.float32)
+        self._class_logit_biases = np.asarray(artifact.get("class_logit_biases", [1.5, 2.5, 0.0, 0.5]), dtype=np.float32)
+        if self._temperature <= 0.0 or self._class_logit_biases.shape != (4,):
+            raise ValueError("DeepForest calibration metadata is invalid.")
+        self.spec = DeepForestSpec(model_file=model_file)
 
     @staticmethod
-    def _normalize(probabilities: np.ndarray) -> np.ndarray:
-        probabilities = probabilities.astype(np.float64)
-        probabilities /= np.clip(probabilities.sum(axis=-1, keepdims=True), 1e-12, None)
-        return probabilities.astype(np.float32)
-
-    @staticmethod
-    def _adjust(probabilities: np.ndarray, bias: np.ndarray | None, temperature: float) -> np.ndarray:
-        adjusted = probabilities.astype(np.float64)
-        if bias is not None:
-            adjusted *= bias.reshape(1, -1)
-        if temperature != 1.0:
-            adjusted = np.power(np.clip(adjusted, 1e-12, None), 1.0 / temperature)
-        return TripleXGBoostInferencer._normalize(adjusted)
+    def _require_model_pair(artifact: dict[str, Any], key: str) -> tuple[Any, Any]:
+        models = artifact.get(key)
+        if not isinstance(models, (list, tuple)) or len(models) != 2:
+            raise ValueError(f"DeepForest artifact field '{key}' must contain ExtraTrees and RandomForest models.")
+        if not all(hasattr(model, "predict_proba") for model in models):
+            raise ValueError(f"DeepForest artifact field '{key}' is not a classifier pair.")
+        return models[0], models[1]
 
     @staticmethod
     def _sequence_to_basic_features(sequence: np.ndarray) -> np.ndarray:
         first_frame = sequence[0]
         last_frame = sequence[-1]
         return np.concatenate(
-            [
+            (
                 sequence.mean(axis=0),
                 sequence.std(axis=0),
                 sequence.min(axis=0),
@@ -159,190 +91,99 @@ class TripleXGBoostInferencer:
                 first_frame,
                 last_frame,
                 last_frame - first_frame,
-                np.array([float(sequence.shape[0])], dtype=np.float32),
-            ]
-        ).astype(np.float32)
+                np.asarray([float(sequence.shape[0])], dtype=np.float32),
+            )
+        ).astype(np.float32, copy=False)
+
+    @staticmethod
+    def _ordered_probabilities(model: Any, features: np.ndarray) -> np.ndarray:
+        raw = np.asarray(model.predict_proba(features), dtype=np.float32)
+        classes = np.asarray(getattr(model, "classes_", np.arange(raw.shape[1])), dtype=np.int64)
+        result = np.zeros((features.shape[0], 4), dtype=np.float32)
+        for index, class_id in enumerate(classes):
+            if 0 <= int(class_id) < 4:
+                result[:, int(class_id)] = raw[:, index]
+        totals = result.sum(axis=1, keepdims=True)
+        if np.any(totals <= 0.0):
+            raise ValueError("DeepForest component returned an invalid probability vector.")
+        return result / totals
 
     @classmethod
-    def _sequence_to_tsfresh_like_features(cls, sequence: np.ndarray) -> np.ndarray:
-        sequence = np.asarray(sequence, dtype=np.float32)
-        centered = sequence - sequence.mean(axis=0, keepdims=True)
-        time_steps = np.arange(sequence.shape[0], dtype=np.float32)
-        centered_t = time_steps - time_steps.mean()
-        slope_den = float(np.sum(centered_t * centered_t) + 1e-6)
+    def _pair_probabilities(cls, models: Iterable[Any], features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        individual = [cls._ordered_probabilities(model, features) for model in models]
+        return np.concatenate(individual, axis=1), np.mean(individual, axis=0, dtype=np.float32)
 
-        diff = np.diff(sequence, axis=0)
-        mean_abs_diff = np.mean(np.abs(diff), axis=0) if diff.size else np.zeros(sequence.shape[1], dtype=np.float32)
-        max_abs_diff = np.max(np.abs(diff), axis=0) if diff.size else np.zeros(sequence.shape[1], dtype=np.float32)
+    def _calibrate(self, probabilities: np.ndarray) -> np.ndarray:
+        logits = np.log(np.clip(probabilities, 1e-12, 1.0)) / self._temperature
+        logits += self._class_logit_biases.reshape(1, -1)
+        if self._prior_blend:
+            if self._class_prior.shape != (4,) or self._class_prior.sum() <= 0.0:
+                raise ValueError("DeepForest prior-blend calibration is invalid.")
+            logits += self._prior_blend * np.log(np.clip(self._class_prior, 1e-12, 1.0)).reshape(1, -1)
+        logits -= logits.max(axis=1, keepdims=True)
+        exp = np.exp(logits)
+        return (exp / exp.sum(axis=1, keepdims=True)).astype(np.float32)
 
-        slope = (centered_t[:, None] * centered).sum(axis=0) / slope_den
-        energy = np.mean(sequence * sequence, axis=0)
-        iqr = np.percentile(sequence, 75, axis=0) - np.percentile(sequence, 25, axis=0)
-        median = np.median(sequence, axis=0)
-        q10 = np.percentile(sequence, 10, axis=0)
-        q90 = np.percentile(sequence, 90, axis=0)
-        value_range = np.ptp(sequence, axis=0)
-        centered_std = sequence.std(axis=0) + 1e-6
-        skewness = np.mean((centered / centered_std) ** 3, axis=0)
-        kurtosis = np.mean((centered / centered_std) ** 4, axis=0) - 3.0
-        abs_sum_change = np.sum(np.abs(diff), axis=0) if diff.size else np.zeros(sequence.shape[1], dtype=np.float32)
-        mean_second_diff = (
-            np.mean(np.abs(np.diff(sequence, n=2, axis=0)), axis=0)
-            if sequence.shape[0] >= 3
-            else np.zeros(sequence.shape[1], dtype=np.float32)
-        )
-
-        if sequence.shape[0] >= 3:
-            middle = sequence[1:-1]
-            peak_count = ((middle > sequence[:-2]) & (middle > sequence[2:])).sum(axis=0).astype(np.float32)
-            peak_rate = peak_count / max(1.0, float(sequence.shape[0] - 2))
-        else:
-            peak_rate = np.zeros(sequence.shape[1], dtype=np.float32)
-
-        if sequence.shape[0] >= 2:
-            signs = np.sign(centered)
-            zero_cross = ((signs[1:] * signs[:-1]) < 0).sum(axis=0).astype(np.float32)
-            zero_cross_rate = zero_cross / max(1.0, float(sequence.shape[0] - 1))
-
-            auto_num = (centered[:-1] * centered[1:]).sum(axis=0)
-            auto_den = (centered * centered).sum(axis=0) + 1e-6
-            autocorr_lag1 = auto_num / auto_den
-        else:
-            zero_cross_rate = np.zeros(sequence.shape[1], dtype=np.float32)
-            autocorr_lag1 = np.zeros(sequence.shape[1], dtype=np.float32)
-
-        spectrum = np.abs(np.fft.rfft(centered, axis=0)).astype(np.float32)
-        if spectrum.shape[0] >= 2:
-            low_band = spectrum[1 : min(3, spectrum.shape[0]), :].sum(axis=0)
-            full_band = spectrum.sum(axis=0) + 1e-6
-            low_freq_ratio = low_band / full_band
-        else:
-            low_freq_ratio = np.zeros(sequence.shape[1], dtype=np.float32)
-
-        return np.concatenate(
-            [
-                cls._sequence_to_basic_features(sequence),
-                slope.astype(np.float32),
-                mean_abs_diff.astype(np.float32),
-                max_abs_diff.astype(np.float32),
-                energy.astype(np.float32),
-                iqr.astype(np.float32),
-                median.astype(np.float32),
-                q10.astype(np.float32),
-                q90.astype(np.float32),
-                value_range.astype(np.float32),
-                skewness.astype(np.float32),
-                kurtosis.astype(np.float32),
-                abs_sum_change.astype(np.float32),
-                mean_second_diff.astype(np.float32),
-                peak_rate.astype(np.float32),
-                zero_cross_rate.astype(np.float32),
-                autocorr_lag1.astype(np.float32),
-                low_freq_ratio.astype(np.float32),
-            ]
-        ).astype(np.float32)
-
-    @classmethod
-    def _sequence_to_tabular_features(cls, sequence: np.ndarray, feature_mode: str = "tsfresh") -> np.ndarray:
-        sequence = np.asarray(sequence, dtype=np.float32)
-        if sequence.ndim == 1:
-            sequence = sequence[:, None]
-
-        sequence = np.nan_to_num(sequence, nan=0.0, posinf=0.0, neginf=0.0)
-        mode = feature_mode.lower().strip()
-        if mode == "basic":
-            return cls._sequence_to_basic_features(sequence)
-        if mode == "tsfresh":
-            return cls._sequence_to_tsfresh_like_features(sequence)
-        raise ValueError(f"Unsupported feature mode: {feature_mode}")
+    @staticmethod
+    def _component(probabilities: np.ndarray) -> dict[str, Any]:
+        values = probabilities[0]
+        return {
+            "probability": float(values[2] + values[3]),
+            "probabilities": values.tolist(),
+        }
 
     def reset(self) -> None:
         return None
 
-    def predict(self, enriched_chunk: np.ndarray) -> dict[str, Any]:
+    def predict(self, enriched_sequence: np.ndarray) -> dict[str, Any]:
         started = time.perf_counter()
-        chunk = np.asarray(enriched_chunk, dtype=np.float32)
-        chunk = np.nan_to_num(chunk, nan=0.0, posinf=0.0, neginf=0.0)
-        expected_shape = self.spec.expected_input_shape()
-        if chunk.shape != expected_shape:
-            raise ValueError(f"Expected chunk shape {expected_shape}, got {chunk.shape}")
+        sequence = np.asarray(enriched_sequence, dtype=np.float32)
+        sequence = np.nan_to_num(sequence, nan=0.0, posinf=0.0, neginf=0.0)
+        if sequence.shape != self.spec.expected_input_shape():
+            raise ValueError(f"Expected DeepForest sequence {self.spec.expected_input_shape()}, got {sequence.shape}")
 
-        # Extract features (2161 dim)
-        features = self._sequence_to_tabular_features(chunk, feature_mode="tsfresh").reshape(1, -1)
+        features = self._sequence_to_basic_features(sequence).reshape(1, -1)
+        expected_tabular_dim = ENRICHED_FEATURE_DIM * 7 + 1
+        if features.shape[1] != expected_tabular_dim:
+            raise ValueError(f"Expected {expected_tabular_dim} basic features, got {features.shape[1]}")
 
-        # Get probabilities for each component
-        comp_probs = {}
-        for comp in ["final_xgb", "boost_xgb", "targeted_xgb"]:
-            prep = self._preprocessors[comp]
-            if features.shape[1] != prep["mean"].shape[0]:
-                raise ValueError(
-                    f"Expected {prep['mean'].shape[0]} tabular features for {comp}, got {features.shape[1]}"
-                )
-            x_scaled = (features - prep["mean"]) / prep["scale"]
-            dmat = xgb.DMatrix(x_scaled)
-            # DMatrix prediction shape is (1, 4)
-            prob_raw = self._models[comp].predict(dmat)
-            comp_probs[comp] = prob_raw[0]  # shape (4,)
+        layer1_features, layer1_probs = self._pair_probabilities(self._layer1, features)
+        _, layer2_probs = self._pair_probabilities(self._layer2, np.concatenate((features, layer1_features), axis=1))
+        probabilities = self._calibrate(layer2_probs)
+        values = probabilities[0]
+        prediction = int(np.argmax(values))
+        focus_score = float(values[2] + values[3])
 
-        # Late-fusion weighted probability sum
-        fused_raw = (
-            WEIGHTS["final_xgb"] * comp_probs["final_xgb"]
-            + WEIGHTS["boost_xgb"] * comp_probs["boost_xgb"]
-            + WEIGHTS["targeted_xgb"] * comp_probs["targeted_xgb"]
-        )
-        normalized = self._normalize(fused_raw.reshape(1, -1))
-        adjusted = self._adjust(normalized, bias=BIAS_VECTOR, temperature=TEMPERATURE)
-
-        # Output predictions
-        probs = adjusted[0].tolist()
-        pred_class = int(np.argmax(adjusted, axis=-1)[0])
-
-        # Continuous focus score is telemetry only. The 4-class prediction uses argmax.
-        raw_focus_score = float(probs[2] + probs[3])
-        state = "ENGAGED" if pred_class in ENGAGED_CLASS_INDICES else "DISTRACTED"
-
-        # Populate components structure for the UI
         components = {
-            "final_xgb": {
-                "probability": float(comp_probs["final_xgb"][2] + comp_probs["final_xgb"][3]),
-                "probabilities": comp_probs["final_xgb"].tolist()
-            },
-            "boost_xgb": {
-                "probability": float(comp_probs["boost_xgb"][2] + comp_probs["boost_xgb"][3]),
-                "probabilities": comp_probs["boost_xgb"].tolist()
-            },
-            "targeted_xgb": {
-                "probability": float(comp_probs["targeted_xgb"][2] + comp_probs["targeted_xgb"][3]),
-                "probabilities": comp_probs["targeted_xgb"].tolist()
-            }
+            "layer1_extra_trees": self._component(self._ordered_probabilities(self._layer1[0], features)),
+            "layer1_random_forest": self._component(self._ordered_probabilities(self._layer1[1], features)),
+            "layer2_cascade": self._component(layer2_probs),
         }
-
         return {
             "model_name": MODEL_NAME,
             "model_version": MODEL_VERSION,
             "label_space": LABEL_SPACE,
-            "probability": raw_focus_score,
-            "raw_probability": raw_focus_score,
-            "focus_score": raw_focus_score,
-            "state": state,
+            "probability": focus_score,
+            "focus_score": focus_score,
+            "state": "ENGAGED" if prediction in ENGAGED_CLASS_INDICES else "DISTRACTED",
             "ready": True,
             "decision_rule": "argmax_4class",
-            "weights": dict(WEIGHTS),
+            "weights": {},
             "components": components,
             "class_labels": list(CLASS_LABELS),
-            "probabilities_4class": probs,
-            "prediction_4class": pred_class,
-            "prediction_label": CLASS_LABELS[pred_class],
+            "probabilities_4class": values.tolist(),
+            "prediction_4class": prediction,
+            "prediction_label": CLASS_LABELS[prediction],
             "engaged_class_indices": list(ENGAGED_CLASS_INDICES),
             "model_inference_latency_ms": (time.perf_counter() - started) * 1000.0,
-            "sequence_length": self.spec.sequence_length,
-            "raw_feature_dim": self.spec.raw_feature_dim,
-            "enriched_feature_dim": self.spec.enriched_feature_dim,
-            "feature_mode": "tsfresh",
+            "sequence_length": SEQUENCE_LENGTH,
+            "raw_feature_dim": RAW_FEATURE_DIM,
+            "enriched_feature_dim": ENRICHED_FEATURE_DIM,
+            "feature_mode": FEATURE_MODE,
+            "feature_schema": "depth_robust_v2",
+            "calibration": {
+                "selected_layer": self._selected_layer,
+                "temperature": self._temperature,
+                "class_logit_biases": self._class_logit_biases.tolist(),
+            },
         }
-
-
-# Backward-compatible aliases for legacy callers. New code should use the
-# names above because the production artifact does not execute ONNX models.
-LateFusionSpec = TripleXGBoostSpec
-ONNXEngagementInferencer = TripleXGBoostInferencer

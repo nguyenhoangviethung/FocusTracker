@@ -10,6 +10,8 @@ from shared.identifiers import new_session_id
 
 
 PROTOCOL_VERSION = "1.0"
+SEQUENCE_LENGTH = 30
+RAW_FRAME_FEATURE_DIM = 168
 
 
 def utc_now() -> datetime:
@@ -54,10 +56,12 @@ class TelemetryPacket(ContractModel):
     @field_validator("raw_feature_sequence")
     @classmethod
     def validate_model_shape(cls, value: list[list[float]]) -> list[list[float]]:
-        if len(value) != 30:
-            raise ValueError("raw_feature_sequence must contain exactly 30 frames")
-        if any(len(frame) != 30 for frame in value):
-            raise ValueError("each raw feature frame must contain exactly 30 values")
+        if len(value) != SEQUENCE_LENGTH:
+            raise ValueError(f"raw_feature_sequence must contain exactly {SEQUENCE_LENGTH} frames")
+        if any(len(frame) != RAW_FRAME_FEATURE_DIM for frame in value):
+            raise ValueError(
+                f"each raw feature frame must contain exactly {RAW_FRAME_FEATURE_DIM} values"
+            )
         return value
 
 

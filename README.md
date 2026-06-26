@@ -1,7 +1,7 @@
 # FocusFlow AI
 
 FocusFlow AI là hệ thống edge-to-cloud theo dõi mức độ tập trung bằng webcam,
-MediaPipe và model 4-class fixed triple-XGBoost fusion.
+MediaPipe và model 4-class calibrated DeepForest.
 
 ## Tài liệu
 
@@ -23,7 +23,7 @@ Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Work
 - `shared/`: Pydantic contracts dùng chung.
 - `server/`: FastAPI gateway, cloud inference và persistence adapters.
 - `deploy/gcp/`: Docker, Cloud Build và hướng dẫn Google Cloud Console.
-- `models/product_4class_fixed_triple_xgb/`: artifact runtime chính gồm `final_xgb`, `boost_xgb`, `targeted_xgb`, preprocessors, summary và reproduction config.
+- `models/deep_forest_product_4class/`: artifact runtime chính gồm `model.joblib` và `summary.json`.
 - `models/face_landmarker.task`: model MediaPipe FaceMesh.
 - `GUIDE.md`: guide production inference 4-class để bảo trì model ngay trong repo app.
 
@@ -51,7 +51,7 @@ FOCUSFLOW_REPOSITORY=memory uvicorn server.app:app --reload
 ## Test nhanh pipeline
 
 ```bash
-python tests/manual/test_tracker.py --model models/product_4class_fixed_triple_xgb
+python tests/manual/test_tracker.py --model models/deep_forest_product_4class
 ```
 
 ## Build desktop app

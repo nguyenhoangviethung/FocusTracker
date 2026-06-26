@@ -6,9 +6,9 @@ FocusFlow AI là hệ thống edge-to-cloud chỉ dùng tín hiệu thị giác:
 
 - Desktop đọc webcam và chạy MediaPipe.
 - Desktop không gửi ảnh hoặc video lên cloud.
-- Desktop gửi chuỗi đặc trưng khuôn mặt `(30, 30)`.
-- Cloud enrich thành `(30, 90)`.
-- Cloud chạy model 4-class `fixed_triple_xgb_fusion`.
+- Desktop gửi chuỗi đặc trưng khuôn mặt `(30, 168)` theo schema `depth_robust_v2`.
+- Cloud enrich thành `(30, 504)` bằng raw + velocity + std.
+- Cloud chạy model 4-class DeepForest đã calibration.
 - Firestore lưu lifecycle và summary của session.
 - Report completion chỉ ghi trạng thái tổng kết, không còn AI coach hay email mentor.
 
@@ -20,16 +20,16 @@ Hardcore Mode.
 ```text
 Webcam frame
   -> MediaPipe Face Landmarker
-  -> 30 raw facial features
+  -> 168 raw facial features (geometry, canonical depth landmarks, blendshapes, transform)
   -> sliding window 30 frames
-  -> raw sequence (30, 30)
+  -> raw sequence (30, 168)
   -> WebSocket TLS
   -> Cloud Run API
   -> enrich raw + velocity + std
-  -> enriched sequence (30, 90)
-  -> tsfresh-like tabular features (2161)
-  -> final_xgb + boost_xgb + targeted_xgb
-  -> weighted probability fusion + class bias + temperature
+  -> enriched sequence (30, 504)
+  -> basic aggregate values (3529)
+  -> layer1 ExtraTrees + layer1 RandomForest + layer2 cascade
+  -> class-logit bias + temperature calibration
   -> argmax over 4 calibrated class probabilities
   -> class 2/3 = FOCUSED, class 0/1 = DISTRACTED
 ```
@@ -39,18 +39,16 @@ score.
 
 ## 3. Contract của model
 
-Artifact runtime nằm trong `models/product_4class_fixed_triple_xgb/`.
+Artifact runtime nằm trong `models/deep_forest_product_4class/`.
 
 ```text
 sequence length:       30
-raw feature dim:       30
-enriched feature dim:  90
-tabular feature dim:   2161
-final_xgb weight:      0.84
-boost_xgb weight:      0.14
-targeted_xgb weight:   0.02
-bias_power:            0.42
-temperature:           1.15
+raw feature dim:       168
+enriched feature dim:  504
+tabular feature dim:   3529
+components:            layer1 ExtraTrees + RandomForest, layer2 cascade
+temperature:           1.25
+class biases:          [1.5, 2.5, 0.0, 0.5]
 decision rule:         argmax_4class
 class labels:          very_low, low, medium, high
 ```
@@ -73,13 +71,13 @@ cho signal và trend chart. Nó không phải threshold decision. Quyết địn
 
 - `main.py`: entrypoint duy nhất.
 - `ui/`: PyQt6 pages và components.
-- `tracking/detector.py`: frame thành feature vector 30 chiều.
+- `tracking/detector.py`: frame thành feature vector depth-robust 168 chiều.
 - `tracking/buffer.py`: sliding window và enrich chuẩn.
-- `tracking/inference.py`: Triple-XGBoost adapter dùng bởi cloud inference.
+- `tracking/inference.py`: calibrated DeepForest adapter dùng bởi cloud inference.
 - `tracking/tracker.py`: camera worker và cloud-only orchestration.
 - `edge/cloud_client.py`: REST lifecycle và WebSocket transport.
-- `ui/component_metrics.py`: normalize component telemetry cho UI, gồm cả
-  fallback từ key legacy `gru/tcn/xgboost` sang `final_xgb/boost_xgb/targeted_xgb`.
+- `ui/component_metrics.py`: normalize component telemetry `layer1_extra_trees`,
+  `layer1_random_forest`, và `layer2_cascade` cho UI.
 
 ### Shared
 
@@ -100,14 +98,14 @@ version mới thay vì sửa âm thầm.
 
 Production sử dụng một luồng `cloud-only`:
 
-- Desktop xử lý frame và trích xuất vector 30 chiều tại edge.
+- Desktop xử lý frame và trích xuất vector 168 chiều tại edge.
 - Desktop gửi cửa sổ đặc trưng qua WebSocket, không gửi ảnh hoặc video.
-- Cloud enrich chuỗi thành 90 đặc trưng mỗi frame và chạy Fixed
-  Triple-XGBoost.
+- Cloud enrich chuỗi thành 504 đặc trưng mỗi frame và chạy calibrated
+  DeepForest.
 - Khi mất kết nối, desktop báo `Reconnecting` và retry bằng backoff; không sinh
   dự đoán local giả.
-- `ONNXEngagementInferencer` chỉ là alias tương thích ngược về tên lớp, không
-  biểu thị một ONNX runtime đang được dùng.
+- Runtime production dùng `DeepForestInferencer`; các script binary legacy là
+  công cụ thí nghiệm riêng, không tham gia pipeline production.
 
 ## 6. Session lifecycle
 

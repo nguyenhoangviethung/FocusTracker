@@ -7,7 +7,7 @@ import numpy as np
 
 from tracking.buffer import FeatureSequenceBuffer
 from tracking.detector import FaceFeatureDetector
-from tracking.inference import ONNXEngagementInferencer
+from tracking.inference import DeepForestInferencer
 from utils.logger import setup_logging, get_logger
 
 
@@ -21,11 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         type=str,
         default=None,
-        help="Path to the 4-class model directory. Defaults to models/product_4class_fixed_triple_xgb",
+        help="Path to the DeepForest product directory. Defaults to models/deep_forest_product_4class",
     )
     parser.add_argument("--show-landmarks", action="store_true", help="Draw FaceMesh landmarks on frame")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0 = until q)")
-    parser.add_argument("--smoothing-window", type=int, default=None, help="Override probability smoothing window")
     return parser
 
 
@@ -33,10 +32,7 @@ def run_cli() -> None:
     setup_logging()
     args = build_parser().parse_args()
     logger.info("Starting tracker CLI (camera=%s)", args.camera)
-    inferencer = ONNXEngagementInferencer(
-        model_file=args.model,
-        smoothing_window=args.smoothing_window,
-    )
+    inferencer = DeepForestInferencer(model_dir=args.model)
     spec = inferencer.spec
     detector = FaceFeatureDetector(draw_landmarks=args.show_landmarks, expected_feature_dim=spec.raw_feature_dim)
     buffer = FeatureSequenceBuffer(sequence_length=spec.sequence_length, frame_feature_dim=spec.raw_feature_dim)

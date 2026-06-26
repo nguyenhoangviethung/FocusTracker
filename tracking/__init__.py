@@ -8,8 +8,7 @@ __all__ = [
     "FaceFeatureDetector",
     "FeatureSequenceBuffer",
     "FocusSessionTracker",
-    "ONNXEngagementInferencer",
-    "TripleXGBoostInferencer",
+    "DeepForestInferencer",
     "TrackerConfig",
 ]
 
@@ -23,13 +22,10 @@ def __getattr__(name: str):
         from tracking.detector import FaceFeatureDetector
 
         return FaceFeatureDetector
-    if name in {"ONNXEngagementInferencer", "TripleXGBoostInferencer"}:
-        from tracking.inference import ONNXEngagementInferencer, TripleXGBoostInferencer
+    if name == "DeepForestInferencer":
+        from tracking.inference import DeepForestInferencer
 
-        return {
-            "ONNXEngagementInferencer": ONNXEngagementInferencer,
-            "TripleXGBoostInferencer": TripleXGBoostInferencer,
-        }[name]
+        return DeepForestInferencer
     if name in {"FocusSessionTracker", "TrackerConfig"}:
         from tracking.tracker import FocusSessionTracker, TrackerConfig
 

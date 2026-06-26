@@ -1,87 +1,51 @@
-# FocusFlow AI: hướng dẫn phản biện luận văn
+# FocusFlow AI: Hướng Dẫn Trả Lời Phản Biện
 
-Tài liệu này chỉ mô tả kiến trúc đang chạy. Bộ UML chính thức nằm trong
-[`docs/uml`](uml/README.md).
+## Model và claim
 
-## 1. Phần nghiên cứu
+Runtime hiện tại là `deep_forest_product_4class`: accuracy 76.85%, balanced
+accuracy 85.90%, macro-F1 78.02% trên protocol DAiSEE được lưu cùng artifact.
+Đây là chỉ số dataset-bound, không phải độ chính xác được cam kết ngoài đời.
 
-Mô hình triển khai là Fixed Triple-XGBoost gồm `final_xgb`, `boost_xgb` và
-`targeted_xgb`. Ba vector xác suất bốn lớp được hợp nhất với trọng số
-`0.84/0.14/0.02`, sau đó áp dụng class bias và temperature calibration.
+Model dùng `depth_robust_v2`: 168 feature/frame, `(30,168)` raw window,
+velocity/std enrichment `(30,504)`, basic aggregate 3529D, rồi cascade
+ExtraTrees + RandomForest hai tầng và calibration 4 lớp.
 
-Các chỉ số của artifact tái lập:
+## Ba câu hỏi cốt lõi
 
-- Accuracy: 76.01%;
-- Balanced Accuracy: 79.98%;
-- Macro-F1: 77.34%;
-- model-side CPU latency trung bình: 11.42 ms.
+**1. Cơ sở nào để chọn feature?**
 
-Đóng góp chính nằm ở preprocessing: 30 đặc trưng mỗi frame, làm giàu thành 90
-đặc trưng mỗi timestep và tổng hợp 2161 thống kê cho XGBoost. Đây không phải
-một thuật toán boosting mới.
+Không nên nói bộ feature là tối ưu nếu chưa có ablation. Cơ sở thiết kế là
+EAR/MAR cho opening mắt/miệng, hình học canonical theo inter-eye/roll để giảm
+camera-distance sensitivity, depth proxy/iris và MediaPipe blendshape/transform
+để mở rộng tín hiệu biểu cảm-hình học. Đây là hypothesis kỹ thuật, không phải
+bằng chứng tối ưu. `docs/EVALUATION_PROTOCOL.md` và
+`scripts/ablate_depth_robust_v2.py` là protocol để kiểm định từng nhóm, giữ
+nguyên split và classifier.
 
-### Câu hỏi thường gặp
+**2. Tại sao không local-only?**
 
-**Vì sao huấn luyện bốn lớp nhưng giao diện hiển thị focus score?**
+Phiên bản demo dùng cloud để đánh giá REST/WebSocket, session persistence,
+Cloud Run scale và observability; nó chỉ giảm raw-video upload, không được gọi
+là privacy tuyệt đối. Telemetry `(30,168)` vẫn nhạy cảm. Model-side latency
+không đủ để kết luận local mode tốt hơn vì MediaPipe, RAM, kích thước bundle,
+battery, update/revocation và reliability còn chi phối. Hướng production là
+đánh giá local/offline mode bằng cùng raw-video benchmark và threat model; API
+key tĩnh chỉ chấp nhận cho demo, không phải production auth.
 
-Quyết định model vẫn là `argmax` trên bốn lớp. `focus_score = P(medium) +
-P(high)` chỉ là telemetry liên tục cho đồ thị và summary, không thay thế quyết
-định bốn lớp bằng threshold nhị phân.
+**3. Generalization và end-to-end?**
 
-**Dữ liệu khuôn mặt khác nhau được xử lý thế nào?**
+Không khẳng định generalization khi chưa có test subject-disjoint ngoài DAiSEE.
+Luận văn phải báo đây là giới hạn. Hệ thống đã có benchmark đo extraction,
+client loop, local-model evaluation và cloud round-trip từ video thô; kết quả
+chỉ được đưa vào báo cáo sau khi chạy trên camera/lighting/network được ghi
+nhận. Không thay raw-video E2E bằng model-side latency.
 
-EAR/MAR dùng tỷ lệ hình học; chuỗi có sai phân và độ lệch chuẩn để giữ chuyển
-động tương đối. Các biện pháp này giảm nhưng không loại bỏ domain shift. Hiệu
-chuẩn theo người dùng là hướng phát triển, chưa phải chức năng hiện tại.
+## Các giới hạn phải nói rõ
 
-## 2. Phần ứng dụng
-
-Hệ thống có kiến trúc edge-to-cloud:
-
-- edge giữ ảnh webcam, chạy MediaPipe và gửi chuỗi `(30,30)`;
-- Cloud Run xác thực, làm giàu `(30,90)` và chạy Triple-XGBoost;
-- Firestore lưu user/session snapshot và summary;
-- Pub/Sub nhận sự kiện `session.completed`.
-
-### Câu hỏi thường gặp
-
-**Hệ thống có gửi video lên cloud không?**
-
-Không. Chỉ chuỗi đặc trưng số được gửi. Tuy vậy, đây vẫn là dữ liệu suy ra từ
-sinh trắc học và phải được bảo vệ bằng TLS, kiểm soát truy cập và retention.
-
-**Khi mất mạng hệ thống có suy luận local không?**
-
-Không ở phiên bản hiện tại. Client báo `reconnecting`, giữ queue bounded và thử
-lại bằng exponential backoff với jitter. Không được tuyên bố có hybrid fallback
-ONNX khi code chưa triển khai chức năng đó.
-
-**Tải mạng có phải 30 request/giây không?**
-
-Không. Camera có thể xử lý nhiều frame mỗi giây để cập nhật cửa sổ, nhưng
-`CLOUD_TELEMETRY_INTERVAL_SECONDS=1.0` giới hạn gửi telemetry tối đa 1 Hz.
-
-**Vì sao API và inference nằm cùng Cloud Run service?**
-
-Quy mô luận văn chưa chứng minh model là bottleneck cần tách service. Một service
-giảm network hop và đơn giản vận hành. Chỉ tách sau khi load test chỉ ra nhu cầu
-scale độc lập.
-
-**API key có đủ cho production không?**
-
-API key phù hợp lớp bảo vệ ứng dụng trong demo nhưng không thay thế danh tính
-người dùng và authorization đầy đủ. Hướng phát triển là token ngắn hạn và IAM
-phân quyền theo tenant.
-
-## 3. Bộ sơ đồ nên đưa vào luận văn
-
-1. Use-case diagram cho người học, giám sát và quản trị viên.
-2. Component diagram thể hiện dependency boundary.
-3. Deployment diagram cho edge, Cloud Run, Firestore và Pub/Sub.
-4. Sequence diagram cho một vòng inference WebSocket.
-5. State machine cho vòng đời phiên desktop.
-6. Domain model cho user, session, telemetry và response.
-
-Không cần đưa cả sáu sơ đồ vào phần thân nếu giới hạn trang. Component,
-deployment và sequence là ba hình quan trọng nhất; use case và domain model có
-thể chuyển xuống phụ lục.
+- DAiSEE là external/crowd annotation; model học nhãn engagement quan sát được,
+  không đo trực tiếp cognitive focus.
+- Cửa sổ 30 frame là mẫu telemetry ngắn, không là kết luận tâm lý độc lập.
+  UI/report cần smoothing hoặc aggregation theo thời gian dài hơn.
+- Không gửi frame không loại bỏ rủi ro biometric telemetry.
+- Kết quả benchmark và model selection phải gắn artifact hash, model version,
+  source commit, hardware và protocol.

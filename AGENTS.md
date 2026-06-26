@@ -7,10 +7,10 @@ FocusFlow AI is a privacy-oriented distributed focus monitoring system.
 The product has two runtime sides:
 
 - **Edge desktop client:** PyQt6, OpenCV, and MediaPipe. It captures webcam
-  frames, extracts a 30-value facial feature vector per frame, renders the
+  frames, extracts a 168-value depth-robust facial feature vector per frame, renders the
   local preview, and sends feature sequences to the cloud.
 - **Google Cloud backend:** FastAPI on Cloud Run. It enriches raw sequences,
-  runs the deployed 4-class fixed triple-XGBoost fusion model, stores session
+  runs the deployed calibrated 4-class DeepForest model, stores session
   summaries, and records report completion metadata.
 
 The project is intentionally **vision-only**.
@@ -27,7 +27,7 @@ Do not implement or reintroduce:
 - AI + OS heuristic fusion;
 - raw webcam frame upload or storage.
 
-The final focus decision comes only from the deployed late-fusion engagement
+The final focus decision comes only from the deployed DeepForest engagement
 model and the face-presence guard.
 
 ## 2. Source Of Truth
@@ -35,7 +35,7 @@ model and the face-presence guard.
 When documents disagree, use this priority:
 
 1. This `AGENTS.md`.
-2. Runtime model metadata in `models/product_4class_fixed_triple_xgb/`.
+2. Runtime model metadata in `models/deep_forest_product_4class/`.
 3. `GUIDE.md`.
 4. Existing implementation and older planning documents.
 
@@ -43,20 +43,20 @@ Do not replace the deployed model with an imagined architecture. The current
 production model is:
 
 ```text
-raw frame features:       30 values
-raw temporal sequence:    (30, 30)
-enriched model sequence:  (30, 90)
-tabular model features:    2161 tsfresh-like values
-components:               final_xgb + boost_xgb + targeted_xgb
-selected weights:         0.84 + 0.14 + 0.02
+raw frame features:       168 values (depth_robust_v2)
+raw temporal sequence:    (30, 168)
+enriched model sequence:  (30, 504)
+tabular model features:   3529 basic aggregate values
+components:               layer1 ExtraTrees + RandomForest, layer2 cascade
+calibration:              temperature=1.25, class biases=[1.5, 2.5, 0.0, 0.5]
 decision rule:            argmax over calibrated 4-class probabilities
-runtime:                  CPU, XGBoost
+runtime:                  CPU, scikit-learn/joblib
 class labels:             very_low, low, medium, high
 focus score:              P(medium) + P(high), telemetry only
 ```
 
 `tracking.buffer.enrich_raw_sequence()` is the canonical transformation from
-`(30, 30)` to `(30, 90)`. Both local tests and cloud inference must use it.
+`(30, 168)` to `(30, 504)`. Both client telemetry and cloud inference must use it.
 
 ## 3. Target GCP Architecture
 
@@ -64,8 +64,8 @@ focus score:              P(medium) + P(high), telemetry only
 ┌──────────────────────────── EDGE DESKTOP ────────────────────────────┐
 │ PyQt6 UI                                                            │
 │   │                                                                 │
-│   ├── Camera worker: OpenCV -> MediaPipe -> raw feature [30]        │
-│   ├── Sliding buffer: 30 frames -> raw sequence [30, 30]            │
+│   ├── Camera worker: OpenCV -> MediaPipe -> raw feature [168]       │
+│   ├── Sliding buffer: 30 frames -> raw sequence [30, 168]           │
 │   ├── Preview renderer: local frames only                           │
 │   └── Network worker: session REST + telemetry WebSocket            │
 └───────────────────────────────┬──────────────────────────────────────┘
@@ -78,8 +78,8 @@ focus score:              P(medium) + P(high), telemetry only
 │   ├── FastAPI REST session lifecycle                                │
 │   ├── WebSocket telemetry ingestion                                 │
 │   ├── shape/schema/idempotency validation                           │
-│   ├── enrich [30,30] -> [30,90]                                     │
-│   ├── fixed triple-XGBoost 4-class CPU inference                    │
+│   ├── enrich [30,168] -> [30,504]                                   │
+│   ├── calibrated DeepForest 4-class CPU inference                   │
 │   └── model-only focus decision                                     │
 │                                                                     │
 │ Firestore                                                           │
@@ -173,7 +173,7 @@ FocusTracker/
 │   ├── cloudbuild.yaml
 │   ├── env.example
 │   └── CONSOLE_SETUP.md
-├── models/product_4class_fixed_triple_xgb/ # Immutable runtime artifacts
+├── models/deep_forest_product_4class/ # Immutable runtime artifacts
 └── tests/
     ├── server/
     └── test_logic_oonx.py
@@ -222,7 +222,7 @@ GET  /readyz
 ```
 
 The example abbreviates the tensor. Validation requires exactly `30` frames and
-exactly `30` float values per frame.
+exactly `168` float values per frame.
 
 ### Inference response
 
@@ -230,7 +230,7 @@ The server returns:
 
 - model name and version;
 - final focus score and state;
-- final_xgb, boost_xgb, and targeted_xgb component probabilities;
+- layer1 ExtraTrees, layer1 RandomForest, and layer2 cascade probabilities;
 - 4-class labels, probabilities, predicted class, and predicted label;
 - selected weights;
 - decision trace;
@@ -365,7 +365,7 @@ download portal and keep the landing page in source control under
 ### Phase 1: Vision-only cleanup
 
 - Remove OS tracker, keyword heuristics, Hardcore Mode, and their UI.
-- Keep local late-fusion inference working.
+- Keep the local DeepForest reference runtime available for evaluation and fallback.
 - Replace the old OS card with component model telemetry.
 - Update all documentation and dependencies.
 
@@ -375,10 +375,10 @@ Exit criterion: no runtime import or UI reference to removed capabilities.
 
 - Add versioned contracts.
 - Add FastAPI health, session, inference, and WebSocket endpoints.
-- Load the late-fusion model once per Cloud Run instance.
+- Load the calibrated DeepForest model once per Cloud Run instance.
 - Add memory repository for tests and Firestore repository for production.
 
-Exit criterion: an integration test submits `(30,30)` and receives component
+Exit criterion: an integration test submits `(30,168)` and receives component
 probabilities from the real bundled model.
 
 ### Phase 3: Edge cloud transport

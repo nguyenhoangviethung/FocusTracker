@@ -12,7 +12,7 @@ import httpx
 from websockets.sync.client import connect
 
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket, utc_now
-from tracking.buffer import FeatureSequenceBuffer
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
 
 
 class DemoStepError(RuntimeError):
@@ -75,7 +75,10 @@ def _open_video_sequence(video_path: Path) -> dict[str, Any]:
         capture = cv2.VideoCapture(str(video_path))
         if not capture.isOpened():
             raise RuntimeError(f"Cannot open video: {video_path}")
-        buffer = FeatureSequenceBuffer(sequence_length=30, frame_feature_dim=30)
+        buffer = FeatureSequenceBuffer(
+            sequence_length=SEQUENCE_LENGTH,
+            frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+        )
         sequence = None
         face_found = False
         frame_count = 0
@@ -263,7 +266,10 @@ def replay_video_session(
 
         base_duration_seconds = (total_frames / fps) if total_frames > 0 else 10.0
         session_duration_seconds = max(1, int(round(base_duration_seconds)) or 1)
-        buffer = FeatureSequenceBuffer(sequence_length=30, frame_feature_dim=30)
+        buffer = FeatureSequenceBuffer(
+            sequence_length=SEQUENCE_LENGTH,
+            frame_feature_dim=DEPTH_ROBUST_V2_FRAME_FEATURE_DIM,
+        )
         face_found = False
         frame_count = 0
         packets: list[dict[str, Any]] = []

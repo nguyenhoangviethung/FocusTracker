@@ -111,10 +111,10 @@ theme sáng/tối của app.
 |                                25:00                                          |
 |                          STATUS: FOCUSED / DISTRACTED                         |
 +--------------------------------------+---------------------------------------+
-| AI CAMERA                            | 4-CLASS XGB FUSION                    |
-| [ Hide / Show ]                      | Final XGB    : 77.7%                 |
-| [ local preview frame ]              | Boost XGB    : 91.6%                 |
-| Signal: 64.8% | face found | FPS     | Targeted XGB : 77.2%                 |
+| AI CAMERA                            | 4-CLASS DEEPFOREST                    |
+| [ Hide / Show ]                      | Layer 1 ExtraTrees : 77.7%           |
+| [ local preview frame ]              | Layer 1 RandomForest : 91.6%         |
+| Signal: 64.8% | face found | FPS     | Layer 2 Cascade : 77.2%              |
 | State : AI=ENGAGED/DISTRACTED        |                                       |
 | Cloud: connecting / session_created   | FOCUS TREND                           |
 |                                      | [ chart ]                             |
@@ -133,8 +133,8 @@ theme sáng/tối của app.
 
 ### 3.2 Model card
 
-- tiêu đề `4-CLASS XGB FUSION`;
-- ba dòng component: `Final XGB`, `Boost XGB`, `Targeted XGB`;
+- tiêu đề `4-CLASS DEEPFOREST`;
+- ba dòng component: `Layer 1 ExtraTrees`, `Layer 1 RandomForest`, `Layer 2 Cascade`;
 - chart `FOCUS TREND` ở bên dưới;
 - `PAUSE` tạm dừng tracker;
 - `END` kết thúc session.
@@ -271,7 +271,7 @@ Ghi chú:
 
 - desktop luôn chạy cloud inference;
 - camera preview không upload;
-- model component telemetry có thể là `final_xgb`, `boost_xgb`, `targeted_xgb`;
+- model component telemetry là `layer1_extra_trees`, `layer1_random_forest`, `layer2_cascade`;
 - nếu component bị thiếu, UI giữ giá trị cũ thay vì nhảy về `0.0%`;
 - nếu frame hoặc feature vector lỗi, frame đó bị drop trước khi vào buffer;
 - crash trước đây ở AI Vision do `_format_latency()` đã được sửa.
@@ -289,4 +289,3 @@ ui/screens/report_page.py     history, filters, bulk delete
 ui/screens/settings_page.py    settings controls
 ui/theme.py                   palette and combo box styles
 ```
-

@@ -4,6 +4,7 @@ substitutions:
   _SERVICE: focusflow-api
   _IMAGE: focusflow-api
   _SERVICE_ACCOUNT: focusflow-api
+  _HF_SECRET: focusflow-hf-token
   _GOOGLE_OAUTH_CLIENT_ID: 1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
   _CONCURRENCY: "4"
   _MIN_INSTANCES: "1"
@@ -16,6 +17,22 @@ options:
   substitutionOption: ALLOW_LOOSE
 
 steps:
+  # The 340 MB model bundle is intentionally not committed to Git. Fetch it
+  # into the Cloud Build workspace before Docker receives its build context.
+  - id: fetch-deepforest-artifact
+    name: python:3.13-slim
+    entrypoint: bash
+    secretEnv:
+      - HF_TOKEN
+    args:
+      - -ceu
+      - |
+        python -m pip install --no-cache-dir "python-dotenv>=1,<2"
+        rm -f models/deep_forest_product_4class/model.joblib
+        python scripts/download_deep_forest_product.py --output models/deep_forest_product_4class
+        test -s models/deep_forest_product_4class/model.joblib
+        test -s models/deep_forest_product_4class/summary.json
+
   - id: build-image
     name: gcr.io/cloud-builders/docker
     args:
@@ -50,6 +67,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
       - --region=${_REGION}
       - --platform=managed
+      - --execution-environment=gen2
       - --ingress=all
       - --allow-unauthenticated
       - --service-account=${_SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com
@@ -57,15 +75,28 @@ steps:
       - --memory=2Gi
       - --concurrency=${_CONCURRENCY}
       - --timeout=3600
-      - --min=${_MIN_INSTANCES}
-      - --max=${_MAX_INSTANCES}
       - --min-instances=${_MIN_INSTANCES}
       - --max-instances=${_MAX_INSTANCES}
       - --cpu-boost
       - --no-cpu-throttling
-      - --set-env-vars=^@^FOCUSFLOW_ENV=production@FOCUSFLOW_REPOSITORY=firestore@FOCUSFLOW_EVENT_BACKEND=pubsub@FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events@FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions@FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users@FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID}@FOCUSFLOW_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000@FOCUSFLOW_STALE_SESSION_TIMEOUT_SECONDS=600@FOCUSFLOW_STALE_SESSION_CLEANUP_INTERVAL_SECONDS=60@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - --set-env-vars=^@^FOCUSFLOW_ENV=production@FOCUSFLOW_REPOSITORY=firestore@FOCUSFLOW_EVENT_BACKEND=pubsub@FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events@FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions@FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users@FOCUSFLOW_DEEP_FOREST_MODEL_DIR=/app/models/deep_forest_product_4class@FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID}@FOCUSFLOW_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000@FOCUSFLOW_STALE_SESSION_TIMEOUT_SECONDS=600@FOCUSFLOW_STALE_SESSION_CLEANUP_INTERVAL_SECONDS=60@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - --update-labels=model=deepforest,feature-schema=depth-robust-v2,build-sha=${SHORT_SHA}
       - --set-secrets=FOCUSFLOW_API_KEY=focusflow-api-key:latest
+
+  - id: verify-readyz
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        service_url="$(gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')"
+        curl --fail --silent --show-error "${service_url}/readyz"
 
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/${_HF_SECRET}/versions/latest
+      env: HF_TOKEN

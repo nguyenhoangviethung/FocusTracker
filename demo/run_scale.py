@@ -137,7 +137,7 @@ def main() -> None:
 
             try:
                 if fixture is not None:
-                    raw_seq = [f[:30] for f in fixture["raw_feature_sequence"]]
+                    raw_seq = fixture["raw_feature_sequence"]
                     outcome = replay_session(
                         config,
                         raw_feature_sequence=raw_seq,

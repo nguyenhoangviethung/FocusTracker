@@ -11,7 +11,7 @@ tách thành hai biên triển khai:
 
 - **Edge desktop:** giao diện PyQt6, OpenCV, MediaPipe, bộ đệm 30 khung hình và
   client REST/WebSocket.
-- **Cloud backend:** FastAPI trên Cloud Run, Fixed Triple-XGBoost, Firestore và
+- **Cloud backend:** FastAPI trên Cloud Run, calibrated DeepForest, Firestore và
   Pub/Sub.
 
 Thiết kế hiện tại là **cloud-only inference**. Khi mất mạng, client hiển thị
@@ -45,7 +45,7 @@ Kiến trúc áp dụng phân lớp nhẹ:
 1. **Presentation/transport:** PyQt6 và FastAPI routes.
 2. **Application:** tracker orchestration, cloud inference engine, repository
    ports và event publisher port.
-3. **Domain/model:** contract, biến đổi đặc trưng và Triple-XGBoost.
+3. **Domain/model:** contract, biến đổi đặc trưng và DeepForest.
 4. **Infrastructure:** OpenCV/MediaPipe, HTTP/WebSocket, Firestore, Pub/Sub và
    local storage.
 
@@ -55,16 +55,12 @@ UI không truy cập Firestore và model trực tiếp. Edge chỉ giao tiếp v
 
 ## 5. Luồng suy luận
 
-Mỗi frame được MediaPipe chuyển thành vector 30 chiều. Bộ đệm tạo chuỗi
-`(30,30)`; tracker gửi tối đa một gói mỗi giây qua WebSocket. Server kiểm tra API
-key, phiên, thứ tự gói và shape, sau đó làm giàu thành `(30,90)`. Model adapter
-tạo vector thống kê 2161 chiều, chạy ba XGBoost và hợp nhất xác suất:
-
-```text
-p = 0.84 p_final + 0.14 p_boost + 0.02 p_targeted
-```
-
-Sau class bias và temperature calibration, lớp có xác suất lớn nhất là đầu ra.
+Mỗi frame được MediaPipe chuyển thành vector `depth_robust_v2` 168 chiều. Bộ
+đệm tạo chuỗi `(30,168)`; tracker gửi tối đa một gói mỗi giây qua WebSocket.
+Server kiểm tra API key, phiên, thứ tự gói và shape, sau đó làm giàu thành
+`(30,504)`. Model adapter tạo vector thống kê basic 3529 chiều, chạy cascade
+ExtraTrees + RandomForest hai tầng, rồi áp dụng temperature `1.25` và class
+logit bias `[1.5, 2.5, 0.0, 0.5]` trước argmax bốn lớp.
 `focus_score` chỉ phục vụ đồ thị và thống kê. Sequence diagram nằm tại
 [`04_inference_sequence.mmd`](uml/04_inference_sequence.mmd).
 
@@ -86,7 +82,7 @@ Không có trạng thái `TrackingLocal` trong phiên bản hiện tại. Chi ti
 | `POST` | `/v1/inference` | Suy luận đồng bộ không trạng thái |
 | `GET` | `/healthz`, `/readyz` | Liveness và readiness |
 
-`TelemetryPacket.raw_feature_sequence` phải có shape `(30,30)`. Mỗi phản hồi
+`TelemetryPacket.raw_feature_sequence` phải có shape `(30,168)`. Mỗi phản hồi
 giữ nguyên `message_id` để client tương quan request/response. Ảnh, landmark
 đầy đủ, tiêu đề cửa sổ và hoạt động bàn phím/chuột không thuộc protocol.
 
@@ -99,7 +95,8 @@ giữa contract và entity được mô tả tại
 
 ## 9. Thuộc tính chất lượng
 
-- **Privacy:** ảnh chỉ tồn tại trong bộ nhớ edge.
+- **Privacy:** ảnh chỉ tồn tại trong bộ nhớ edge; feature telemetry vẫn là dữ
+  liệu suy ra từ sinh trắc học và phải có TLS, retention policy và consent.
 - **Availability:** reconnect có exponential backoff và jitter.
 - **Scalability:** Cloud Run stateless, model load một lần mỗi instance.
 - **Testability:** repository và event publisher có in-memory adapter.
@@ -111,8 +108,9 @@ giữa contract và entity được mô tả tại
 ## 10. Giới hạn hiện tại
 
 - Chưa có suy luận local khi mất mạng.
-- Chưa benchmark raw-video end-to-end của MediaPipe trên cùng máy với pipeline
-  OpenFace tham chiếu.
+- Raw-video end-to-end phải được benchmark theo `docs/EVALUATION_PROTOCOL.md`;
+  không dùng model-side latency thay thế trải nghiệm người dùng.
+- Chưa có generalization study subject-disjoint ngoài DAiSEE.
 - API key là xác thực ứng dụng cho giai đoạn luận văn, chưa thay thế hệ thống
   identity production hoàn chỉnh.
 - Dashboard là công cụ giám sát demo, không phải LMS đa tenant hoàn chỉnh.

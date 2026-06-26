@@ -94,18 +94,18 @@ class ActiveSessionPage(ThemedPage):
         self.model_card = Card()
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.model_card)
-        model_title = QLabel("4-CLASS XGB FUSION")
+        model_title = QLabel("4-CLASS DEEPFOREST")
         model_title.setFont(font(16, bold=True))
-        self.final_xgb_state = QLabel("Final XGB    : WARMING UP")
-        self.boost_xgb_state = QLabel("Boost XGB    : WARMING UP")
-        self.targeted_xgb_state = QLabel("Targeted XGB : WARMING UP")
+        self.extra_trees_state = QLabel("Layer 1 ExtraTrees : WARMING UP")
+        self.random_forest_state = QLabel("Layer 1 RandomForest : WARMING UP")
+        self.cascade_state = QLabel("Layer 2 Cascade : WARMING UP")
         self.trend_title = QLabel("FOCUS TREND")
         self.trend_title.setFont(font(16, bold=True))
         self.focus_chart = FocusTrendChart(max_points=300)
         self.model_card.layout.addWidget(model_title)
-        self.model_card.layout.addWidget(self.final_xgb_state)
-        self.model_card.layout.addWidget(self.boost_xgb_state)
-        self.model_card.layout.addWidget(self.targeted_xgb_state)
+        self.model_card.layout.addWidget(self.extra_trees_state)
+        self.model_card.layout.addWidget(self.random_forest_state)
+        self.model_card.layout.addWidget(self.cascade_state)
         self.model_card.layout.addSpacing(16)
         self.model_card.layout.addWidget(self.trend_title)
         self.model_card.layout.addWidget(self.focus_chart)
@@ -144,9 +144,9 @@ class ActiveSessionPage(ThemedPage):
         self.camera_signal.setText("Signal: Starting camera/model")
         self.camera_state.setText("State : WARMING_UP")
         self.cloud_status.setText("Cloud: connecting...")
-        self.final_xgb_state.setText("Final XGB    : WARMING UP")
-        self.boost_xgb_state.setText("Boost XGB    : WARMING UP")
-        self.targeted_xgb_state.setText("Targeted XGB : WARMING UP")
+        self.extra_trees_state.setText("Layer 1 ExtraTrees : WARMING UP")
+        self.random_forest_state.setText("Layer 1 RandomForest : WARMING UP")
+        self.cascade_state.setText("Layer 2 Cascade : WARMING UP")
         
         self.focus_chart.set_threshold(0.5)
         self._start_tracker(config)
@@ -259,9 +259,9 @@ class ActiveSessionPage(ThemedPage):
         if components:
             self._latest_components = components
         display_components = self._latest_components
-        self.final_xgb_state.setText(component_text("Final XGB", display_components.get("final_xgb")))
-        self.boost_xgb_state.setText(component_text("Boost XGB", display_components.get("boost_xgb")))
-        self.targeted_xgb_state.setText(component_text("Targeted XGB", display_components.get("targeted_xgb")))
+        self.extra_trees_state.setText(component_text("Layer 1 ExtraTrees", display_components.get("layer1_extra_trees")))
+        self.random_forest_state.setText(component_text("Layer 1 RandomForest", display_components.get("layer1_random_forest")))
+        self.cascade_state.setText(component_text("Layer 2 Cascade", display_components.get("layer2_cascade")))
 
     def _render_frame(self, frame_bgr) -> None:
         if self.toggle_cam_btn.isChecked():
@@ -354,8 +354,8 @@ class ActiveSessionPage(ThemedPage):
             self.camera_signal,
             self.camera_state,
             self.cloud_status,
-            self.final_xgb_state,
-            self.boost_xgb_state,
-            self.targeted_xgb_state,
+            self.extra_trees_state,
+            self.random_forest_state,
+            self.cascade_state,
         ]:
             label.setStyleSheet(f"color: {p['text_secondary']};")

@@ -15,6 +15,8 @@ from PyQt6.QtGui import QImage, QPixmap
 
 from ui.screens.base import ThemedPage, Card
 from ui.theme import ThemeManager, font
+from ui.component_metrics import component_text, normalize_components
+from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, SEQUENCE_LENGTH
 from tracking.tracker import FocusSessionTracker, TrackerConfig
 
 class AIVisionPage(ThemedPage):
@@ -28,6 +30,7 @@ class AIVisionPage(ThemedPage):
             "model": None,
             "roundtrip": None,
         }
+        self._latest_components: dict[str, dict] = {}
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
@@ -59,33 +62,37 @@ class AIVisionPage(ThemedPage):
             "loop_latency": QLabel("Client Loop Latency: --"),
             "model_latency": QLabel("Model Inference Latency: --"),
             "roundtrip_latency": QLabel("Cloud Round-Trip Latency: --"),
-            "pose": QLabel("Pitch: 0.0° | Yaw: 0.0°"),
+            "schema": QLabel(
+                f"Feature Schema: depth_robust_v2 ({DEPTH_ROBUST_V2_FRAME_FEATURE_DIM} values/frame)"
+            ),
+            "pose": QLabel("Pose: Pitch 0.00 | Yaw 0.00 | Roll 0.00"),
+            "depth": QLabel("Depth Cues: inter-eye -- | normalized z-span --"),
         }
-        self.ear_bar = QProgressBar()
-        self.mar_bar = QProgressBar()
-        self.confidence_bar = QProgressBar()
+        self.focus_score_bar = QProgressBar()
         self.telemetry_card.layout.addWidget(t_title)
         for label in self.telemetry_labels.values():
             self.telemetry_card.layout.addWidget(label)
-        self.telemetry_card.layout.addWidget(QLabel("EAR"))
-        self.telemetry_card.layout.addWidget(self.ear_bar)
-        self.telemetry_card.layout.addWidget(QLabel("MAR"))
-        self.telemetry_card.layout.addWidget(self.mar_bar)
-        self.telemetry_card.layout.addWidget(QLabel("Confidence"))
-        self.telemetry_card.layout.addWidget(self.confidence_bar)
+        self.telemetry_card.layout.addWidget(QLabel("Focus Telemetry"))
+        self.telemetry_card.layout.addWidget(self.focus_score_bar)
         self.telemetry_card.layout.addStretch()
         
         self.model_card = Card()
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.model_card)
-        m_title = QLabel("LATE-FUSION MODEL OUTPUT")
+        m_title = QLabel("DEEPFOREST 4-CLASS OUTPUT")
         m_title.setFont(font(16, bold=True))
-        self.conf_label = QLabel("Confidence: 0%")
-        self.vote_label = QLabel("VOTE: NONE")
-        self.vote_label.setFont(font(16, bold=True))
+        self.focus_score_label = QLabel("Focus Telemetry: --")
+        self.extra_trees_label = QLabel("Layer 1 ExtraTrees : --")
+        self.random_forest_label = QLabel("Layer 1 RandomForest : --")
+        self.cascade_label = QLabel("Layer 2 Cascade : --")
+        self.model_state_label = QLabel("STATE: WARMING_UP")
+        self.model_state_label.setFont(font(16, bold=True))
         self.model_card.layout.addWidget(m_title)
-        self.model_card.layout.addWidget(self.conf_label)
-        self.model_card.layout.addWidget(self.vote_label)
+        self.model_card.layout.addWidget(self.focus_score_label)
+        self.model_card.layout.addWidget(self.extra_trees_label)
+        self.model_card.layout.addWidget(self.random_forest_label)
+        self.model_card.layout.addWidget(self.cascade_label)
+        self.model_card.layout.addWidget(self.model_state_label)
         
         # Add Control Buttons
         ctrl_layout = QHBoxLayout()
@@ -117,6 +124,7 @@ class AIVisionPage(ThemedPage):
             self._tracker.stop()
             self._tracker = None
         self._latest_latencies = {"loop": None, "model": None, "roundtrip": None}
+        self._latest_components = {}
         self.camera_preview.setText("Camera Offline")
         self.camera_preview.setPixmap(QPixmap())
 
@@ -124,6 +132,7 @@ class AIVisionPage(ThemedPage):
         if self._tracker: return
         self._tracker_queue = queue.Queue()
         self._latest_latencies = {"loop": None, "model": None, "roundtrip": None}
+        self._latest_components = {}
         app = self.property("app_reference")
         config_dict = app.settings if app else {}
         config = TrackerConfig.from_dict(config_dict)
@@ -156,20 +165,43 @@ class AIVisionPage(ThemedPage):
         feature_values = payload.get("feature") or []
         if not isinstance(feature_values, (list, tuple)):
             feature_values = []
-        ear = float(feature_values[0]) if len(feature_values) > 0 else 0.0
-        mar = float(feature_values[2]) if len(feature_values) > 2 else 0.0
         pitch = float(feature_values[3]) if len(feature_values) > 3 else 0.0
         yaw = float(feature_values[4]) if len(feature_values) > 4 else 0.0
-        self.telemetry_labels["pose"].setText(f"Pitch: {pitch:.1f}° | Yaw: {yaw:.1f}°")
-        self._set_bar(self.ear_bar, ear)
-        self._set_bar(self.mar_bar, mar)
+        roll = float(feature_values[5]) if len(feature_values) > 5 else 0.0
+        inter_eye = float(feature_values[8]) if len(feature_values) > 8 else 0.0
+        normalized_z_span = float(feature_values[12]) if len(feature_values) > 12 else 0.0
+        self.telemetry_labels["pose"].setText(
+            f"Pose: Pitch {pitch:.3f} | Yaw {yaw:.3f} | Roll {roll:.3f}"
+        )
+        self.telemetry_labels["depth"].setText(
+            f"Depth Cues: inter-eye {inter_eye:.4f} | normalized z-span {normalized_z_span:.4f}"
+        )
 
-        score = payload.get("focus_score", 0.0)
-        state = payload.get("state", "DISTRACTED")
-        self._set_bar(self.confidence_bar, float(score))
-        self.conf_label.setText(f"Confidence: {score*100:.1f}%")
-        self.vote_label.setText(f"VOTE: {state}")
-        self.vote_label.setStyleSheet(f"color: {self.theme.color('accent_focus') if state == 'FOCUSED' else self.theme.color('accent_warn')};")
+        score = self._clamp_score(payload.get("focus_score"))
+        state = str(payload.get("state", "WARMING_UP")).upper()
+        self._set_bar(self.focus_score_bar, score)
+        self.focus_score_label.setText(f"Focus Telemetry: {score * 100:.1f}%")
+
+        components = normalize_components(payload.get("components"))
+        if components:
+            self._latest_components = components
+        self.extra_trees_label.setText(
+            component_text("Layer 1 ExtraTrees", self._latest_components.get("layer1_extra_trees"))
+        )
+        self.random_forest_label.setText(
+            component_text("Layer 1 RandomForest", self._latest_components.get("layer1_random_forest"))
+        )
+        self.cascade_label.setText(
+            component_text("Layer 2 Cascade", self._latest_components.get("layer2_cascade"))
+        )
+        self.model_state_label.setText(f"STATE: {state}")
+        if state == "FOCUSED":
+            color = self.theme.color("accent_focus")
+        elif state in {"WARMING_UP", "PAUSED"}:
+            color = self.theme.color("text_secondary")
+        else:
+            color = self.theme.color("accent_warn")
+        self.model_state_label.setStyleSheet(f"color: {color};")
 
     def _render_frame(self, frame_bgr) -> None:
         if frame_bgr is None or len(frame_bgr) == 0:
@@ -189,6 +221,13 @@ class AIVisionPage(ThemedPage):
     def _set_bar(bar: QProgressBar, value: float) -> None:
         bar.setRange(0, 1000)
         bar.setValue(max(0, min(1000, int(round(max(0.0, min(1.0, value)) * 1000)))))
+
+    @staticmethod
+    def _clamp_score(value) -> float:
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.0
 
     def _format_latency(self, key: str, value) -> str:
         try:
