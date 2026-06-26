@@ -306,11 +306,11 @@ class FocusSessionTracker:
                 probability = float(ai_result.get("focus_score", ai_result.get("probability", 0.0)))
                 model_ready = bool(ai_result.get("ready", False))
                 if model_ready:
-                    state = (
-                        "FOCUSED"
-                        if str(ai_result.get("state", "DISTRACTED")) in {"ENGAGED", "FOCUSED"}
-                        else "DISTRACTED"
-                    )
+                    raw_state = str(ai_result.get("state", "DISTRACTED"))
+                    if raw_state in {"FOCUSED", "DISTRACTED", "NO_FACE"}:
+                        state = raw_state
+                    else:
+                        state = "FOCUSED" if raw_state in {"ENGAGED", "FOCUSED"} else "DISTRACTED"
                 else:
                     state = "WARMING_UP"
                 latency_ms = (time.perf_counter() - loop_started_at) * 1000.0
@@ -465,7 +465,8 @@ class FocusSessionTracker:
                     **payload,
                     "probability": payload.get("focus_score", 0.0),
                     "ready": True,
-                    "state": payload.get("ai_state", "DISTRACTED"),
+                    "state": payload.get("state", payload.get("ai_state", "DISTRACTED")),
+                    "ai_state": payload.get("ai_state", "DISTRACTED"),
                     "inference_source": "cloud",
                 }
         return latest

@@ -10,6 +10,9 @@ from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, enrich_raw_sequen
 from tracking.inference import DeepForestInferencer, MODEL_NAME, MODEL_VERSION
 
 
+FOCUS_THRESHOLD = 0.5
+
+
 class CloudInferenceEngine:
     """Thread-safe adapter around the calibrated DeepForest product bundle."""
 
@@ -29,16 +32,18 @@ class CloudInferenceEngine:
                 prediction = self._inferencer.predict(enriched)
             focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
             ai_state = str(prediction.get("state", "DISTRACTED"))
-            state = "FOCUSED" if ai_state == "ENGAGED" else "DISTRACTED"
+            state = "FOCUSED" if focus_score > FOCUS_THRESHOLD else "DISTRACTED"
             decision = {
                 "state": state,
                 "source": "deep_forest_product_4class",
-                "reason": "Decision produced by the calibrated DeepForest 4-class cascade.",
+                "reason": f"Decision produced by the calibrated DeepForest 4-class cascade with focus_score > {FOCUS_THRESHOLD:.2f}.",
                 "ai_probability": focus_score,
-                "decision_rule": prediction.get("decision_rule", "argmax_4class"),
+                "decision_rule": f"focus_score_threshold_{FOCUS_THRESHOLD:.2f}",
+                "ai_state": ai_state,
                 "predicted_class": prediction.get("prediction_4class"),
                 "predicted_label": prediction.get("prediction_label"),
                 "engaged_class_indices": prediction.get("engaged_class_indices", [2, 3]),
+                "focus_threshold": FOCUS_THRESHOLD,
             }
         else:
             prediction = {}
