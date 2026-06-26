@@ -61,6 +61,18 @@ python tests/manual/test_tracker.py --model models/deep_forest_product_4class
 pyinstaller focusflow_app.spec --clean
 ```
 
+Linux release package:
+
+```bash
+scripts/package_linux_release.sh
+```
+
+Upload release artifacts after all OS builds exist in `release/`:
+
+```bash
+scripts/upload_release_artifacts.sh
+```
+
 ## Public download portal
 
 For demo distribution, the repository includes a static landing page designed

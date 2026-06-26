@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 block_cipher = None
-project_root = Path(__file__).resolve().parent
+project_root = Path(globals().get("SPECPATH", ".")).resolve()
 
 hiddenimports = [
     "cv2",

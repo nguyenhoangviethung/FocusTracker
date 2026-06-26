@@ -11,6 +11,11 @@ __pycache__/
 logs/
 build/
 dist/
+release/
+*.AppImage
+*.dmg
+*.exe
+*.tar.gz
 demo/results/
 demo/features/
 demo/Data
