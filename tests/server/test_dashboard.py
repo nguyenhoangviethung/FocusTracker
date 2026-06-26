@@ -12,7 +12,10 @@ from server.api.routes import (
     dashboard_batch_delete_sessions,
     dashboard_clear_all_sessions,
     dashboard_clear_stale_sessions,
+    dashboard_create_session,
     dashboard_delete_session,
+    dashboard_finalize_session,
+    dashboard_update_session,
 )
 from server.app import app
 from shared.contracts import utc_now
@@ -35,6 +38,19 @@ class DummySettings:
     stale_session_cleanup_interval_seconds = 60
 
 
+class DummyPublisher:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def publish(self, event_type: str, payload: dict) -> None:
+        self.events.append((event_type, payload))
+
+
+class FailingPublisher:
+    def publish(self, event_type: str, payload: dict) -> None:
+        raise RuntimeError("Pub/Sub unavailable")
+
+
 class MutableRepository:
     def __init__(self, records: list[dict]) -> None:
         self.records = {record["session_id"]: dict(record) for record in records}
@@ -42,6 +58,12 @@ class MutableRepository:
     def get(self, session_id: str):
         record = self.records.get(session_id)
         return dict(record) if record else None
+
+    def create(self, payload):
+        from shared.contracts import SessionRecord
+        record = SessionRecord(**payload.model_dump())
+        self.records[record.session_id] = record.model_dump(mode="json")
+        return record
 
     def list_recent(self, limit: int):
         records = sorted(
@@ -53,6 +75,13 @@ class MutableRepository:
 
     def delete(self, session_id: str) -> bool:
         return self.records.pop(session_id, None) is not None
+
+    def update(self, session_id: str, updates: dict):
+        record = self.records.get(session_id)
+        if record is None:
+            return None
+        record.update(updates)
+        return dict(record)
 
     def expire_stale(self, cutoff, limit: int = 500) -> list[str]:
         from server.repositories.sessions import _expire_record_if_stale
@@ -83,7 +112,7 @@ class DummyEngine:
 
 
 class DummyApp:
-    def __init__(self, repository, cache: DummyCache | None = None) -> None:
+    def __init__(self, repository, cache: DummyCache | None = None, publisher=None) -> None:
         self.state = type(
             "State",
             (),
@@ -92,7 +121,7 @@ class DummyApp:
                 "session_repository": repository,
                 "user_repository": DummyUserRepository(),
                 "inference_engine": DummyEngine(),
-                "event_publisher": None,
+                "event_publisher": publisher,
                 "dashboard_cache": cache,
                 "query_limit": 100,
             },
@@ -100,8 +129,8 @@ class DummyApp:
 
 
 class DummyRequest:
-    def __init__(self, repository, cache: DummyCache | None = None) -> None:
-        self.app = DummyApp(repository, cache)
+    def __init__(self, repository, cache: DummyCache | None = None, publisher=None) -> None:
+        self.app = DummyApp(repository, cache, publisher)
 
 
 def test_dashboard_routes_are_available() -> None:
@@ -383,3 +412,470 @@ def test_dashboard_update_settings() -> None:
     assert req.app.state.dashboard_cache.ttl_seconds == 5.0
     assert req.app.state.query_limit == 50
     assert cache.cleared is True
+
+
+# ---------------------------------------------------------------------------
+# dashboard_create_session tests
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_create_session_creates_active_session() -> None:
+    repository = MutableRepository([])
+    cache = DummyCache()
+
+    result = asyncio.run(
+        dashboard_create_session(
+            DummyRequest(repository, cache),
+            {"user_id": "test-user", "device_id": "test-device", "duration_seconds": 600},
+            x_api_key="secret",
+        )
+    )
+
+    assert result["status"] == "created"
+    session_id = result["session_id"]
+    assert session_id in repository.records
+    record = repository.records[session_id]
+    assert record["user_id"] == "test-user"
+    assert record["device_id"] == "test-device"
+    assert record["duration_seconds"] == 600
+    assert record.get("ended_at") is None
+    assert cache.cleared is True
+
+
+def test_dashboard_create_session_with_completed_status_populates_summary() -> None:
+    repository = MutableRepository([])
+    cache = DummyCache()
+
+    result = asyncio.run(
+        dashboard_create_session(
+            DummyRequest(repository, cache),
+            {
+                "user_id": "demo-user",
+                "device_id": "demo-device",
+                "duration_seconds": 1800,
+                "status": "completed",
+            },
+            x_api_key="secret",
+        )
+    )
+
+    assert result["status"] == "created"
+    session_id = result["session_id"]
+    record = repository.records[session_id]
+    assert record["status"] == "completed"
+    assert record["ended_at"] is not None
+    summary = record["summary"]
+    assert isinstance(summary, dict)
+    assert summary["duration_seconds"] == 1800
+    assert 0.0 < summary["average_focus"] <= 1.0
+    assert len(summary["minute_focus_scores"]) == 30  # 1800 / 60
+    assert record["report_status"] == "completed"
+
+
+def test_dashboard_create_session_with_cancelled_status() -> None:
+    repository = MutableRepository([])
+
+    result = asyncio.run(
+        dashboard_create_session(
+            DummyRequest(repository, DummyCache()),
+            {"status": "cancelled", "duration_seconds": 600},
+            x_api_key="secret",
+        )
+    )
+
+    session_id = result["session_id"]
+    record = repository.records[session_id]
+    assert record["status"] == "cancelled"
+    assert record["ended_at"] is not None
+    assert record["summary"]["completed"] is False
+
+
+def test_dashboard_create_session_uses_defaults() -> None:
+    repository = MutableRepository([])
+
+    result = asyncio.run(
+        dashboard_create_session(
+            DummyRequest(repository, DummyCache()),
+            {},
+            x_api_key="secret",
+        )
+    )
+
+    session_id = result["session_id"]
+    record = repository.records[session_id]
+    assert record["user_id"] == "admin-demo"
+    assert record["device_id"] == "demo-device"
+    assert record["duration_seconds"] == 1800
+    assert record.get("ended_at") is None
+
+
+def test_dashboard_create_session_rejects_bad_api_key() -> None:
+    repository = MutableRepository([])
+
+    try:
+        asyncio.run(
+            dashboard_create_session(
+                DummyRequest(repository, DummyCache()),
+                {"user_id": "user"},
+                x_api_key="wrong-key",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Expected 401 for bad API key")
+
+    assert len(repository.records) == 0
+
+
+# ---------------------------------------------------------------------------
+# dashboard_update_session tests
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_update_session_updates_user_and_device() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "old-user",
+                "device_id": "old-device",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+            }
+        ]
+    )
+    cache = DummyCache()
+
+    result = asyncio.run(
+        dashboard_update_session(
+            DummyRequest(repository, cache),
+            "s1",
+            {"user_id": "new-user", "device_id": "new-device"},
+            x_api_key="secret",
+        )
+    )
+
+    assert result == {"status": "updated", "session_id": "s1"}
+    record = repository.records["s1"]
+    assert record["user_id"] == "new-user"
+    assert record["device_id"] == "new-device"
+    assert cache.cleared is True
+
+
+def test_dashboard_update_session_transitions_active_to_completed() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+                "duration_seconds": 1800,
+            }
+        ]
+    )
+
+    asyncio.run(
+        dashboard_update_session(
+            DummyRequest(repository, DummyCache()),
+            "s1",
+            {"status": "completed"},
+            x_api_key="secret",
+        )
+    )
+
+    record = repository.records["s1"]
+    assert record["status"] == "completed"
+    assert record["ended_at"] is not None
+    assert record["summary"] is not None
+    assert record["report_status"] == "completed"
+
+
+def test_dashboard_update_session_transitions_completed_back_to_active() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "completed",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": "2026-06-20T10:30:00Z",
+                "summary": {"duration_seconds": 1800, "average_focus": 0.75},
+                "report_status": "completed",
+                "report_started_at": "2026-06-20T10:30:00Z",
+                "report_completed_at": "2026-06-20T10:30:00Z",
+            }
+        ]
+    )
+
+    asyncio.run(
+        dashboard_update_session(
+            DummyRequest(repository, DummyCache()),
+            "s1",
+            {"status": "active"},
+            x_api_key="secret",
+        )
+    )
+
+    record = repository.records["s1"]
+    assert record["status"] == "active"
+    assert record["ended_at"] is None
+    assert record["summary"] is None
+    assert record["report_status"] is None
+
+
+def test_dashboard_update_session_adds_notes_to_summary() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "completed",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": "2026-06-20T10:30:00Z",
+                "summary": {"duration_seconds": 1800, "average_focus": 0.75},
+            }
+        ]
+    )
+
+    asyncio.run(
+        dashboard_update_session(
+            DummyRequest(repository, DummyCache()),
+            "s1",
+            {"notes": "Good focus session"},
+            x_api_key="secret",
+        )
+    )
+
+    record = repository.records["s1"]
+    assert record["summary"]["notes"] == "Good focus session"
+    assert record["summary"]["duration_seconds"] == 1800
+
+
+def test_dashboard_update_session_returns_404_for_missing_session() -> None:
+    repository = MutableRepository([])
+
+    try:
+        asyncio.run(
+            dashboard_update_session(
+                DummyRequest(repository, DummyCache()),
+                "nonexistent",
+                {"user_id": "user"},
+                x_api_key="secret",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert exc.detail == "Session not found"
+    else:
+        raise AssertionError("Expected 404 for missing session")
+
+
+def test_dashboard_update_session_rejects_bad_api_key() -> None:
+    repository = MutableRepository(
+        [{"session_id": "s1", "started_at": "2026-06-20T10:00:00Z"}]
+    )
+
+    try:
+        asyncio.run(
+            dashboard_update_session(
+                DummyRequest(repository, DummyCache()),
+                "s1",
+                {"user_id": "hacker"},
+                x_api_key="wrong",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Expected 401 for bad API key")
+
+
+def test_dashboard_update_session_empty_payload_is_noop() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "original-user",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+            }
+        ]
+    )
+
+    result = asyncio.run(
+        dashboard_update_session(
+            DummyRequest(repository, DummyCache()),
+            "s1",
+            {},
+            x_api_key="secret",
+        )
+    )
+
+    assert result == {"status": "updated", "session_id": "s1"}
+    assert repository.records["s1"]["user_id"] == "original-user"
+
+
+# ---------------------------------------------------------------------------
+# dashboard_finalize_session tests
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_finalize_session_generates_summary_and_publishes_event() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+                "duration_seconds": 1800,
+            }
+        ]
+    )
+    publisher = DummyPublisher()
+    cache = DummyCache()
+
+    result = asyncio.run(
+        dashboard_finalize_session(
+            DummyRequest(repository, cache, publisher),
+            "s1",
+            {},
+            x_api_key="secret",
+        )
+    )
+
+    assert result == {"status": "finalized", "session_id": "s1"}
+
+    record = repository.records["s1"]
+    assert record["status"] == "completed"
+    assert record["ended_at"] is not None
+    summary = record["summary"]
+    assert isinstance(summary, dict)
+    assert summary["duration_seconds"] == 1800
+    assert 0.0 < summary["average_focus"] <= 1.0
+    assert len(summary["minute_focus_scores"]) == 30  # 1800 / 60
+    assert summary["completed"] is True
+    assert record["report_status"] == "completed"
+
+    assert len(publisher.events) == 1
+    event_type, payload = publisher.events[0]
+    assert event_type == "session.completed"
+    assert payload["session_id"] == "s1"
+    assert payload["device_id"] == "device-1"
+    assert isinstance(payload["summary"], dict)
+
+    assert cache.cleared is True
+
+
+def test_dashboard_finalize_session_with_custom_duration() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+                "duration_seconds": 1800,
+            }
+        ]
+    )
+    publisher = DummyPublisher()
+
+    asyncio.run(
+        dashboard_finalize_session(
+            DummyRequest(repository, DummyCache(), publisher),
+            "s1",
+            {"duration_seconds": 600, "completed": False},
+            x_api_key="secret",
+        )
+    )
+
+    record = repository.records["s1"]
+    assert record["status"] == "cancelled"
+    assert record["summary"]["duration_seconds"] == 600
+    assert record["summary"]["completed"] is False
+    assert len(record["summary"]["minute_focus_scores"]) == 10  # 600 / 60
+
+
+def test_dashboard_finalize_session_returns_404_for_missing_session() -> None:
+    repository = MutableRepository([])
+    publisher = DummyPublisher()
+
+    try:
+        asyncio.run(
+            dashboard_finalize_session(
+                DummyRequest(repository, DummyCache(), publisher),
+                "nonexistent",
+                {},
+                x_api_key="secret",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert exc.detail == "Session not found"
+    else:
+        raise AssertionError("Expected 404 for missing session")
+
+    assert len(publisher.events) == 0
+
+
+def test_dashboard_finalize_session_rejects_bad_api_key() -> None:
+    repository = MutableRepository(
+        [{"session_id": "s1", "started_at": "2026-06-20T10:00:00Z"}]
+    )
+
+    try:
+        asyncio.run(
+            dashboard_finalize_session(
+                DummyRequest(repository, DummyCache(), DummyPublisher()),
+                "s1",
+                {},
+                x_api_key="wrong",
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Expected 401 for bad API key")
+
+
+def test_dashboard_finalize_session_survives_publisher_failure() -> None:
+    repository = MutableRepository(
+        [
+            {
+                "session_id": "s1",
+                "user_id": "user-1",
+                "device_id": "device-1",
+                "status": "active",
+                "started_at": "2026-06-20T10:00:00Z",
+                "ended_at": None,
+                "duration_seconds": 600,
+            }
+        ]
+    )
+
+    result = asyncio.run(
+        dashboard_finalize_session(
+            DummyRequest(repository, DummyCache(), FailingPublisher()),
+            "s1",
+            {},
+            x_api_key="secret",
+        )
+    )
+
+    assert result == {"status": "finalized", "session_id": "s1"}
+    record = repository.records["s1"]
+    assert record["status"] == "completed"
+    assert record["summary"] is not None

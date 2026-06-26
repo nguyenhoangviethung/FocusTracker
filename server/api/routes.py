@@ -313,6 +313,198 @@ async def dashboard_update_settings(
     }
 
 
+@router.post("/dashboard/api/sessions/create")
+async def dashboard_create_session(
+    request: Request,
+    payload: dict[str, Any],
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+
+    user_id = payload.get("user_id", "admin-demo")
+    device_id = payload.get("device_id", "demo-device")
+    duration = int(payload.get("duration_seconds", 1800))
+    status = payload.get("status", "active")
+
+    create_payload = SessionCreate(
+        device_id=device_id,
+        user_id=user_id,
+        duration_seconds=duration,
+    )
+
+    record = repository.create(create_payload)
+
+    updates = {}
+    if status in ("completed", "cancelled"):
+        completed = (status == "completed")
+        import random
+        minutes = max(1, duration // 60)
+        mock_scores = [round(random.uniform(0.3, 0.98), 2) for _ in range(minutes)]
+        avg_focus = sum(mock_scores) / len(mock_scores)
+
+        summary = {
+            "duration_seconds": duration,
+            "focused_seconds": int(duration * avg_focus),
+            "average_focus": avg_focus,
+            "distraction_count": random.randint(1, 6),
+            "focus_streak_seconds": float(random.randint(120, 600)),
+            "completed": completed,
+            "minute_focus_scores": mock_scores,
+        }
+
+        ended_at = utc_now().isoformat()
+        updates = {
+            "status": status,
+            "ended_at": ended_at,
+            "last_seen_at": ended_at,
+            "summary": summary,
+            "report_status": "completed",
+            "report_started_at": ended_at,
+            "report_completed_at": ended_at,
+        }
+
+    if updates:
+        repository.update(record.session_id, updates)
+
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+
+    return {"status": "created", "session_id": record.session_id}
+
+
+@router.post("/dashboard/api/sessions/{session_id}/update")
+async def dashboard_update_session(
+    request: Request,
+    session_id: str,
+    payload: dict[str, Any],
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, _ = _services(request)
+    _verify_api_key(settings, x_api_key)
+
+    existing = repository.get(session_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    updates = {}
+    if "user_id" in payload:
+        updates["user_id"] = str(payload["user_id"]).strip()
+    if "device_id" in payload:
+        updates["device_id"] = str(payload["device_id"]).strip()
+    if "status" in payload:
+        status = payload["status"]
+        if status in ("active", "completed", "cancelled"):
+            updates["status"] = status
+            if status != "active" and not existing.get("ended_at"):
+                ended_at = utc_now().isoformat()
+                updates["ended_at"] = ended_at
+                updates["last_seen_at"] = ended_at
+
+                if not existing.get("summary"):
+                    updates["summary"] = {
+                        "duration_seconds": existing.get("duration_seconds", 1800),
+                        "focused_seconds": 0,
+                        "average_focus": 0.0,
+                        "distraction_count": 0,
+                        "focus_streak_seconds": 0.0,
+                        "completed": (status == "completed"),
+                        "minute_focus_scores": [0.5, 0.6, 0.7],
+                    }
+                    updates["report_status"] = "completed"
+                    updates["report_started_at"] = ended_at
+                    updates["report_completed_at"] = ended_at
+            elif status == "active":
+                updates["ended_at"] = None
+                updates["summary"] = None
+                updates["report_status"] = None
+                updates["report_started_at"] = None
+                updates["report_completed_at"] = None
+
+    if "notes" in payload:
+        summary = existing.get("summary") or {}
+        summary["notes"] = str(payload["notes"]).strip()
+        updates["summary"] = summary
+
+    if updates:
+        repository.update(session_id, updates)
+
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+
+    return {"status": "updated", "session_id": session_id}
+
+
+@router.post("/dashboard/api/sessions/{session_id}/finalize")
+async def dashboard_finalize_session(
+    request: Request,
+    session_id: str,
+    payload: dict[str, Any],
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    settings, repository, _, _, publisher = _services(request)
+    _verify_api_key(settings, x_api_key)
+
+    existing = repository.get(session_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    duration = int(payload.get("duration_seconds") or existing.get("duration_seconds") or 1800)
+    completed = bool(payload.get("completed", True))
+
+    import random
+    minutes = max(1, duration // 60)
+    mock_scores = [round(random.uniform(0.4, 0.98), 2) for _ in range(minutes)]
+    avg_focus = sum(mock_scores) / len(mock_scores)
+
+    summary = SessionSummary(
+        duration_seconds=duration,
+        focused_seconds=int(duration * avg_focus),
+        average_focus=avg_focus,
+        distraction_count=random.randint(1, 5),
+        focus_streak_seconds=float(random.randint(150, 700)),
+        completed=completed,
+        minute_focus_scores=mock_scores,
+    )
+
+    completed_at = utc_now().isoformat()
+    updates = {
+        "status": "completed" if completed else "cancelled",
+        "ended_at": completed_at,
+        "last_seen_at": completed_at,
+        "summary": summary.model_dump(mode="json"),
+        "report_status": "completed",
+        "report_started_at": completed_at,
+        "report_completed_at": completed_at,
+    }
+
+    repository.update(session_id, updates)
+
+    try:
+        publisher.publish(
+            "session.completed",
+            {
+                "session_id": session_id,
+                "device_id": existing.get("device_id"),
+                "summary": summary.model_dump(mode="json"),
+            },
+        )
+    except Exception:
+        logger.error(
+            "Dashboard manual finalization event publish failed session_id=%s",
+            session_id,
+            exc_info=True,
+        )
+
+    cache = getattr(request.app.state, "dashboard_cache", None)
+    if cache is not None:
+        cache.clear()
+
+    return {"status": "finalized", "session_id": session_id}
+
+
 @router.delete("/dashboard/api/sessions/{session_id}")
 async def dashboard_delete_session(
     request: Request,
