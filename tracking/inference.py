@@ -17,7 +17,7 @@ from utils.paths import resource_base_dir
 logger = get_logger("inference")
 
 MODEL_NAME = "triple_xgb_depth_robust_fusion"
-MODEL_VERSION = "triple_xgb_depth_robust_maxacc_product"
+MODEL_VERSION = "triple_xgb_depth_robust_target_band_product"
 LABEL_SPACE = "daisee_4class"
 CLASS_LABELS = ("very_low", "low", "medium", "high")
 ENGAGED_CLASS_INDICES = (2, 3)
@@ -58,7 +58,7 @@ class TripleXGBDepthRobustInferencer:
         if not config_file.exists():
             raise FileNotFoundError(
                 f"Triple XGB product artifact is missing: {config_file}. "
-                "Download triple_xgb_depth_robust_maxacc_product.zip before starting."
+                "Download triple_xgb_depth_robust_target_band_product.zip before starting."
             )
 
         self._config = json.loads(config_file.read_text(encoding="utf-8"))

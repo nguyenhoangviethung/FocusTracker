@@ -7,13 +7,13 @@ artifact selected from the `engagement-cpu` checkpoint reports.
 
 ```text
 model_name:         triple_xgb_depth_robust_fusion
-model_version:      triple_xgb_depth_robust_maxacc_product
-accuracy:           86.44%
-balanced accuracy:  88.00%
-macro F1:           89.54%
-mean latency:       23.96 ms
+model_version:      triple_xgb_depth_robust_target_band_product
+accuracy:           76.85%
+balanced accuracy:  83.20%
+macro F1:           76.91%
+mean latency:       24.80 ms
 decision rule:      argmax over calibrated 4-class probabilities
-component weights:  final_xgb=0.04, boost_xgb=0.66, targeted_xgb=0.30
+component weights:  final_xgb=0.72, boost_xgb=0.26, targeted_xgb=0.02
 ```
 
 The UI displays `focus_score = P(medium) + P(high)` as telemetry. The final
@@ -43,7 +43,7 @@ that same transform.
 Install the bundle at:
 
 ```text
-models/triple_xgb_depth_robust_maxacc_product/
+models/triple_xgb_depth_robust_target_band_product/
   fusion_config.json
   summary.json
   final_xgb/model.json
@@ -57,13 +57,13 @@ models/triple_xgb_depth_robust_maxacc_product/
 Canonical remote artifact:
 
 ```text
-Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip
+Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
 ```
 
 Cloud Build fetches the same zip from:
 
 ```text
-gs://${PROJECT_ID}-focusflow-releases/models/triple_xgb_depth_robust_maxacc_product.zip
+gs://${PROJECT_ID}-focusflow-releases/models/triple_xgb_depth_robust_target_band_product.zip
 ```
 
 ## Inference Contract
@@ -74,7 +74,7 @@ x = tsfresh_like_features(enriched)            # -> (12097,)
 p_final = final_xgb.predict_proba(scale_final(x))
 p_boost = boost_xgb.predict_proba(scale_boost(x))
 p_targeted = targeted_xgb.predict_proba(scale_targeted(x))
-p_fused = 0.04 * p_final + 0.66 * p_boost + 0.30 * p_targeted
+p_fused = 0.72 * p_final + 0.26 * p_boost + 0.02 * p_targeted
 p_calibrated = normalize(p_fused * class_bias_from_validation_support)
 prediction = argmax(p_calibrated)
 focus_score = p_calibrated[2] + p_calibrated[3]

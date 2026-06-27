@@ -36,7 +36,7 @@ model and the face-presence guard.
 When documents disagree, use this priority:
 
 1. This `AGENTS.md`.
-2. Runtime model metadata in `models/triple_xgb_depth_robust_maxacc_product/`.
+2. Runtime model metadata in `models/triple_xgb_depth_robust_target_band_product/`.
 3. `GUIDE.md`.
 4. Existing implementation and older planning documents.
 
@@ -176,7 +176,7 @@ FocusTracker/
 │   ├── cloudbuild.yaml
 │   ├── env.example
 │   └── CONSOLE_SETUP.md
-├── models/triple_xgb_depth_robust_maxacc_product/ # Immutable runtime artifacts
+├── models/triple_xgb_depth_robust_target_band_product/ # Immutable runtime artifacts
 └── tests/
     ├── server/
     └── test_logic_oonx.py

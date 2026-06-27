@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         type=str,
         default=None,
-        help="Path to the Triple XGB product directory. Defaults to models/triple_xgb_depth_robust_maxacc_product",
+        help="Path to the Triple XGB product directory. Defaults to models/triple_xgb_depth_robust_target_band_product",
     )
     parser.add_argument("--show-landmarks", action="store_true", help="Draw FaceMesh landmarks on frame")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0 = until q)")

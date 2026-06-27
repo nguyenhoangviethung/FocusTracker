@@ -11,8 +11,8 @@ from dotenv import dotenv_values
 
 
 REPO_ID = "Hnug/daisee-processed"
-ARTIFACT_PATH = "checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip"
-DEFAULT_OUTPUT = Path("models/triple_xgb_depth_robust_maxacc_product")
+ARTIFACT_PATH = "checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip"
+DEFAULT_OUTPUT = Path("models/triple_xgb_depth_robust_target_band_product")
 
 
 def _load_token() -> str:
@@ -39,7 +39,7 @@ def _download(url: str, destination: Path, token: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download the FocusFlow Triple XGB product artifact.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--zip-path", type=Path, default=Path("/tmp/triple_xgb_depth_robust_maxacc_product.zip"))
+    parser.add_argument("--zip-path", type=Path, default=Path("/tmp/triple_xgb_depth_robust_target_band_product.zip"))
     args = parser.parse_args()
 
     token = _load_token()

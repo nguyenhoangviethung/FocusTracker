@@ -487,7 +487,7 @@ class FocusSessionTracker:
                 "decision_rule": "argmax_4class",
                 "feature_schema": "depth_robust_v2",
                 "temporal_enrichment": "velocity_std",
-                "model_version": "triple_xgb_depth_robust_maxacc_product",
+                    "model_version": "triple_xgb_depth_robust_target_band_product",
             },
         )
         try:

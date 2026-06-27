@@ -24,7 +24,7 @@ def add_data(path: Path, target: str) -> tuple[str, str] | None:
 datas = [
     item
     for item in [
-        add_data(project_root / "models" / "triple_xgb_depth_robust_maxacc_product", "models/triple_xgb_depth_robust_maxacc_product"),
+        add_data(project_root / "models" / "triple_xgb_depth_robust_target_band_product", "models/triple_xgb_depth_robust_target_band_product"),
         add_data(project_root / "models" / "face_landmarker.task", "models"),
         add_data(project_root / "assets", "assets"),
         add_data(project_root / "data", "data"),

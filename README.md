@@ -24,7 +24,7 @@ Mẫu biến môi trường nằm ở [`.env.example`](/home/bear/Documents/Work
 - `shared/`: Pydantic contracts dùng chung.
 - `server/`: FastAPI gateway, optional cloud inference và persistence adapters.
 - `deploy/gcp/`: Docker, Cloud Build và hướng dẫn Google Cloud Console.
-- `models/triple_xgb_depth_robust_maxacc_product/`: artifact runtime chính gồm ba nhánh XGBoost và cấu hình fusion.
+- `models/triple_xgb_depth_robust_target_band_product/`: artifact runtime chính gồm ba nhánh XGBoost và cấu hình fusion.
 - `models/face_landmarker.task`: model MediaPipe FaceMesh.
 - `GUIDE.md`: guide production inference 4-class để bảo trì model ngay trong repo app.
 
@@ -52,7 +52,7 @@ FOCUSFLOW_REPOSITORY=memory uvicorn server.app:app --reload
 ## Test nhanh pipeline
 
 ```bash
-python tests/manual/test_tracker.py --model models/triple_xgb_depth_robust_maxacc_product
+python tests/manual/test_tracker.py --model models/triple_xgb_depth_robust_target_band_product
 ```
 
 ## Build desktop app
