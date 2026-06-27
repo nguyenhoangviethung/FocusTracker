@@ -17,7 +17,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from demo.schemas import utc_now_iso
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH, enrich_raw_sequence
-from tracking.inference import DeepForestInferencer
+from tracking.inference import ProductInferencer
 
 
 def natural_key(path: Path) -> list[Any]:
@@ -95,7 +95,7 @@ def extract_raw_sequence(path: Path) -> dict[str, Any]:
     }
 
 
-def score_video(inferencer: DeepForestInferencer, path: Path) -> dict[str, Any]:
+def score_video(inferencer: ProductInferencer, path: Path) -> dict[str, Any]:
     extracted = extract_raw_sequence(path)
     enriched = enrich_raw_sequence(extracted["raw_sequence"])
     prediction = inferencer.predict(enriched)
@@ -140,7 +140,7 @@ def main() -> None:
     if not candidates:
         raise SystemExit(f"No mp4 files found in {args.input}")
 
-    inferencer = DeepForestInferencer()
+    inferencer = ProductInferencer()
     scored: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
 

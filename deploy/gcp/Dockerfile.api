@@ -21,7 +21,7 @@ COPY server/ /app/server/
 COPY shared/ /app/shared/
 COPY tracking/ /app/tracking/
 COPY utils/ /app/utils/
-COPY models/deep_forest_product_4class/ /app/models/deep_forest_product_4class/
+COPY models/triple_xgb_depth_robust_maxacc_product/ /app/models/triple_xgb_depth_robust_maxacc_product/
 
 RUN python -c "from server.app import app; from server.core.inference import CloudInferenceEngine; CloudInferenceEngine(); print('FocusFlow API smoke test passed')"
 

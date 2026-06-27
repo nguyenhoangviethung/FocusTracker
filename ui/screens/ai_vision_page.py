@@ -79,19 +79,19 @@ class AIVisionPage(ThemedPage):
         self.model_card = Card()
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.model_card)
-        m_title = QLabel("DEEPFOREST 4-CLASS OUTPUT")
+        m_title = QLabel("TRIPLE XGB DEPTH-ROBUST OUTPUT")
         m_title.setFont(font(16, bold=True))
         self.focus_score_label = QLabel("Focus Telemetry: --")
-        self.extra_trees_label = QLabel("Layer 1 ExtraTrees : --")
-        self.random_forest_label = QLabel("Layer 1 RandomForest : --")
-        self.cascade_label = QLabel("Layer 2 Cascade : --")
+        self.final_xgb_label = QLabel("Final XGB : --")
+        self.boost_xgb_label = QLabel("Boost XGB : --")
+        self.targeted_xgb_label = QLabel("Targeted XGB : --")
         self.model_state_label = QLabel("STATE: WARMING_UP")
         self.model_state_label.setFont(font(16, bold=True))
         self.model_card.layout.addWidget(m_title)
         self.model_card.layout.addWidget(self.focus_score_label)
-        self.model_card.layout.addWidget(self.extra_trees_label)
-        self.model_card.layout.addWidget(self.random_forest_label)
-        self.model_card.layout.addWidget(self.cascade_label)
+        self.model_card.layout.addWidget(self.final_xgb_label)
+        self.model_card.layout.addWidget(self.boost_xgb_label)
+        self.model_card.layout.addWidget(self.targeted_xgb_label)
         self.model_card.layout.addWidget(self.model_state_label)
         
         # Add Control Buttons
@@ -185,14 +185,14 @@ class AIVisionPage(ThemedPage):
         components = normalize_components(payload.get("components"))
         if components:
             self._latest_components = components
-        self.extra_trees_label.setText(
-            component_text("Layer 1 ExtraTrees", self._latest_components.get("layer1_extra_trees"))
+        self.final_xgb_label.setText(
+            component_text("Final XGB", self._latest_components.get("final_xgb"))
         )
-        self.random_forest_label.setText(
-            component_text("Layer 1 RandomForest", self._latest_components.get("layer1_random_forest"))
+        self.boost_xgb_label.setText(
+            component_text("Boost XGB", self._latest_components.get("boost_xgb"))
         )
-        self.cascade_label.setText(
-            component_text("Layer 2 Cascade", self._latest_components.get("layer2_cascade"))
+        self.targeted_xgb_label.setText(
+            component_text("Targeted XGB", self._latest_components.get("targeted_xgb"))
         )
         self.model_state_label.setText(f"STATE: {state}")
         if state == "FOCUSED":

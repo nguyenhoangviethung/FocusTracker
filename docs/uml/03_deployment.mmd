@@ -7,8 +7,10 @@ graph TB
         subgraph DESKTOP_ENV["Phần mềm FocusFlow Application"]
             direction TB
             APP["FocusFlow Desktop App<br/>«PyQt6 Client Process»"]
+            DF["Local Inference Engine<br/>«Calibrated DeepForest»"]
             CACHE[("Local Memory Cache<br/>«SQLite DB»")]
             APP -->|"save state"| CACHE
+            APP -->|"local inference"| DF
         end
 
         CAM -->|"raw video frames"| APP
@@ -75,6 +77,6 @@ graph TB
     class DESKTOP_ENV,RUNTIME_TIER,DATA_TIER,OPERATIONAL_TIER systemBoxStyle;
 
     class APP,CAM nodeApp;
-    class CR,XGB,CB,AR,CS nodeCloud;
+    class CR,XGB,CB,AR,CS,DF nodeCloud;
     class CACHE,FS,PUBSUB,SECRET nodeDb;
     class TLS nodeTls;

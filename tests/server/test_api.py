@@ -48,7 +48,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             headers=headers,
         )
         assert inferred.status_code == 200
-        assert set(inferred.json()["components"]) == {"layer1_extra_trees", "layer1_random_forest", "layer2_cascade"}
+        assert set(inferred.json()["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
         assert inferred.json()["class_labels"] == ["very_low", "low", "medium", "high"]
         assert len(inferred.json()["class_probabilities"]) == 4
         assert inferred.json()["inference_latency_ms"] >= 0.0
@@ -83,7 +83,7 @@ def test_session_inference_and_completion(monkeypatch) -> None:
             )
             streamed = websocket.receive_json()
             assert streamed["session_id"] == session_id
-            assert set(streamed["components"]) == {"layer1_extra_trees", "layer1_random_forest", "layer2_cascade"}
+            assert set(streamed["components"]) == {"final_xgb", "boost_xgb", "targeted_xgb"}
             assert streamed["class_labels"] == ["very_low", "low", "medium", "high"]
             assert len(streamed["class_probabilities"]) == 4
             assert streamed["inference_latency_ms"] >= 0.0

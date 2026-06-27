@@ -4,7 +4,7 @@ from server.core.inference import CloudInferenceEngine
 from shared.contracts import RAW_FRAME_FEATURE_DIM, SEQUENCE_LENGTH, TelemetryPacket
 
 
-def test_cloud_inference_uses_real_deep_forest_product_model() -> None:
+def test_cloud_inference_uses_real_triple_xgb_product_model() -> None:
     rng = np.random.default_rng(42)
     packet = TelemetryPacket(
         session_id="session-1",
@@ -16,13 +16,13 @@ def test_cloud_inference_uses_real_deep_forest_product_model() -> None:
 
     response = CloudInferenceEngine().predict(packet)
 
-    assert response.model_name == "deep_forest_product_4class"
-    assert response.model_version == "deep_forest_product_4class"
+    assert response.model_name == "triple_xgb_depth_robust_fusion"
+    assert response.model_version == "triple_xgb_depth_robust_maxacc_product"
     assert response.state in {"FOCUSED", "DISTRACTED"}
     assert set(response.components) == {
-        "layer1_extra_trees",
-        "layer1_random_forest",
-        "layer2_cascade",
+        "final_xgb",
+        "boost_xgb",
+        "targeted_xgb",
     }
     assert response.class_labels == ["very_low", "low", "medium", "high"]
     assert len(response.class_probabilities) == 4
@@ -34,4 +34,4 @@ def test_cloud_inference_uses_real_deep_forest_product_model() -> None:
     assert response.inference_latency_ms is not None
     assert response.inference_latency_ms >= 0.0
     assert 0.0 <= response.focus_score <= 1.0
-    assert response.decision["source"] == "deep_forest_product_4class"
+    assert response.decision["source"] == "triple_xgb_depth_robust_maxacc_product"

@@ -7,7 +7,7 @@ import numpy as np
 
 from tracking.buffer import FeatureSequenceBuffer
 from tracking.detector import FaceFeatureDetector
-from tracking.inference import DeepForestInferencer
+from tracking.inference import ProductInferencer
 from utils.logger import setup_logging, get_logger
 
 
@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         type=str,
         default=None,
-        help="Path to the DeepForest product directory. Defaults to models/deep_forest_product_4class",
+        help="Path to the Triple XGB product directory. Defaults to models/triple_xgb_depth_robust_maxacc_product",
     )
     parser.add_argument("--show-landmarks", action="store_true", help="Draw FaceMesh landmarks on frame")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0 = until q)")
@@ -32,7 +32,7 @@ def run_cli() -> None:
     setup_logging()
     args = build_parser().parse_args()
     logger.info("Starting tracker CLI (camera=%s)", args.camera)
-    inferencer = DeepForestInferencer(model_dir=args.model)
+    inferencer = ProductInferencer(model_dir=args.model)
     spec = inferencer.spec
     detector = FaceFeatureDetector(draw_landmarks=args.show_landmarks, expected_feature_dim=spec.raw_feature_dim)
     buffer = FeatureSequenceBuffer(sequence_length=spec.sequence_length, frame_feature_dim=spec.raw_feature_dim)

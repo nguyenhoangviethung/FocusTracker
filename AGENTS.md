@@ -7,7 +7,7 @@ FocusFlow AI is a privacy-oriented distributed focus monitoring system.
 The product has two runtime sides:
 
 - **Edge desktop client:** PyQt6, OpenCV, MediaPipe, and the bundled calibrated
-  DeepForest artifact. It captures webcam frames, extracts a 168-value
+  Triple XGBoost artifact. It captures webcam frames, extracts a 168-value
   depth-robust facial feature vector per frame, enriches local windows, runs the
   primary decision locally, and renders the preview.
 - **Google Cloud backend:** FastAPI on Cloud Run. It provides session lifecycle,
@@ -28,7 +28,7 @@ Do not implement or reintroduce:
 - AI + OS heuristic fusion;
 - raw webcam frame upload or storage.
 
-The final focus decision comes only from the deployed DeepForest engagement
+The final focus decision comes only from the deployed Triple XGBoost engagement
 model and the face-presence guard.
 
 ## 2. Source Of Truth
@@ -36,7 +36,7 @@ model and the face-presence guard.
 When documents disagree, use this priority:
 
 1. This `AGENTS.md`.
-2. Runtime model metadata in `models/deep_forest_product_4class/`.
+2. Runtime model metadata in `models/triple_xgb_depth_robust_maxacc_product/`.
 3. `GUIDE.md`.
 4. Existing implementation and older planning documents.
 
@@ -47,12 +47,12 @@ production model is:
 raw frame features:       168 values (depth_robust_v2)
 raw temporal sequence:    (30, 168)
 enriched model sequence:  (30, 504), on edge and cloud
-tabular model features:   3529 basic aggregate values
-components:               layer1 ExtraTrees + RandomForest, layer2 cascade
-calibration:              temperature=1.25, class biases=[1.5, 2.5, 0.0, 0.5]
+tabular model features:   12097 tsfresh-like aggregate values
+components:               final_xgb + boost_xgb + targeted_xgb
+calibration:              fusion weights + validation-support class bias
 raw model decision:       argmax over calibrated 4-class probabilities
-UI state policy:          focus score > 0.50, except face-presence guard
-runtime:                  CPU, scikit-learn/joblib
+UI state policy:          argmax class in {medium, high}, except face-presence guard
+runtime:                  CPU, xgboost/numpy
 class labels:             very_low, low, medium, high
 focus score:              P(medium) + P(high), presentation telemetry
 ```
@@ -68,7 +68,7 @@ focus score:              P(medium) + P(high), presentation telemetry
 │   │                                                                 │
 │   ├── Camera worker: OpenCV -> MediaPipe -> raw feature [168]       │
 │   ├── Sliding buffer: 30 frames -> raw sequence [30, 168]           │
-│   ├── Local DeepForest: enrich [30,168] -> [30,504] -> decision     │
+│   ├── Local Triple XGB: enrich [30,168] -> [30,504] -> decision     │
 │   ├── Preview renderer: local frames only                           │
 │   └── Network worker: session REST + optional cloud/shadow stream   │
 └───────────────────────────────┬──────────────────────────────────────┘
@@ -176,7 +176,7 @@ FocusTracker/
 │   ├── cloudbuild.yaml
 │   ├── env.example
 │   └── CONSOLE_SETUP.md
-├── models/deep_forest_product_4class/ # Immutable runtime artifacts
+├── models/triple_xgb_depth_robust_maxacc_product/ # Immutable runtime artifacts
 └── tests/
     ├── server/
     └── test_logic_oonx.py
@@ -233,7 +233,7 @@ The server returns:
 
 - model name and version;
 - final focus score and state;
-- layer1 ExtraTrees, layer1 RandomForest, and layer2 cascade probabilities;
+- final XGB, boost XGB, and targeted XGB component probabilities;
 - 4-class labels, probabilities, predicted class, and predicted label;
 - selected weights;
 - decision trace;
@@ -370,7 +370,7 @@ download portal and keep the landing page in source control under
 ### Phase 1: Vision-only cleanup
 
 - Remove OS tracker, keyword heuristics, Hardcore Mode, and their UI.
-- Keep the local DeepForest reference runtime available for evaluation and fallback.
+- Keep the local Triple XGBoost reference runtime available for evaluation and fallback.
 - Replace the old OS card with component model telemetry.
 - Update all documentation and dependencies.
 
@@ -380,7 +380,7 @@ Exit criterion: no runtime import or UI reference to removed capabilities.
 
 - Add versioned contracts.
 - Add FastAPI health, session, inference, and WebSocket endpoints.
-- Load the calibrated DeepForest model once per Cloud Run instance.
+- Load the calibrated Triple XGBoost model once per Cloud Run instance.
 - Add memory repository for tests and Firestore repository for production.
 
 Exit criterion: an integration test submits `(30,168)` and receives component

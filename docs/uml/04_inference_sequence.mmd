@@ -7,6 +7,7 @@ sequenceDiagram
         participant UI as 🎨 PyQt6 Giao diện
         participant ST as ⚙️ Session Coordinator
         participant MP as 👁️ MediaPipe Detector
+        participant EI as 🧠 DeepForest Inferencer
         participant CC as 📡 Cloud Client (WSS)
     end
 
@@ -30,23 +31,34 @@ sequenceDiagram
 
     %% Live streaming loop
     rect rgb(248, 250, 252)
-        Note over User,DB: Phase 2: Vòng lặp suy luận thời gian thực (Real-time Inference Loop) - Tối đa 1 Hz
+        Note over User,DB: Phase 2: Vòng lặp suy luận (Real-time Inference Loop)
         ST->>MP: detect_landmarks(camera_frame)
-        MP-->>ST: facial_landmarks[30], face_found
-        Note over ST: Lưu landmarks vào hàng đợi trượt (sliding queue)<br/>Tích lũy cửa sổ dữ liệu 30 khung hình
-        ST->>CC: send_packet(telemetry_message)
-        CC->>API: WSS Frame (features_30x30_matrix)
-        API->>INF: process_inference(features_30x30)
-        Note over INF: Làm giàu đặc trưng (Feature Enrichment)<br/>Sai phân + Độ lệch chuẩn -> 30x90 matrix
-        Note over INF: Thống kê đặc trưng thời gian (Temporal Aggregation)<br/>2161 chiều
-        INF->>XGB: predict_probabilities(x_vector)
-        XGB-->>INF: 3 vector xác suất 4 lớp (calibration & fusion)
-        INF-->>API: InferenceResult (focus_score, engagement_state)
-        API->>DB: update_live_metrics(session_id)
-        API-->>CC: InferenceResponse (focus_score, state, message_id)
-        CC-->>ST: update_state(focus_score, latency_ms)
+        MP-->>ST: facial_features, face_found
+        Note over ST: Lưu đặc trưng vào sliding buffer (30 frames x 168 dims)
+
+        alt Local / Hybrid Inference Mode (Edge-First)
+            Note over ST,EI: Tải mô hình biên & suy luận trực tiếp trên CPU thiết bị
+            ST->>ST: enrich_features() (30x168 -> 30x504)
+            ST->>EI: predict(enriched_sequence)
+            EI-->>ST: InferenceResult (focus_score, state, latency_ms ~ 204ms)
+        end
+
+        alt Cloud / Hybrid Inference Mode (Parallel sync & persistent telemetry)
+            ST->>CC: send_packet(TelemetryPacket)
+            CC->>API: WSS Frame (raw_features_30x168_matrix)
+            API->>INF: process_inference(features_30x168)
+            Note over INF: Làm giàu đặc trưng (Feature Enrichment)<br/>30x168 -> 30x504 matrix
+            Note over INF: Thống kê đặc trưng thời gian (Temporal Aggregation)<br/>3529 chiều
+            INF->>XGB: predict_probabilities(x_vector)
+            XGB-->>INF: Phán quyết & hiệu chuẩn phân loại (calibration)
+            INF-->>API: InferenceResult (focus_score, engagement_state)
+            API->>DB: update_live_metrics(session_id)
+            API-->>CC: InferenceResponse (focus_score, state, message_id)
+            CC-->>ST: update_state(focus_score, latency_ms)
+        end
+
         ST-->>UI: display_visual_metrics()
         UI-->>User: Hiển thị thanh trạng thái tập trung
     end
 
-    Note over User,MP: ⚠️ Bảo mật: Camera frames và Landmark thô chỉ lưu vết tại RAM thiết bị biên, không gửi đi.
+    Note over User,MP: ⚠️ Bảo mật: Camera frames và Landmark thô chỉ xử lý tại RAM thiết bị biên, không gửi đi.

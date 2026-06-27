@@ -794,7 +794,7 @@
     const probs = s.live_metrics?.class_probabilities;
     if (Array.isArray(probs) && probs.length >= 4) return Number(probs[2] || 0) + Number(probs[3] || 0);
     const components = s.live_metrics?.components || {};
-    const keys = ['layer1_extra_trees', 'layer1_random_forest', 'layer2_cascade'];
+    const keys = ['final_xgb', 'boost_xgb', 'targeted_xgb', 'layer1_extra_trees', 'layer1_random_forest', 'layer2_cascade'];
     const values = keys
       .map(key => components[key]?.probability)
       .filter(value => value != null && !Number.isNaN(Number(value)))

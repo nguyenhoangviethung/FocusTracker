@@ -1,20 +1,25 @@
 # FocusFlow Model Guide
 
-FocusFlow serves the calibrated 4-class DeepForest product model documented in
-`../engagement-cpu/checkpoints/reports/GUIDE.md`.
+FocusFlow product runtime now uses the depth-robust Triple XGBoost 4-class
+artifact selected from the `engagement-cpu` checkpoint reports.
 
 ## Production Model
 
 ```text
-model_name:      deep_forest_product_4class
-accuracy:        76.85%
-balanced accuracy:85.90%
-macro F1:        78.02%
-decision rule:   argmax over calibrated 4-class probabilities
+model_name:         triple_xgb_depth_robust_fusion
+model_version:      triple_xgb_depth_robust_maxacc_product
+accuracy:           86.44%
+balanced accuracy:  88.00%
+macro F1:           89.54%
+mean latency:       23.96 ms
+decision rule:      argmax over calibrated 4-class probabilities
+component weights:  final_xgb=0.04, boost_xgb=0.66, targeted_xgb=0.30
 ```
 
-The uncalibrated DeepForest experiment reached 88.00% accuracy but only 62.33%
-balanced accuracy and is not a production artifact.
+The UI displays `focus_score = P(medium) + P(high)` as telemetry. The final
+model state still comes from the 4-class argmax: classes `medium` and `high`
+map to `ENGAGED`; `very_low` and `low` map to `DISTRACTED`. The face-presence
+guard has priority and maps missing faces to `NO_FACE`.
 
 ## Input Contract
 
@@ -22,47 +27,62 @@ balanced accuracy and is not a production artifact.
 frame schema:       depth_robust_v2
 raw frame feature:  168 values
 raw sequence:       (30, 168)
-enrichment:         velocity + per-window standard deviation
+enrichment:         value + velocity + per-window std
 model sequence:     (30, 504)
-tabular features:   3529 basic aggregate values
+tabular features:   12097 tsfresh-like aggregate values
 labels:             very_low, low, medium, high
 ```
 
-The edge extractor is `tracking.detector.FaceFeatureDetector`. It uses
-aspect-correct canonical landmarks, depth proxies, iris measurements,
-MediaPipe blendshapes, and facial transformation matrices. Missing faces do
-not enter the buffer. The same immutable `model.joblib` bundle is loaded by the
-edge worker for local inference and by Cloud Run for explicit cloud/benchmark
-inference.
+`tracking.detector.FaceFeatureDetector` extracts one 168-value feature vector
+from each valid frame. `tracking.buffer.enrich_raw_sequence()` is the canonical
+raw-to-enriched transform. Both edge inference and Cloud Run inference must use
+that same transform.
 
 ## Artifact
 
-Download and unpack the bundle into `models/deep_forest_product_4class/`:
+Install the bundle at:
 
 ```text
-Hnug/daisee-processed/checkpoints/runs/deep_forest_product_4class.zip
-  model.joblib
+models/triple_xgb_depth_robust_maxacc_product/
+  fusion_config.json
   summary.json
+  final_xgb/model.json
+  final_xgb/preprocessor.npz
+  boost_xgb/model.json
+  boost_xgb/preprocessor.npz
+  targeted_xgb/model.json
+  targeted_xgb/preprocessor.npz
+```
+
+Canonical remote artifact:
+
+```text
+Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip
+```
+
+Cloud Build fetches the same zip from:
+
+```text
+gs://${PROJECT_ID}-focusflow-releases/models/triple_xgb_depth_robust_maxacc_product.zip
 ```
 
 ## Inference Contract
 
 ```python
-layer1_features = concat_predict_proba(layer1, basic_features)
-layer2_prob = mean_predict_proba(layer2, concat(basic_features, layer1_features))
-prob = softmax(log(clip(layer2_prob)) / 1.25 + [1.5, 2.5, 0.0, 0.5])
-prediction = argmax(prob)
-focus_score = prob[2] + prob[3]
+enriched = enrich_raw_sequence(raw_30x168)     # -> (30, 504)
+x = tsfresh_like_features(enriched)            # -> (12097,)
+p_final = final_xgb.predict_proba(scale_final(x))
+p_boost = boost_xgb.predict_proba(scale_boost(x))
+p_targeted = targeted_xgb.predict_proba(scale_targeted(x))
+p_fused = 0.04 * p_final + 0.66 * p_boost + 0.30 * p_targeted
+p_calibrated = normalize(p_fused * class_bias_from_validation_support)
+prediction = argmax(p_calibrated)
+focus_score = p_calibrated[2] + p_calibrated[3]
 state = "ENGAGED" if prediction in {2, 3} else "DISTRACTED"
 ```
 
-The response exposes `layer1_extra_trees`, `layer1_random_forest`, and
-`layer2_cascade` as component telemetry. `ai_state` retains the calibrated
-4-class argmax result. The product UI maps its displayed `state` through the
-documented `focus_score > 0.50` operating policy; face absence still wins via
-the face-presence guard.
-
-There is no OS telemetry or heuristic override.
+The response exposes `final_xgb`, `boost_xgb`, and `targeted_xgb` component
+probabilities. There is no OS telemetry or heuristic override.
 
 ## Runtime Code Map
 
@@ -70,23 +90,15 @@ There is no OS telemetry or heuristic override.
 |---|---|
 | `tracking/detector.py` | Production `depth_robust_v2` frame extraction |
 | `tracking/buffer.py` | Builds `(30,168)` windows and `(30,504)` enrichment |
-| `tracking/inference.py` | Loads and evaluates the calibrated DeepForest bundle on edge or cloud |
+| `tracking/inference.py` | Loads and evaluates the Triple XGB product bundle |
 | `tracking/tracker.py` | Camera thread, bounded edge inference worker, and optional cloud transport |
-| `server/core/inference.py` | Thread-safe cloud inference adapter |
+| `server/core/inference.py` | Thread-safe Cloud Run inference adapter |
 
 ## Fallbacks
 
 - Fewer than 30 valid frames: render `WARMING_UP` and send no model packet.
 - No face: retain local preview and use the face-presence guard.
-- NaN/Inf: sanitize to `0.0` before enrichment; invalid feature vectors are
+- NaN/Inf: sanitize to `0.0` before inference; invalid feature vectors are
   dropped before entering the window.
-- Missing `model.joblib`: fail startup with a clear `FileNotFoundError`.
+- Missing `fusion_config.json` or component model files: fail startup clearly.
 - Any shape other than `(30,168)` raw or `(30,504)` enriched: fail clearly.
-
-## Updating The Artifact
-
-1. Download `deep_forest_product_4class.zip` from the Hugging Face dataset.
-2. Unpack `model.joblib` and `summary.json` into
-   `models/deep_forest_product_4class/`.
-3. Run `pytest tests/server/test_cloud_inference.py tests/server/test_api.py`.
-4. Build the Cloud Run image only after the server smoke test loads that bundle.

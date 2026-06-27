@@ -2,7 +2,7 @@ stateDiagram-v2
     [*] --> Idle : Launch application
 
     Idle --> Starting : Trigger 'Start Session'
-    
+
     Starting --> WarmingUp : Webcam stream active
     Starting --> ErrorState : Stream/Hardware failure (timeout)
 
@@ -11,13 +11,22 @@ stateDiagram-v2
     WarmingUp --> ActiveSession : Window buffer filled (30 frames accumulated)
 
     state ActiveSession {
-        [*] --> Connecting
-        Connecting --> TrackingCloud : Authenticated & WSS connection established
-        
+        [*] --> Initializing
+        Initializing --> TrackingLocal : Local Mode (Offline)
+        Initializing --> Connecting : Cloud / Hybrid Mode
+        Connecting --> TrackingCloud : WSS connection established
+
+        state TrackingLocal {
+            [*] --> ProcessingLocal
+            ProcessingLocal --> FeatureExtractedLocal : Capture frame
+            FeatureExtractedLocal --> PredictionLocal : Local CPU Inference
+            PredictionLocal --> ProcessingLocal : Success
+        }
+
         state TrackingCloud {
             [*] --> Streaming
-            Streaming --> FeatureExtracted : Capture frame (1 Hz)
-            FeatureExtracted --> ResponseReceived : Telemetry sent & response processed
+            Streaming --> FeatureExtractedCloud : Capture frame (1 Hz)
+            FeatureExtractedCloud --> ResponseReceived : Telemetry sent & response processed
             ResponseReceived --> Streaming : Success
         }
 
@@ -28,7 +37,7 @@ stateDiagram-v2
 
     ActiveSession --> Paused : User triggers 'Pause'
     Paused --> ActiveSession : User triggers 'Resume'
-    
+
     ActiveSession --> Completing : User triggers 'Stop' / Target timer ended
     Paused --> Completing : User triggers 'Stop'
 
@@ -45,7 +54,7 @@ stateDiagram-v2
     classDef compositeState fill:#FAF5FF,stroke:#8B5CF6,stroke-width:2px,color:#5B21B6
 
     class Idle,Paused normalState
-    class Starting,WarmingUp,Connecting,Reconnecting,Completing blueState
-    class TrackingCloud,Streaming,FeatureExtracted,ResponseReceived,ReportGenerated greenState
+    class Starting,WarmingUp,Connecting,Reconnecting,Completing,Initializing blueState
+    class TrackingCloud,Streaming,FeatureExtractedCloud,ResponseReceived,ReportGenerated,TrackingLocal,ProcessingLocal,FeatureExtractedLocal,PredictionLocal greenState
     class ErrorState redState
     class ActiveSession compositeState

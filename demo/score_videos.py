@@ -12,13 +12,13 @@ import numpy as np
 from demo.validate_videos import natural_key, read_video_metadata
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
 from tracking.detector import FRAME_FEATURE_DIM, FaceFeatureDetector
-from tracking.inference import DeepForestInferencer
+from tracking.inference import MODEL_VERSION, ProductInferencer
 from utils.logger import setup_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Score demo videos with the deployed calibrated 4-class DeepForest model."
+        description="Score demo videos with the deployed calibrated 4-class Triple XGB model."
     )
     parser.add_argument("--input", type=Path, default=Path("demo/Data"))
     parser.add_argument("--scorecard-output", type=Path, default=Path("demo/results/video-scorecard.json"))
@@ -39,7 +39,7 @@ def _is_valid_feature(feature: np.ndarray) -> bool:
 def _score_video(
     video_path: Path,
     detector: FaceFeatureDetector,
-    inferencer: DeepForestInferencer,
+    inferencer: ProductInferencer,
     *,
     max_windows_per_video: int,
     window_stride_valid_frames: int,
@@ -188,7 +188,7 @@ def _build_balanced_manifest(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "input_dir": str(input_dir),
         "selection_method": "local_model_score_non_overlapping_30_valid_frame_windows",
-        "model_version": "deep_forest_product_4class",
+        "model_version": MODEL_VERSION,
         "scorecard": str(output_path),
         "target_total": target_total,
         "target_focus": target_focus,
@@ -212,7 +212,7 @@ def main() -> None:
         draw_landmarks=False,
         camera_distance_scale=args.camera_distance_scale,
     )
-    inferencer = DeepForestInferencer()
+    inferencer = ProductInferencer()
 
     scorecard: list[dict] = []
     skipped: list[dict] = []

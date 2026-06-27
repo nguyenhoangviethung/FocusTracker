@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
 from tracking.detector import FaceFeatureDetector
-from tracking.inference import DeepForestInferencer
+from tracking.inference import ProductInferencer
 
 
 def percentile(values: list[float], value: float) -> float | None:
@@ -43,7 +43,7 @@ def main() -> None:
     parser.add_argument("--windows", type=int, default=20)
     parser.add_argument("--stride", type=int, default=30, help="Valid frames between measured windows.")
     parser.add_argument("--cloud", action="store_true", help="Also measure session REST inference round trips.")
-    parser.add_argument("--local-model", action="store_true", help="Measure model-side DeepForest latency for evaluation only.")
+    parser.add_argument("--local-model", action="store_true", help="Measure model-side Triple XGB latency for evaluation only.")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -58,7 +58,7 @@ def main() -> None:
     if args.cloud and (not api_url or not api_key):
         raise SystemExit("Cloud benchmark needs FOCUSFLOW_CLOUD_API_URL and FOCUSFLOW_CLOUD_API_KEY in .env.")
 
-    local_model = DeepForestInferencer() if args.local_model else None
+    local_model = ProductInferencer() if args.local_model else None
     detector = FaceFeatureDetector(draw_landmarks=False)
     buffer = FeatureSequenceBuffer(SEQUENCE_LENGTH, DEPTH_ROBUST_V2_FRAME_FEATURE_DIM)
     capture = cv2.VideoCapture(str(args.video))

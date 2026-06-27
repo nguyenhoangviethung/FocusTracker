@@ -15,12 +15,14 @@ graph TB
             MP["MediaPipe Detector<br/>«adapter»"]
             CC["Cloud Client (WSS)<br/>«adapter»"]
             LOCAL[("Local Store<br/>«sqlite»")]
+            EI["DeepForest Inferencer<br/>«edge inference»"]
         end
 
         UI --> ST
         ST --> MP
         ST --> CC
         ST -.-> LOCAL
+        ST --> EI
     end
 
     %% NETWORK BOUNDARY
@@ -93,5 +95,5 @@ graph TB
     class UI,API presNode;
     class ST,INF appNode;
     class MP,CC,REPO,EVT,LOCAL,FS,PS,SM,LOCAL,FS,PS infraNode;
-    class XGB modelNode;
+    class XGB,EI modelNode;
     class PROTO networkNode;

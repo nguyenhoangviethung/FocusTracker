@@ -72,7 +72,7 @@ class BinaryLateFusionInferencer:
         raise RuntimeError(
             "The binary GRU/TCN/XGBoost scorer is archived and cannot consume "
             "the production depth_robust_v2 feature schema. Use demo/score_videos.py "
-            "for the calibrated DeepForest product model."
+            "for the current Triple XGB product model."
         )
         if features.shape[1] != self.xgb_mean.shape[0]:
             raise ValueError(f"Expected {self.xgb_mean.shape[0]} XGB features, got {features.shape[1]}")
@@ -262,7 +262,7 @@ def _write_balanced_manifest(
 def main() -> None:
     raise SystemExit(
         "This is an archived binary-model experiment. It is intentionally disabled "
-        "because production now uses the distinct 168D DeepForest pipeline."
+        "because production now uses the distinct 168D depth-robust Triple XGB pipeline."
     )
     setup_logging()
     args = build_parser().parse_args()

@@ -24,7 +24,7 @@ logger = get_logger("tracker")
 INFERENCE_EVERY_N_FRAMES = 3
 PREVIEW_EVERY_N_FRAMES = 2
 CLOUD_TELEMETRY_INTERVAL_SECONDS = 1.0
-FOCUS_THRESHOLD = 0.5
+
 @dataclass(slots=True)
 class TrackerConfig:
     camera_index: int = 0
@@ -487,6 +487,7 @@ class FocusSessionTracker:
                 "decision_rule": "argmax_4class",
                 "feature_schema": "depth_robust_v2",
                 "temporal_enrichment": "velocity_std",
+                "model_version": "triple_xgb_depth_robust_maxacc_product",
             },
         )
         try:
@@ -516,11 +517,11 @@ class FocusSessionTracker:
 
     def _local_inference_loop(self) -> None:
         try:
-            from tracking.inference import DeepForestInferencer
+            from tracking.inference import ProductInferencer
 
-            inferencer = DeepForestInferencer()
+            inferencer = ProductInferencer()
         except Exception as exc:
-            logger.exception("Unable to load edge DeepForest model")
+            logger.exception("Unable to load edge Triple XGB model")
             self._put(
                 {
                     "type": "status",
@@ -543,14 +544,14 @@ class FocusSessionTracker:
                         **prediction,
                         "probability": focus_score,
                         "focus_score": focus_score,
-                        "state": "FOCUSED" if focus_score > FOCUS_THRESHOLD else "DISTRACTED",
+                        "state": "FOCUSED" if prediction.get("state") == "ENGAGED" else "DISTRACTED",
                         "ai_state": prediction.get("state", "DISTRACTED"),
                         "inference_source": "edge",
                         "cloud_roundtrip_latency_ms": None,
                     },
                 )
             except Exception:
-                logger.exception("Edge DeepForest inference failed")
+                logger.exception("Edge Triple XGB inference failed")
                 self._put({"type": "status", "message": "Edge inference failed; waiting for next window."})
 
     def _latest_local_result(self) -> dict[str, Any] | None:

@@ -4,12 +4,12 @@ substitutions:
   _SERVICE: focusflow-api
   _IMAGE: focusflow-api
   _SERVICE_ACCOUNT: focusflow-api
-  _HF_SECRET: focusflow-hf-token
   _GOOGLE_OAUTH_CLIENT_ID: 1093941638042-h6b0ogrnj6jhe959usdqnjqbh6hlrg92.apps.googleusercontent.com
   _CONCURRENCY: "4"
   _MIN_INSTANCES: "1"
   _MAX_INSTANCES: "60"
   _RELEASE_BASE_URL: https://storage.googleapis.com/${PROJECT_ID}-focusflow-releases/releases/latest
+  _MODEL_GCS_URI: gs://${PROJECT_ID}-focusflow-releases/models/triple_xgb_depth_robust_maxacc_product.zip
 
 timeout: 1800s
 
@@ -18,21 +18,24 @@ options:
   substitutionOption: ALLOW_LOOSE
 
 steps:
-  # The 340 MB model bundle is intentionally not committed to Git. Fetch it
-  # into the Cloud Build workspace before Docker receives its build context.
-  - id: fetch-deepforest-artifact
-    name: python:3.13-slim
+  # The product model bundle is intentionally not committed to Git. Fetch it
+  # from Cloud Storage into the Cloud Build workspace before Docker receives
+  # its build context.
+  - id: fetch-triple-xgb-artifact
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
-    secretEnv:
-      - HF_TOKEN
     args:
       - -ceu
       - |
-        python -m pip install --no-cache-dir "python-dotenv>=1,<2"
-        rm -f models/deep_forest_product_4class/model.joblib
-        python scripts/download_deep_forest_product.py --output models/deep_forest_product_4class
-        test -s models/deep_forest_product_4class/model.joblib
-        test -s models/deep_forest_product_4class/summary.json
+        rm -rf models/triple_xgb_depth_robust_maxacc_product
+        mkdir -p models/triple_xgb_depth_robust_maxacc_product
+        gcloud storage cp "${_MODEL_GCS_URI}" /workspace/triple_xgb_depth_robust_maxacc_product.zip
+        python3 -m zipfile -e /workspace/triple_xgb_depth_robust_maxacc_product.zip models/triple_xgb_depth_robust_maxacc_product
+        test -s models/triple_xgb_depth_robust_maxacc_product/fusion_config.json
+        test -s models/triple_xgb_depth_robust_maxacc_product/summary.json
+        test -s models/triple_xgb_depth_robust_maxacc_product/final_xgb/model.json
+        test -s models/triple_xgb_depth_robust_maxacc_product/boost_xgb/model.json
+        test -s models/triple_xgb_depth_robust_maxacc_product/targeted_xgb/model.json
 
   - id: build-image
     name: gcr.io/cloud-builders/docker
@@ -80,8 +83,8 @@ steps:
       - --max-instances=${_MAX_INSTANCES}
       - --cpu-boost
       - --no-cpu-throttling
-      - --set-env-vars=^@^FOCUSFLOW_ENV=production@FOCUSFLOW_REPOSITORY=firestore@FOCUSFLOW_EVENT_BACKEND=pubsub@FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events@FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions@FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users@FOCUSFLOW_DEEP_FOREST_MODEL_DIR=/app/models/deep_forest_product_4class@FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID}@FOCUSFLOW_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000@FOCUSFLOW_STALE_SESSION_TIMEOUT_SECONDS=600@FOCUSFLOW_STALE_SESSION_CLEANUP_INTERVAL_SECONDS=60@FOCUSFLOW_RELEASE_VERSION=${SHORT_SHA}@FOCUSFLOW_RELEASE_BASE_URL=${_RELEASE_BASE_URL}@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
-      - --update-labels=model=deepforest,feature-schema=depth-robust-v2,build-sha=${SHORT_SHA}
+      - --set-env-vars=^@^FOCUSFLOW_ENV=production@FOCUSFLOW_REPOSITORY=firestore@FOCUSFLOW_EVENT_BACKEND=pubsub@FOCUSFLOW_PUBSUB_SESSION_EVENTS_TOPIC=focusflow-session-events@FOCUSFLOW_FIRESTORE_SESSIONS_COLLECTION=focusflow_sessions@FOCUSFLOW_FIRESTORE_USERS_COLLECTION=focusflow_users@FOCUSFLOW_TRIPLE_XGB_MODEL_DIR=/app/models/triple_xgb_depth_robust_maxacc_product@FOCUSFLOW_GOOGLE_OAUTH_CLIENT_ID=${_GOOGLE_OAUTH_CLIENT_ID}@FOCUSFLOW_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000@FOCUSFLOW_STALE_SESSION_TIMEOUT_SECONDS=600@FOCUSFLOW_STALE_SESSION_CLEANUP_INTERVAL_SECONDS=60@FOCUSFLOW_RELEASE_VERSION=${SHORT_SHA}@FOCUSFLOW_RELEASE_BASE_URL=${_RELEASE_BASE_URL}@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - --update-labels=model=triple-xgb-depth,feature-schema=depth-robust-v2,build-sha=${SHORT_SHA}
       - --set-secrets=FOCUSFLOW_API_KEY=focusflow-api-key:latest
 
   - id: verify-readyz
@@ -96,8 +99,3 @@ steps:
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${SHORT_SHA}
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:latest
-
-availableSecrets:
-  secretManager:
-    - versionName: projects/${PROJECT_ID}/secrets/${_HF_SECRET}/versions/latest
-      env: HF_TOKEN

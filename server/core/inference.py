@@ -7,17 +7,14 @@ import numpy as np
 
 from shared.contracts import InferenceResponse, TelemetryPacket
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, enrich_raw_sequence
-from tracking.inference import DeepForestInferencer, MODEL_NAME, MODEL_VERSION
-
-
-FOCUS_THRESHOLD = 0.5
+from tracking.inference import MODEL_NAME, MODEL_VERSION, ProductInferencer
 
 
 class CloudInferenceEngine:
-    """Thread-safe adapter around the calibrated DeepForest product bundle."""
+    """Thread-safe adapter around the depth-aware Triple XGBoost product bundle."""
 
     def __init__(self) -> None:
-        self._inferencer = DeepForestInferencer()
+        self._inferencer = ProductInferencer()
         self._lock = threading.Lock()
 
     def predict(self, packet: TelemetryPacket) -> InferenceResponse:
@@ -32,18 +29,17 @@ class CloudInferenceEngine:
                 prediction = self._inferencer.predict(enriched)
             focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
             ai_state = str(prediction.get("state", "DISTRACTED"))
-            state = "FOCUSED" if focus_score > FOCUS_THRESHOLD else "DISTRACTED"
+            state = "FOCUSED" if ai_state == "ENGAGED" else "DISTRACTED"
             decision = {
                 "state": state,
-                "source": "deep_forest_product_4class",
-                "reason": f"Decision produced by the calibrated DeepForest 4-class cascade with focus_score > {FOCUS_THRESHOLD:.2f}.",
+                "source": MODEL_VERSION,
+                "reason": "Decision produced by the depth-aware Triple XGBoost 4-class fusion model.",
                 "ai_probability": focus_score,
-                "decision_rule": f"focus_score_threshold_{FOCUS_THRESHOLD:.2f}",
+                "decision_rule": prediction.get("decision_rule", "argmax_4class"),
                 "ai_state": ai_state,
                 "predicted_class": prediction.get("prediction_4class"),
                 "predicted_label": prediction.get("prediction_label"),
                 "engaged_class_indices": prediction.get("engaged_class_indices", [2, 3]),
-                "focus_threshold": FOCUS_THRESHOLD,
             }
         else:
             prediction = {}
