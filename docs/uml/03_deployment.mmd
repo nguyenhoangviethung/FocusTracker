@@ -7,7 +7,7 @@ graph TB
         subgraph DESKTOP_ENV["Phần mềm FocusFlow Application"]
             direction TB
             APP["FocusFlow Desktop App<br/>«PyQt6 Client Process»"]
-            DF["Local Inference Engine<br/>«Calibrated DeepForest»"]
+            DF["Local Inference Engine<br/>«Triple XGBoost»"]
             CACHE[("Local Memory Cache<br/>«SQLite DB»")]
             APP -->|"save state"| CACHE
             APP -->|"local inference"| DF
@@ -28,7 +28,7 @@ graph TB
 
         subgraph RUNTIME_TIER["⚡ Tầng Thực Thi (Execution Tier)"]
             CR["FastAPI Application Server<br/>«Google Cloud Run»"]
-            XGB["Inference Instance<br/>«Calibrated DeepForest»"]
+            XGB["Inference Instance<br/>«Calibrated Triple XGBoost»"]
             CR -->|"model call"| XGB
         end
 

@@ -10,9 +10,9 @@ def test_component_normalization_accepts_triple_xgb_keys() -> None:
         }
     )
 
-    assert components["final_xgb"]["probability"] == 0.7
+    assert components["final_xgb"]["probability"] == 0.4
     assert components["boost_xgb"]["probability"] == 0.55
-    assert components["targeted_xgb"]["probability"] == 0.7
+    assert components["targeted_xgb"]["probability"] == 0.1
 
 
 def test_component_normalization_keeps_legacy_deep_forest_keys() -> None:
@@ -26,7 +26,7 @@ def test_component_normalization_keeps_legacy_deep_forest_keys() -> None:
 
     assert components["final_xgb"]["probability"] == 0.65
     assert components["boost_xgb"]["probability"] == 0.55
-    assert components["targeted_xgb"]["probability"] == 0.7
+    assert components["targeted_xgb"]["probability"] == 0.1
 
 
 def test_missing_component_is_not_rendered_as_zero() -> None:

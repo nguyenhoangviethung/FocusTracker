@@ -30,10 +30,10 @@ def test_cloud_inference_uses_real_triple_xgb_product_model() -> None:
     assert response.predicted_class in {0, 1, 2, 3}
     assert response.predicted_label in set(response.class_labels)
     assert response.focus_score == pytest.approx(
-        response.class_probabilities[2] + response.class_probabilities[3],
+        response.class_probabilities[3],
         abs=1e-6,
     )
-    expected_state = "FOCUSED" if response.predicted_class in {2, 3} else "DISTRACTED"
+    expected_state = "FOCUSED" if response.predicted_class == 3 else "DISTRACTED"
     assert response.state == expected_state
     assert response.decision["decision_rule"] == "argmax_4class"
     assert response.inference_latency_ms is not None

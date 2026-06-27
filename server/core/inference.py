@@ -39,7 +39,7 @@ class CloudInferenceEngine:
                 "ai_state": ai_state,
                 "predicted_class": prediction.get("prediction_4class"),
                 "predicted_label": prediction.get("prediction_label"),
-                "engaged_class_indices": prediction.get("engaged_class_indices", [2, 3]),
+                "engaged_class_indices": prediction.get("engaged_class_indices", [3]),
             }
         else:
             prediction = {}

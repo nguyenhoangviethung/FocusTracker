@@ -15,7 +15,7 @@ graph TB
             MP["MediaPipe Detector<br/>«adapter»"]
             CC["Cloud Client (WSS)<br/>«adapter»"]
             LOCAL[("Local Store<br/>«sqlite»")]
-            EI["DeepForest Inferencer<br/>«edge inference»"]
+            EI["Triple XGBoost Inferencer<br/>«edge inference»"]
         end
 
         UI --> ST
@@ -45,7 +45,7 @@ graph TB
         end
 
         subgraph CLOUD_MODEL["🌲 Lớp Học Máy (ML Models)"]
-            XGB["Calibrated DeepForest<br/>«model classifier»"]
+            XGB["Calibrated Triple XGBoost<br/>«model classifier»"]
         end
 
         subgraph CLOUD_PORTS["📡 Cổng Giao Tiếp Ngoại Vi (Ports)"]

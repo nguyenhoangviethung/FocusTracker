@@ -134,7 +134,7 @@ def _normalize_dashboard_session(record: dict[str, Any]) -> None:
         class_probabilities = live_metrics.get("class_probabilities")
         if isinstance(class_probabilities, list) and len(class_probabilities) >= 4:
             try:
-                live_metrics["focus_score"] = float(class_probabilities[2]) + float(class_probabilities[3])
+                live_metrics["focus_score"] = float(class_probabilities[3])
             except (TypeError, ValueError):
                 pass
 

@@ -38,7 +38,7 @@ def parse_component(component: Any) -> dict | None:
         return None
 
     if probability is None and isinstance(probabilities, (list, tuple)) and len(probabilities) >= 4:
-        probability = float(probabilities[2]) + float(probabilities[3])
+        probability = float(probabilities[3])
     if probability is None:
         return None
     return {"probability": max(0.0, min(1.0, float(probability)))}

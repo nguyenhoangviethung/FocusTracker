@@ -7,14 +7,14 @@ sequenceDiagram
         participant UI as 🎨 PyQt6 Giao diện
         participant ST as ⚙️ Session Coordinator
         participant MP as 👁️ MediaPipe Detector
-        participant EI as 🧠 DeepForest Inferencer
+        participant EI as 🧠 Triple XGBoost Inferencer
         participant CC as 📡 Cloud Client (WSS)
     end
 
     box rgb(240, 253, 244) Phân hệ Đám mây (Cloud Inference Platform)
         participant API as 🌐 FastAPI API Gateway
         participant INF as 🧠 Inference Engine
-        participant XGB as 🌲 Calibrated DeepForest Classifier
+        participant XGB as 🌲 Calibrated Triple XGBoost Classifier
         participant DB as 💾 Firestore Database
     end
 
@@ -40,7 +40,7 @@ sequenceDiagram
             Note over ST,EI: Tải mô hình biên & suy luận trực tiếp trên CPU thiết bị
             ST->>ST: enrich_features() (30x168 -> 30x504)
             ST->>EI: predict(enriched_sequence)
-            EI-->>ST: InferenceResult (focus_score, state, latency_ms ~ 204ms)
+            EI-->>ST: InferenceResult (focus_score, state, latency_ms ~ 24.8ms)
         end
 
         alt Cloud / Hybrid Inference Mode (Parallel sync & persistent telemetry)

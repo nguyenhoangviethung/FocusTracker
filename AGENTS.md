@@ -51,10 +51,10 @@ tabular model features:   12097 tsfresh-like aggregate values
 components:               final_xgb + boost_xgb + targeted_xgb
 calibration:              fusion weights + validation-support class bias
 raw model decision:       argmax over calibrated 4-class probabilities
-UI state policy:          argmax class in {medium, high}, except face-presence guard
+UI state policy:          argmax class is high, except face-presence guard
 runtime:                  CPU, xgboost/numpy
 class labels:             very_low, low, medium, high
-focus score:              P(medium) + P(high), presentation telemetry
+focus score:              P(high), presentation telemetry
 ```
 
 `tracking.buffer.enrich_raw_sequence()` is the canonical transformation from

@@ -16,10 +16,10 @@ decision rule:      argmax over calibrated 4-class probabilities
 component weights:  final_xgb=0.72, boost_xgb=0.26, targeted_xgb=0.02
 ```
 
-The UI displays `focus_score = P(medium) + P(high)` as telemetry. The final
-model state still comes from the 4-class argmax: classes `medium` and `high`
-map to `ENGAGED`; `very_low` and `low` map to `DISTRACTED`. The face-presence
-guard has priority and maps missing faces to `NO_FACE`.
+The UI displays `focus_score = P(high)` as telemetry. The final model state
+still comes from the 4-class argmax: only class `high` maps to `ENGAGED`;
+`very_low`, `low`, and `medium` all map to `DISTRACTED`. The face-presence guard
+has priority and maps missing faces to `NO_FACE`.
 
 ## Input Contract
 
@@ -77,8 +77,8 @@ p_targeted = targeted_xgb.predict_proba(scale_targeted(x))
 p_fused = 0.72 * p_final + 0.26 * p_boost + 0.02 * p_targeted
 p_calibrated = normalize(p_fused * class_bias_from_validation_support)
 prediction = argmax(p_calibrated)
-focus_score = p_calibrated[2] + p_calibrated[3]
-state = "ENGAGED" if prediction in {2, 3} else "DISTRACTED"
+focus_score = p_calibrated[3]
+state = "ENGAGED" if prediction == 3 else "DISTRACTED"
 ```
 
 The response exposes `final_xgb`, `boost_xgb`, and `targeted_xgb` component

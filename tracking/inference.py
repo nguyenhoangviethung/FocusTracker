@@ -20,7 +20,7 @@ MODEL_NAME = "triple_xgb_depth_robust_fusion"
 MODEL_VERSION = "triple_xgb_depth_robust_target_band_product"
 LABEL_SPACE = "daisee_4class"
 CLASS_LABELS = ("very_low", "low", "medium", "high")
-ENGAGED_CLASS_INDICES = (2, 3)
+ENGAGED_CLASS_INDICES = (3,)
 SEQUENCE_LENGTH = 30
 RAW_FEATURE_DIM = 168
 ENRICHED_FEATURE_DIM = 504
@@ -252,7 +252,7 @@ class TripleXGBDepthRobustInferencer:
     @staticmethod
     def _component(values: np.ndarray) -> dict[str, Any]:
         return {
-            "probability": float(values[2] + values[3]),
+            "probability": float(values[3]),
             "probabilities": values.tolist(),
         }
 
@@ -277,7 +277,7 @@ class TripleXGBDepthRobustInferencer:
         probabilities = self._adjust(self._normalize(fused_raw))
         values = probabilities[0]
         prediction = int(np.argmax(values))
-        focus_score = float(values[2] + values[3])
+        focus_score = float(values[3])
 
         components = {
             component: self._component(component_probs[component])

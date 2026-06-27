@@ -65,7 +65,7 @@ class FocusTrendChart(QWidget):
             painter.drawText(left + 4, y - 4, f"{int(value * 100)}%")
             painter.setPen(pen)
 
-        # Visual guide for P(medium) + P(high). It is not the 4-class decision rule.
+        # Visual guide for P(high). It is not the 4-class decision rule.
         warn_pen = QPen(QColor(self._palette["accent_warn"]), 1, Qt.PenStyle.DashLine)
         painter.setPen(warn_pen)
         threshold_y = bottom - int(self._threshold * span_y)
