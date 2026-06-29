@@ -30,14 +30,14 @@ class ReportPage(ThemedPage):
         self._history_item_checkboxes: dict[str, QCheckBox] = {}
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(18)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(16)
         
         self.header = PageTitle("Session Report", "Session summary and local history.")
         layout.addWidget(self.header)
         
         metrics_layout = QHBoxLayout()
-        metrics_layout.setSpacing(18)
+        metrics_layout.setSpacing(16)
         layout.addLayout(metrics_layout)
         
         self.focus_val = self._metric_card(metrics_layout, "Focus Score", "0.0%")
@@ -48,7 +48,7 @@ class ReportPage(ThemedPage):
         metrics_layout.setStretch(2, 1)
 
         body_layout = QHBoxLayout()
-        body_layout.setSpacing(18)
+        body_layout.setSpacing(16)
         layout.addLayout(body_layout)
         body_layout.setStretch(0, 3)
         body_layout.setStretch(1, 2)
@@ -62,13 +62,13 @@ class ReportPage(ThemedPage):
         self.timeline_card = Card()
         self.timeline_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.timeline_label = QLabel("Focus Timeline")
-        self.timeline_label.setFont(font(14, bold=True))
+        self.timeline_label.setFont(font(15, bold=True))
         self.focus_chart = FocusTrendChart(max_points=120, palette=self.theme.palette())
         self.focus_chart.setMinimumHeight(90)
         self.focus_chart.setMaximumHeight(110)
         self.timeline_summary = QTextEdit()
         self.timeline_summary.setReadOnly(True)
-        self.timeline_summary.setMaximumHeight(74)
+        self.timeline_summary.setMaximumHeight(84)
         self.timeline_summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.timeline_card.layout.addWidget(self.timeline_label)
         self.timeline_card.layout.addWidget(self.focus_chart)
@@ -80,7 +80,7 @@ class ReportPage(ThemedPage):
         self.details_card.setMinimumHeight(260)
         
         self.status_label = QLabel("No session data available.")
-        self.status_label.setFont(font(14, bold=True))
+        self.status_label.setFont(font(15, bold=True))
         self.report_label = QLabel("Report status: pending")
         
         self.details_card.layout.addWidget(self.status_label)
@@ -94,7 +94,7 @@ class ReportPage(ThemedPage):
         body_layout.addWidget(self.history_card, stretch=1)
         
         h_title = QLabel("Recent History")
-        h_title.setFont(font(14, bold=True))
+        h_title.setFont(font(15, bold=True))
         self.history_card.layout.addWidget(h_title)
 
         self._build_history_filters()
@@ -107,7 +107,7 @@ class ReportPage(ThemedPage):
         self.history_container.setStyleSheet("background: transparent;")
         self.history_layout = QVBoxLayout(self.history_container)
         self.history_layout.setContentsMargins(0,0,0,0)
-        self.history_layout.setSpacing(8)
+        self.history_layout.setSpacing(10)
         self.history_scroll.setWidget(self.history_container)
         self.history_card.layout.addWidget(self.history_scroll, 1)
         
@@ -135,9 +135,9 @@ class ReportPage(ThemedPage):
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         parent_layout.addWidget(card)
         t = QLabel(title)
-        t.setFont(font(13))
+        t.setFont(font(12))
         v = QLabel(value)
-        v.setFont(font(24, bold=True))
+        v.setFont(font(28, bold=True))
         card.layout.addWidget(t)
         card.layout.addWidget(v)
         return v
@@ -363,8 +363,22 @@ class ReportPage(ThemedPage):
             self.focus_chart.add_score(float(score))
 
     def _refresh_history_source(self, records: list[dict]) -> None:
-        self._history_records = [rec for rec in records if is_meaningful_session_record(rec)]
+        self._history_records = [rec for rec in records if is_meaningful_session_record(rec) and self._record_belongs_to_current_user(rec)]
         self._render_history()
+
+    def _record_belongs_to_current_user(self, record: dict) -> bool:
+        app = self.property("app_reference")
+        if not app:
+            return True
+        current_user_id = str(app.settings.get("auth_user_id") or "").strip()
+        current_username = str(app.settings.get("auth_username") or "").strip().lower()
+        record_user_id = str(record.get("user_id") or "").strip()
+        record_username = str(record.get("username") or "").strip().lower()
+        if current_user_id:
+            return record_user_id == current_user_id
+        if current_username:
+            return record_username == current_username
+        return True
 
     def _delete_history_record(self, record: dict) -> None:
         timestamp = str(record.get("timestamp") or "").strip()
@@ -450,6 +464,13 @@ class ReportPage(ThemedPage):
             c = QWidget()
             c.setObjectName("bg_app")
             cl = QVBoxLayout(c)
+            c.setStyleSheet(f"""
+                QWidget#bg_app {{
+                    background-color: {self.theme.color('bg_surface')};
+                    border: 1px solid {self.theme.color('border_soft')};
+                    border-radius: 14px;
+                }}
+            """)
             focus = float(rec.get("average_focus", 0.0)) * 100
             dmins = int(rec.get("duration_seconds", 0)) // 60
             ts = str(rec.get("timestamp", ""))[:16].replace("T", " ")
@@ -495,6 +516,10 @@ class ReportPage(ThemedPage):
         super().apply_theme()
         self.header.apply_theme(self.theme)
         self.focus_chart.apply_theme(self.theme.palette())
+        p = self.theme.palette()
+        self.timeline_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
+        self.details_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
+        self.history_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
         self.report_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
         self.timeline_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
         self.history_filters_label.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
@@ -507,6 +532,13 @@ class ReportPage(ThemedPage):
         ):
             combo.setStyleSheet(self.theme.combo_box_stylesheet())
             combo.view().setStyleSheet(self.theme.combo_popup_stylesheet())
+        self.history_search.setMinimumHeight(42)
+        self.history_reset_btn.setMinimumHeight(40)
+        self.history_clear_selection_btn.setMinimumHeight(40)
+        self.history_delete_selected_btn.setMinimumHeight(40)
+        for btn in (self.history_reset_btn, self.history_clear_selection_btn, self.history_delete_selected_btn):
+            btn.setStyleSheet(f"QPushButton {{ background-color: {p['btn_neutral']}; color: {p['text_primary']}; }} QPushButton:hover {{ background-color: {p['btn_neutral_hover']}; }}")
+        self.history_delete_selected_btn.setStyleSheet(f"QPushButton#accent_warn {{ background-color: {p['accent_warn']}; color: white; }} QPushButton#accent_warn:hover {{ background-color: {p['accent_warn']}; }}")
 
     def refresh(self):
         """Called by app_window.navigate() when switching to this page."""
@@ -547,25 +579,45 @@ class ReportPage(ThemedPage):
         local_history = []
         for rec in sessions:
             summary = rec.get("summary") or {}
+            if not isinstance(summary, dict):
+                summary = {}
+            live_metrics = rec.get("live_metrics") or {}
+            if not isinstance(live_metrics, dict):
+                live_metrics = {}
             status = str(rec.get("status") or summary.get("status") or rec.get("report_status") or "completed")
             if status == "processing":
                 status = "pending"
+            average_focus = summary.get("average_focus")
+            if average_focus in (None, "", 0, 0.0) and live_metrics.get("focus_score") is not None:
+                average_focus = live_metrics.get("focus_score")
+            duration_seconds = summary.get("duration_seconds") or rec.get("duration_seconds") or 0
+            focused_seconds = summary.get("focused_seconds")
+            if focused_seconds in (None, ""):
+                try:
+                    focused_seconds = int(float(duration_seconds or 0) * float(average_focus or 0.0))
+                except (TypeError, ValueError):
+                    focused_seconds = 0
+            report_status = rec.get("report_status") or status or "completed"
             mapped = {
                 "session_id": rec.get("session_id") or "",
                 "timestamp": rec.get("started_at") or rec.get("timestamp") or "",
+                "user_id": rec.get("user_id") or "",
+                "username": rec.get("username") or "",
+                "display_name": rec.get("display_name") or "",
                 "status": status,
-                "average_focus": summary.get("average_focus") or rec.get("average_focus") or 0.0,
-                "duration_seconds": summary.get("duration_seconds") or rec.get("duration_seconds") or 0,
-                "focused_seconds": summary.get("focused_seconds") or rec.get("focused_seconds") or 0,
+                "average_focus": average_focus or rec.get("average_focus") or 0.0,
+                "duration_seconds": duration_seconds,
+                "focused_seconds": focused_seconds or rec.get("focused_seconds") or 0,
                 "distraction_count": summary.get("distraction_count") or rec.get("distraction_count") or 0,
                 "completed": summary.get("completed") if "completed" in summary else rec.get("completed", False),
                 "minute_focus_scores": summary.get("minute_focus_scores") or rec.get("minute_focus_scores") or [],
-                "report_status": rec.get("report_status") or "completed",
+                "report_status": report_status,
                 "report_completed_at": rec.get("report_completed_at") or "",
                 "inference_mode": rec.get("inference_mode") or summary.get("inference_mode") or "local",
                 "cloud_session_id": rec.get("cloud_session_id") or "",
+                "live_state": live_metrics.get("state") or live_metrics.get("ai_state") or "",
             }
-            if is_meaningful_session_record(mapped):
+            if is_meaningful_session_record(mapped) and self._record_belongs_to_current_user(mapped):
                 local_history.append(mapped)
 
         from utils.session_storage import save_session_history

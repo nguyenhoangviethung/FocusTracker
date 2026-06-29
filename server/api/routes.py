@@ -813,13 +813,37 @@ async def get_user_stats(
 
     for sess in sessions:
         summary = sess.get("summary") or {}
+        if not isinstance(summary, dict):
+            summary = {}
+        live_metrics = sess.get("live_metrics") or {}
+        if not isinstance(live_metrics, dict):
+            live_metrics = {}
         status = sess.get("status", "")
-        has_summary = bool(summary.get("duration_seconds") or summary.get("focused_seconds"))
+        duration_seconds = int(summary.get("duration_seconds") or sess.get("duration_seconds") or 0)
+        try:
+            average_focus = float(summary.get("average_focus") or 0.0)
+        except (TypeError, ValueError):
+            average_focus = 0.0
+        if average_focus <= 0.0 and live_metrics.get("focus_score") is not None:
+            try:
+                average_focus = float(live_metrics.get("focus_score") or 0.0)
+            except (TypeError, ValueError):
+                average_focus = 0.0
+        focused_seconds = int(summary.get("focused_seconds") or 0)
+        if focused_seconds <= 0 and duration_seconds > 0 and average_focus > 0.0:
+            focused_seconds = int(duration_seconds * average_focus)
+        has_summary = bool(
+            duration_seconds
+            or focused_seconds
+            or average_focus > 0.0
+            or live_metrics.get("state")
+            or live_metrics.get("ai_state")
+        )
 
         if has_summary and status in ("completed", "cancelled"):
             scored_sessions += 1
-            total_focused_seconds += int(summary.get("focused_seconds", 0))
-            total_score += float(summary.get("average_focus", 0.0))
+            total_focused_seconds += focused_seconds
+            total_score += average_focus
 
             started_at = sess.get("started_at", "")
             if started_at:
@@ -828,8 +852,8 @@ async def get_user_stats(
                     session_dates.append(dt.strftime("%Y-%m-%d"))
                     if len(recent_activity) < 5:
                         label = dt.strftime("%a %d/%m, %I:%M %p")
-                        mins = int(summary.get("focused_seconds", 0)) // 60
-                        score_pct = int(float(summary.get("average_focus", 0)) * 100)
+                        mins = focused_seconds // 60
+                        score_pct = int(average_focus * 100)
                         recent_activity.append({
                             "label": label,
                             "description": f"{mins}m focused · {score_pct}%",

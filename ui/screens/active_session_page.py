@@ -42,23 +42,23 @@ class ActiveSessionPage(ThemedPage):
         self.queue_timer.timeout.connect(self._poll_tracker_queue)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(18)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(16)
         
         self.timer_card = Card()
         self.timer_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.timer_card)
         self.timer_label = QLabel("25:00")
-        self.timer_label.setFont(font(62, bold=True))
+        self.timer_label.setFont(font(58, bold=True))
         self.timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label = QLabel("STATUS: FOCUSED")
-        self.status_label.setFont(font(16, bold=True))
+        self.status_label.setFont(font(15, bold=True))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.timer_card.layout.addWidget(self.timer_label)
         self.timer_card.layout.addWidget(self.status_label)
         
         h_layout = QHBoxLayout()
-        h_layout.setSpacing(18)
+        h_layout.setSpacing(16)
         layout.addLayout(h_layout)
         
         self.camera_card = Card()
@@ -67,10 +67,10 @@ class ActiveSessionPage(ThemedPage):
         
         cam_header = QHBoxLayout()
         c_title = QLabel("AI CAMERA")
-        c_title.setFont(font(16, bold=True))
+        c_title.setFont(font(17, bold=True))
         self.toggle_cam_btn = QPushButton("Hide")
         self.toggle_cam_btn.setCheckable(True)
-        self.toggle_cam_btn.setFixedWidth(70)
+        self.toggle_cam_btn.setFixedWidth(78)
         self.toggle_cam_btn.clicked.connect(self._toggle_camera_visibility)
         cam_header.addWidget(c_title)
         cam_header.addStretch()
@@ -78,9 +78,9 @@ class ActiveSessionPage(ThemedPage):
         
         self.camera_preview = QLabel("Camera will open when session starts")
         self.camera_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.camera_preview.setMinimumHeight(240)
+        self.camera_preview.setMinimumHeight(260)
         self.camera_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
+        self.camera_preview.setStyleSheet("background-color: rgba(15, 23, 42, 0.9); border-radius: 16px;")
         self.camera_signal = QLabel("Signal: Waiting for Phase 2")
         self.camera_state = QLabel("State : FOCUSED")
         self.cloud_status = QLabel("Cloud: lifecycle sync pending")
@@ -95,12 +95,12 @@ class ActiveSessionPage(ThemedPage):
         self.model_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         h_layout.addWidget(self.model_card)
         model_title = QLabel("TRIPLE XGB DEPTH-ROBUST")
-        model_title.setFont(font(16, bold=True))
+        model_title.setFont(font(17, bold=True))
         self.extra_trees_state = QLabel("Final XGB : WARMING UP")
         self.random_forest_state = QLabel("Boost XGB : WARMING UP")
         self.cascade_state = QLabel("Targeted XGB : WARMING UP")
         self.trend_title = QLabel("FOCUS TREND")
-        self.trend_title.setFont(font(16, bold=True))
+        self.trend_title.setFont(font(17, bold=True))
         self.focus_chart = FocusTrendChart(max_points=300)
         self.model_card.layout.addWidget(model_title)
         self.model_card.layout.addWidget(self.extra_trees_state)
@@ -113,12 +113,12 @@ class ActiveSessionPage(ThemedPage):
         ctrl_layout = QHBoxLayout()
         self.pause_button = QPushButton("PAUSE")
         self.pause_button.clicked.connect(self.toggle_pause)
-        self.pause_button.setFixedSize(150, 42)
+        self.pause_button.setFixedSize(156, 44)
         
         self.end_button = QPushButton("END")
         self.end_button.setObjectName("accent_warn")
         self.end_button.clicked.connect(lambda: self.end_session())
-        self.end_button.setFixedSize(150, 42)
+        self.end_button.setFixedSize(156, 44)
         
         ctrl_layout.addStretch()
         ctrl_layout.addWidget(self.pause_button)
@@ -287,15 +287,15 @@ class ActiveSessionPage(ThemedPage):
             self.camera_preview.setPixmap(QPixmap())
             self.camera_preview.setText("Camera feed is hidden\n(AI tracking in progress...)")
             self.camera_preview.setStyleSheet("""
-                background-color: #0b1320;
-                color: #10B981;
-                border: 1px solid rgba(16, 185, 129, 0.2);
-                border-radius: 8px;
-                font-weight: bold;
+                background-color: rgba(15, 23, 42, 0.95);
+                color: #34D399;
+                border: 1px solid rgba(52, 211, 153, 0.22);
+                border-radius: 16px;
+                font-weight: 700;
             """)
         else:
             self.camera_preview.setText("")
-            self.camera_preview.setStyleSheet("background-color: #222222; border-radius: 8px;")
+            self.camera_preview.setStyleSheet("background-color: rgba(15, 23, 42, 0.9); border-radius: 16px;")
 
     def _reset_statistics(self) -> None:
         self._latest_focus_score = 0.0
@@ -351,6 +351,9 @@ class ActiveSessionPage(ThemedPage):
         super().apply_theme()
         p = self.theme.palette()
         self.focus_chart.apply_theme(p)
+        self.timer_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
+        self.camera_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
+        self.model_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
         for label in [
             self.camera_signal,
             self.camera_state,
@@ -360,3 +363,8 @@ class ActiveSessionPage(ThemedPage):
             self.cascade_state,
         ]:
             label.setStyleSheet(f"color: {p['text_secondary']};")
+        self.timer_label.setStyleSheet(f"color: {p['text_primary']};")
+        self.status_label.setStyleSheet(f"color: {p['accent_focus']};")
+        self.pause_button.setStyleSheet(f"QPushButton {{ background-color: {p['btn_neutral']}; color: {p['text_primary']}; }} QPushButton:hover {{ background-color: {p['btn_neutral_hover']}; }}")
+        self.end_button.setStyleSheet(f"QPushButton#accent_warn {{ background-color: {p['accent_warn']}; color: white; }} QPushButton#accent_warn:hover {{ background-color: {p['accent_warn']}; }}")
+        self.toggle_cam_btn.setStyleSheet(f"QPushButton {{ background-color: {p['btn_neutral']}; color: {p['text_primary']}; }} QPushButton:hover {{ background-color: {p['btn_neutral_hover']}; }}")

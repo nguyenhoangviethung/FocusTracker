@@ -45,6 +45,7 @@ Install the bundle at:
 ```text
 models/triple_xgb_depth_robust_target_band_product/
   fusion_config.json
+  reproduction_config.json
   summary.json
   final_xgb/model.json
   final_xgb/preprocessor.npz

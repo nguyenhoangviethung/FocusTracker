@@ -6,32 +6,38 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 class ThemeManager:
     _PALETTES = {
         "Light": {
-            "bg_app": "#F0F4F8",
+            "bg_app": "#F4F7FB",
             "bg_sidebar": "#FFFFFF",
             "bg_card": "#FFFFFF",
-            "text_primary": "#111827",
+            "bg_surface": "#F8FBFF",
+            "text_primary": "#0F172A",
             "text_secondary": "#64748B",
-            "accent_focus": "#1E5EEB",
-            "accent_warn": "#EF4444",
+            "accent_focus": "#2563EB",
+            "accent_focus_soft": "#DBEAFE",
+            "accent_warn": "#E11D48",
             "btn_neutral": "#F1F5F9",
             "btn_neutral_hover": "#E2E8F0",
-            "sidebar_hover": "#F0F4F8",
+            "sidebar_hover": "#EEF4FF",
             "input": "#FFFFFF",
-            "border": "#E5E7EB",
+            "border": "#DCE3EE",
+            "border_soft": "#E8EEF6",
         },
         "Dark": {
-            "bg_app": "#0F0F0F",
-            "bg_sidebar": "#141414",
-            "bg_card": "#1A1A1A",
-            "text_primary": "#FFFFFF",
-            "text_secondary": "#888888",
-            "accent_focus": "#1E5EEB",
-            "accent_warn": "#E74C3C",
-            "btn_neutral": "#333333",
-            "btn_neutral_hover": "#404040",
-            "sidebar_hover": "#1F1F1F",
-            "input": "#222222",
-            "border": "#333333",
+            "bg_app": "#0B1220",
+            "bg_sidebar": "#111827",
+            "bg_card": "#121A2A",
+            "bg_surface": "#0F172A",
+            "text_primary": "#F8FAFC",
+            "text_secondary": "#94A3B8",
+            "accent_focus": "#3B82F6",
+            "accent_focus_soft": "#1D4ED8",
+            "accent_warn": "#FB7185",
+            "btn_neutral": "#1F2937",
+            "btn_neutral_hover": "#273244",
+            "sidebar_hover": "#172033",
+            "input": "#0F172A",
+            "border": "#223046",
+            "border_soft": "#1F2A3F",
         },
     }
 
@@ -66,7 +72,7 @@ class ThemeManager:
         return f"""
             QWidget {{
                 color: {p['text_primary']};
-                font-family: 'Inter', 'Segoe UI', sans-serif;
+                font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', sans-serif;
             }}
             QMainWindow, QDialog, #bg_app {{
                 background-color: {p['bg_app']};
@@ -77,8 +83,8 @@ class ThemeManager:
             }}
             #bg_card {{
                 background-color: {p['bg_card']};
-                border-radius: 12px;
-                border: none;
+                border-radius: 18px;
+                border: 1px solid {p['border_soft']};
             }}
             QLabel#text_secondary {{
                 color: {p['text_secondary']};
@@ -87,9 +93,9 @@ class ThemeManager:
                 background-color: {p['btn_neutral']};
                 color: {p['text_primary']};
                 border: none;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-weight: bold;
+                border-radius: 12px;
+                padding: 10px 16px;
+                font-weight: 600;
             }}
             QPushButton:hover {{
                 background-color: {p['btn_neutral_hover']};
@@ -99,21 +105,21 @@ class ThemeManager:
                 color: white;
             }}
             QPushButton#accent_focus:hover {{
-                background-color: #059669; /* Darker green */
+                background-color: {p['accent_focus_soft']};
             }}
             QPushButton#accent_warn {{
                 background-color: {p['accent_warn']};
                 color: white;
             }}
             QPushButton#accent_warn:hover {{
-                background-color: #DC2626; /* Darker red */
+                background-color: {p['accent_warn']};
             }}
             QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
                 background-color: {p['input']};
                 color: {p['text_primary']};
                 border: 1px solid {p['border']};
-                border-radius: 8px;
-                padding: 8px;
+                border-radius: 12px;
+                padding: 10px 12px;
                 selection-background-color: {p['accent_focus']};
                 selection-color: white;
             }}
@@ -129,13 +135,13 @@ class ThemeManager:
             }}
             QTabWidget::pane {{
                 border: 1px solid {p['border']};
-                border-radius: 8px;
+                border-radius: 14px;
                 background-color: {p['bg_card']};
             }}
             QTabBar::tab {{
                 background-color: transparent;
                 color: {p['text_secondary']};
-                padding: 8px 16px;
+                padding: 10px 16px;
                 border: 1px solid transparent;
                 border-bottom: 2px solid transparent;
             }}
@@ -153,7 +159,7 @@ class ThemeManager:
                 background-color: {p['input']};
                 color: {p['text_primary']};
                 border: 1px solid {p['border']};
-                border-radius: 8px;
+                border-radius: 12px;
                 padding: 4px;
                 outline: 0;
                 selection-background-color: {p['accent_focus']};
@@ -162,7 +168,7 @@ class ThemeManager:
             QComboBox QAbstractItemView::item, QComboBox QListView::item {{
                 min-height: 28px;
                 padding: 6px 8px;
-                border-radius: 6px;
+                border-radius: 8px;
             }}
             QComboBox QAbstractItemView::item:hover, QComboBox QListView::item:hover {{
                 background-color: {p['btn_neutral_hover']};
@@ -224,8 +230,8 @@ class ThemeManager:
                 background-color: {p['input']};
                 color: {p['text_primary']};
                 border: 1px solid {p['border']};
-                border-radius: 8px;
-                padding: 8px;
+                border-radius: 12px;
+                padding: 10px 12px;
                 padding-right: 28px;
                 selection-background-color: {p['accent_focus']};
                 selection-color: white;
@@ -236,6 +242,9 @@ class ThemeManager:
             QComboBox::drop-down {{
                 border: none;
                 width: 24px;
+            }}
+            QComboBox:hover {{
+                border-color: {p['accent_focus']};
             }}
             QComboBox::down-arrow {{
                 image: none;
@@ -249,7 +258,7 @@ class ThemeManager:
                 background-color: {p['input']};
                 color: {p['text_primary']};
                 border: 1px solid {p['border']};
-                border-radius: 8px;
+                border-radius: 12px;
                 padding: 4px;
                 outline: 0;
                 selection-background-color: {p['accent_focus']};
@@ -258,7 +267,7 @@ class ThemeManager:
             QListView::item {{
                 min-height: 28px;
                 padding: 6px 8px;
-                border-radius: 6px;
+                border-radius: 8px;
             }}
             QListView::item:hover {{
                 background-color: {p['btn_neutral_hover']};

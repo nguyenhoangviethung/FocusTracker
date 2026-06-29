@@ -31,7 +31,16 @@ class HomePage(ThemedPage):
         self.header = PageTitle("Hello User", "Start a new session and track focus locally or through the cloud.")
         
         premium_badge = QLabel("★ PREMIUM")
-        premium_badge.setStyleSheet("background-color: #333; color: #FFD700; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;")
+        premium_badge.setStyleSheet("""
+            QLabel {
+                background-color: rgba(37, 99, 235, 0.12);
+                color: #2563EB;
+                padding: 6px 10px;
+                border-radius: 999px;
+                font-weight: 700;
+                font-size: 11px;
+            }
+        """)
         
         header_layout.addWidget(self.header)
         header_layout.addWidget(premium_badge, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -42,8 +51,9 @@ class HomePage(ThemedPage):
         self.summary_card = Card()
         self.summary_card.setStyleSheet("""
             QFrame#bg_card {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2E8CFF, stop:1 #1E5EEB);
-                border-radius: 16px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(37, 99, 235, 0.96), stop:1 rgba(15, 118, 110, 0.92));
+                border-radius: 18px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
             }
             QLabel { color: white; }
         """)
@@ -72,7 +82,7 @@ class HomePage(ThemedPage):
 
         self.setup_card = Card()
         title_label = QLabel("Pomodoro Setup")
-        title_label.setFont(font(16, bold=True))
+        title_label.setFont(font(17, bold=True))
         self.setup_card.layout.addWidget(title_label)
         
         dur_layout = QHBoxLayout()
@@ -81,7 +91,7 @@ class HomePage(ThemedPage):
         self.dur_combo = QComboBox()
         self.dur_combo.addItems(["15 Mins", "25 Mins", "45 Mins", "60 Mins", "90 Mins"])
         self.dur_combo.setCurrentText("25 Mins")
-        self.dur_combo.setFixedWidth(150)
+        self.dur_combo.setFixedWidth(170)
         self.dur_combo.setView(QListView())
         dur_layout.addWidget(dur_label)
         dur_layout.addStretch()
@@ -101,7 +111,7 @@ class HomePage(ThemedPage):
         # User Activity
         self.recent_card = Card()
         recent_title = QLabel("Recent Activity")
-        recent_title.setFont(font(16, bold=True))
+        recent_title.setFont(font(17, bold=True))
         self.recent_card.layout.addWidget(recent_title)
         
         self.recent_content = QVBoxLayout()
@@ -133,6 +143,19 @@ class HomePage(ThemedPage):
         self.header.apply_theme(self.theme)
         self.dur_combo.setStyleSheet(self.theme.combo_box_stylesheet())
         self.dur_combo.view().setStyleSheet(self.theme.combo_popup_stylesheet())
+        p = self.theme.palette()
+        self.summary_card.setStyleSheet(f"""
+            QFrame#bg_card {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {p['accent_focus']}, stop:1 {p['accent_focus_soft']});
+                border-radius: 18px;
+                border: 1px solid {p['border_soft']};
+            }}
+            QLabel {{ color: white; }}
+        """)
+        self.recent_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border-radius: 18px; border: 1px solid {p['border_soft']}; }}")
+        self.setup_card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border-radius: 18px; border: 1px solid {p['border_soft']}; }}")
+        for lbl in self.stat_labels.values():
+            lbl.setStyleSheet("color: white;")
 
     def refresh(self):
         """Called by app_window.navigate() when switching to this page."""
@@ -186,7 +209,7 @@ class HomePage(ThemedPage):
         recent = stats.get("recent_activity", [])
         if not recent:
             lbl = QLabel("No recent activity.")
-            lbl.setStyleSheet("color: #64748B;")
+            lbl.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
             self.recent_content.addWidget(lbl)
             return
             
@@ -195,7 +218,7 @@ class HomePage(ThemedPage):
             r_name = QLabel(act.get("label", ""))
             r_name.setFont(font(12, bold=True))
             r_size = QLabel(act.get("description", ""))
-            r_size.setStyleSheet("color: #64748B;")
+            r_size.setStyleSheet(f"color: {self.theme.color('text_secondary')};")
             r_row.addWidget(r_name)
             r_row.addStretch()
             r_row.addWidget(r_size)

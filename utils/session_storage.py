@@ -85,6 +85,11 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
 
     normalized = {
         "timestamp": str(record.get("timestamp") or _now_iso()),
+        "session_id": str(record.get("session_id") or "").strip(),
+        "user_id": str(record.get("user_id") or "").strip(),
+        "username": str(record.get("username") or "").strip(),
+        "display_name": str(record.get("display_name") or "").strip(),
+        "status": str(record.get("status") or "").strip(),
         "duration_seconds": duration_seconds,
         "focused_seconds": focused_seconds,
         "minute_focus_scores": minute_scores,
@@ -97,6 +102,8 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
         normalized["inference_mode"] = str(record.get("inference_mode") or "local")
     if record.get("cloud_session_id"):
         normalized["cloud_session_id"] = str(record.get("cloud_session_id") or "")
+    if record.get("live_state"):
+        normalized["live_state"] = str(record.get("live_state") or "").strip()
     if record.get("report_status"):
         normalized["report_status"] = str(record.get("report_status") or "").strip()
     if record.get("report_started_at"):
@@ -110,11 +117,24 @@ def is_meaningful_session_record(record: dict[str, Any]) -> bool:
     summary = record.get("summary") or {}
     if not isinstance(summary, dict):
         summary = {}
+    live_metrics = record.get("live_metrics") or {}
+    if not isinstance(live_metrics, dict):
+        live_metrics = {}
     minute_scores = summary.get("minute_focus_scores") or record.get("minute_focus_scores") or []
     duration = _safe_int(summary.get("duration_seconds") or record.get("duration_seconds") or 0)
     focused = _safe_int(summary.get("focused_seconds") or record.get("focused_seconds") or 0)
     average_focus = _safe_float(summary.get("average_focus") or record.get("average_focus") or 0.0)
-    return duration > 0 and (bool(minute_scores) or focused > 0 or average_focus > 0.0)
+    live_focus = _safe_float(live_metrics.get("focus_score"), 0.0)
+    has_live_inference = (
+        bool(live_metrics.get("state") or live_metrics.get("ai_state") or record.get("live_state"))
+        or live_focus > 0.0
+    )
+    return duration > 0 and (
+        bool(minute_scores)
+        or focused > 0
+        or average_focus > 0.0
+        or has_live_inference
+    )
 
 
 def save_session_statistics(
@@ -125,10 +145,17 @@ def save_session_statistics(
     focused_seconds: int,
     distraction_count: int,
     focus_streak_seconds: float,
+    *,
+    user_id: str = "",
+    username: str = "",
+    display_name: str = "",
 ) -> dict[str, Any]:
     session_record = normalize_session_record(
         {
             "timestamp": _now_iso(),
+            "user_id": user_id,
+            "username": username,
+            "display_name": display_name,
             "duration_seconds": int(total_seconds),
             "focused_seconds": int(focused_seconds),
             "minute_focus_scores": [float(score) for score in minute_scores],

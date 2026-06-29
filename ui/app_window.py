@@ -123,6 +123,9 @@ class FocusFlowApp(QMainWindow):
             focused_seconds=int(summary.get("focused_seconds", 0)),
             distraction_count=int(summary.get("distraction_count", 0)),
             focus_streak_seconds=float(summary.get("focus_streak_seconds", 0.0)),
+            user_id=str(self.settings.get("auth_user_id") or ""),
+            username=str(self.settings.get("auth_username") or ""),
+            display_name=str(self.settings.get("auth_display_name") or ""),
         )
         record.update({
             "inference_mode": str(summary.get("inference_mode") or "local"),

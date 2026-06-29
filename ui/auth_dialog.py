@@ -12,8 +12,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTabWidget,
     QVBoxLayout,
+    QFrame,
     QWidget,
 )
+from PyQt6.QtCore import Qt
 
 from edge.auth_client import AuthClient, AuthRequestError
 from ui.theme import ThemeManager, font
@@ -34,21 +36,28 @@ class AuthDialog(QDialog):
 
         self.setWindowTitle("FocusFlow Sign In")
         self.setModal(True)
-        self.resize(560, 420)
+        self.resize(720, 560)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setSpacing(18)
 
-        title = QLabel("Sign in to FocusFlow")
-        title.setFont(font(22, bold=True))
-        subtitle = QLabel("Use username/password or Google sign-in to tag sessions with a stable user identity.")
-        subtitle.setWordWrap(True)
-        subtitle.setObjectName("text_secondary")
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        hero = QFrame()
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(28, 28, 28, 28)
+        hero_layout.setSpacing(8)
+        hero.setObjectName("bg_card")
+        hero_title = QLabel("FocusFlow AI")
+        hero_title.setFont(font(28, bold=True))
+        hero_subtitle = QLabel("Welcome back. Sign in to keep sessions, reports, and cloud sync in one place.")
+        hero_subtitle.setWordWrap(True)
+        hero_subtitle.setObjectName("text_secondary")
+        hero_layout.addWidget(hero_title)
+        hero_layout.addWidget(hero_subtitle)
+        layout.addWidget(hero)
 
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         layout.addWidget(self.tabs)
 
         self.password_tab = QWidget()
@@ -70,13 +79,19 @@ class AuthDialog(QDialog):
 
     def _build_password_tab(self) -> None:
         layout = QVBoxLayout(self.password_tab)
+        layout.setContentsMargins(4, 10, 4, 4)
+        layout.setSpacing(14)
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
 
         self.username_edit = QLineEdit()
-        self.username_edit.setPlaceholderText("student01")
+        self.username_edit.setPlaceholderText("Enter your username")
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_edit.setPlaceholderText("••••••••")
+        self.password_edit.setPlaceholderText("Enter your password")
         self.display_name_edit = QLineEdit()
         self.display_name_edit.setPlaceholderText("Optional display name")
 
@@ -90,6 +105,9 @@ class AuthDialog(QDialog):
         self.register_btn = QPushButton("Create account")
         self.login_btn.clicked.connect(self._login_password)
         self.register_btn.clicked.connect(self._register_password)
+        self.login_btn.setObjectName("accent_focus")
+        self.login_btn.setMinimumHeight(44)
+        self.register_btn.setMinimumHeight(44)
         btn_row.addWidget(self.login_btn)
         btn_row.addWidget(self.register_btn)
         layout.addLayout(btn_row)
@@ -101,16 +119,20 @@ class AuthDialog(QDialog):
 
     def _build_google_tab(self) -> None:
         layout = QVBoxLayout(self.google_tab)
+        layout.setContentsMargins(4, 10, 4, 4)
+        layout.setSpacing(14)
         hint = QLabel(
-            "This uses the desktop OAuth client values loaded from .env. "
+            "This uses the desktop OAuth client values loaded from `.env`. "
             "A browser window will open and the callback lands on localhost."
         )
         hint.setWordWrap(True)
+        hint.setObjectName("text_secondary")
         layout.addWidget(hint)
 
         self.google_btn = QPushButton("Sign in with Google")
         self.google_btn.setObjectName("accent_focus")
         self.google_btn.clicked.connect(self._login_google)
+        self.google_btn.setMinimumHeight(46)
         layout.addWidget(self.google_btn)
 
         self.google_status = QLabel("")
@@ -233,3 +255,26 @@ class AuthDialog(QDialog):
 
     def apply_theme(self) -> None:
         self.setStyleSheet(self.theme.get_stylesheet())
+        p = self.theme.palette()
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {p['border']};
+                border-radius: 14px;
+                background-color: {p['bg_card']};
+                top: -1px;
+            }}
+            QTabBar::tab {{
+                background-color: transparent;
+                color: {p['text_secondary']};
+                padding: 10px 16px;
+                margin-right: 4px;
+                border: 1px solid {p['border']};
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+            }}
+            QTabBar::tab:selected {{
+                color: {p['text_primary']};
+                background-color: {p['bg_card']};
+                border-bottom-color: {p['bg_card']};
+            }}
+        """)

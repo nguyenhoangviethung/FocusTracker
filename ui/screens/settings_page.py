@@ -23,8 +23,8 @@ class SettingsPage(ThemedPage):
         super().__init__(theme)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(24)
+        layout.setContentsMargins(32, 28, 32, 28)
+        layout.setSpacing(18)
         
         self.header = PageTitle("Settings", "Configure your focus preferences, notifications, and security.")
         layout.addWidget(self.header)
@@ -38,13 +38,13 @@ class SettingsPage(ThemedPage):
         scroll_content.setStyleSheet("background: transparent;")
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(0, 0, 0, 0)
-        scroll_layout.setSpacing(24)
+        scroll_layout.setSpacing(18)
         
         # 1. Appearance & Preferences
         self.acc_card = Card()
         scroll_layout.addWidget(self.acc_card)
         t1 = QLabel("Appearance & Device Preferences")
-        t1.setFont(font(16, bold=True))
+        t1.setFont(font(17, bold=True))
         self.acc_card.layout.addWidget(t1)
         
         theme_layout = QHBoxLayout()
@@ -61,6 +61,8 @@ class SettingsPage(ThemedPage):
         
         self.rb_light.clicked.connect(lambda: self._set_theme("Light"))
         self.rb_dark.clicked.connect(lambda: self._set_theme("Dark"))
+        self.rb_light.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.rb_dark.setCursor(Qt.CursorShape.PointingHandCursor)
 
         autohide_layout = QHBoxLayout()
         self.chk_autohide = QCheckBox("Auto-hide camera preview when starting session")
@@ -76,7 +78,7 @@ class SettingsPage(ThemedPage):
         camera_layout.addWidget(QLabel("Webcam Device:"))
         self.camera_combo = QComboBox()
         self.camera_combo.addItems(["Webcam 0 (Default)", "Webcam 1", "Webcam 2", "Webcam 3"])
-        self.camera_combo.setFixedWidth(200)
+        self.camera_combo.setFixedWidth(220)
         self._prepare_combo(self.camera_combo)
         camera_layout.addWidget(self.camera_combo)
         camera_layout.addStretch()
@@ -86,7 +88,7 @@ class SettingsPage(ThemedPage):
         self.focus_card = Card()
         scroll_layout.addWidget(self.focus_card)
         t_focus = QLabel("Focus & Work Goals")
-        t_focus.setFont(font(16, bold=True))
+        t_focus.setFont(font(17, bold=True))
         self.focus_card.layout.addWidget(t_focus)
 
         goal_layout = QHBoxLayout()
@@ -120,7 +122,7 @@ class SettingsPage(ThemedPage):
         self.alerts_card = Card()
         scroll_layout.addWidget(self.alerts_card)
         t_alerts = QLabel("Notifications & Sound Alerts")
-        t_alerts.setFont(font(16, bold=True))
+        t_alerts.setFont(font(17, bold=True))
         self.alerts_card.layout.addWidget(t_alerts)
 
         self.chk_complete = QCheckBox("Play sound when session completes")
@@ -132,7 +134,7 @@ class SettingsPage(ThemedPage):
         self.pwd_card = Card()
         scroll_layout.addWidget(self.pwd_card)
         t_pwd = QLabel("Security")
-        t_pwd.setFont(font(16, bold=True))
+        t_pwd.setFont(font(17, bold=True))
         self.pwd_card.layout.addWidget(t_pwd)
 
         old_pwd_layout = QHBoxLayout()
@@ -160,6 +162,7 @@ class SettingsPage(ThemedPage):
         self.save_btn = QPushButton("Save Settings")
         self.save_btn.setObjectName("accent_focus")
         self.save_btn.clicked.connect(self._save)
+        self.save_btn.setMinimumHeight(44)
         
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -178,6 +181,7 @@ class SettingsPage(ThemedPage):
     @staticmethod
     def _prepare_combo(combo: QComboBox) -> None:
         combo.setView(QListView())
+        combo.setMinimumHeight(42)
 
     def _apply_combo_theme(self) -> None:
         combo_style = self.theme.combo_box_stylesheet()
@@ -267,3 +271,7 @@ class SettingsPage(ThemedPage):
         super().apply_theme()
         self.header.apply_theme(self.theme)
         self._apply_combo_theme()
+        p = self.theme.palette()
+        for card in (self.acc_card, self.focus_card, self.alerts_card, self.pwd_card):
+            card.setStyleSheet(f"QFrame#bg_card {{ background-color: {p['bg_card']}; border: 1px solid {p['border_soft']}; border-radius: 18px; }}")
+        self.save_btn.setStyleSheet(f"QPushButton#accent_focus {{ background-color: {p['accent_focus']}; color: white; }} QPushButton#accent_focus:hover {{ background-color: {p['accent_focus_soft']}; }}")

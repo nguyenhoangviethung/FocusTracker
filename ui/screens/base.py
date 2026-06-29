@@ -8,7 +8,7 @@ class PageTitle(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         
         self.title_label = QLabel(title)
         self.title_label.setFont(font(24, bold=True))
@@ -31,8 +31,8 @@ class Card(QFrame):
         self.setObjectName("bg_card")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(24, 24, 24, 24)
-        self.layout.setSpacing(16)
+        self.layout.setContentsMargins(22, 22, 22, 22)
+        self.layout.setSpacing(14)
 
 class ThemedPage(QWidget):
     def __init__(self, theme: ThemeManager) -> None:
