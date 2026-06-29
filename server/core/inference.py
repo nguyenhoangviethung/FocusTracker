@@ -8,6 +8,7 @@ import numpy as np
 from shared.contracts import InferenceResponse, TelemetryPacket
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, enrich_raw_sequence
 from tracking.inference import MODEL_NAME, MODEL_VERSION, ProductInferencer
+from utils.focus_signal import presentation_signal
 
 
 class CloudInferenceEngine:
@@ -30,20 +31,36 @@ class CloudInferenceEngine:
             focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
             ai_state = str(prediction.get("state", "DISTRACTED"))
             state = "FOCUSED" if ai_state == "ENGAGED" else "DISTRACTED"
+            display_signal = float(
+                prediction.get("presentation_signal")
+                or presentation_signal(
+                    prediction.get("prediction_4class"),
+                    prediction.get("probabilities_4class"),
+                    focus_score,
+                )
+            )
             decision = {
                 "state": state,
                 "source": MODEL_VERSION,
-                "reason": "Decision produced by the depth-aware Triple XGBoost 4-class fusion model.",
+                "reason": (
+                    "Decision produced by the depth-aware Triple XGBoost 4-class fusion model. "
+                    "Class high is focused; class medium is focused when high probability passes support threshold."
+                ),
                 "ai_probability": focus_score,
-                "decision_rule": prediction.get("decision_rule", "argmax_4class"),
+                "decision_rule": prediction.get("decision_rule", "high_argmax_or_medium_with_high_support"),
                 "ai_state": ai_state,
                 "predicted_class": prediction.get("prediction_4class"),
                 "predicted_label": prediction.get("prediction_label"),
                 "engaged_class_indices": prediction.get("engaged_class_indices", [3]),
+                "conditional_engaged_class_indices": prediction.get("conditional_engaged_class_indices", [2]),
+                "medium_high_probability_threshold": prediction.get("medium_high_probability_threshold", 0.2),
             }
+            if isinstance(prediction.get("decision"), dict):
+                decision.update(prediction["decision"])
         else:
             prediction = {}
             focus_score = 0.0
+            display_signal = 0.0
             ai_state = "NO_FACE"
             state = "NO_FACE"
             decision = {
@@ -65,6 +82,7 @@ class CloudInferenceEngine:
             state=state,
             ai_state=ai_state,
             focus_score=max(0.0, min(1.0, focus_score)),
+            presentation_signal=max(0.0, min(1.0, display_signal)),
             components=dict(prediction.get("components") or {}),
             weights=dict(prediction.get("weights") or {}),
             class_labels=list(prediction.get("class_labels") or []),

@@ -81,7 +81,7 @@ class ActiveSessionPage(ThemedPage):
         self.camera_preview.setMinimumHeight(260)
         self.camera_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.camera_preview.setStyleSheet("background-color: rgba(15, 23, 42, 0.9); border-radius: 16px;")
-        self.camera_signal = QLabel("Signal: Waiting for Phase 2")
+        self.camera_signal = QLabel("Signal: Waiting for model")
         self.camera_state = QLabel("State : FOCUSED")
         self.cloud_status = QLabel("Cloud: lifecycle sync pending")
         
@@ -101,7 +101,7 @@ class ActiveSessionPage(ThemedPage):
         self.cascade_state = QLabel("Targeted XGB : WARMING UP")
         self.trend_title = QLabel("FOCUS TREND")
         self.trend_title.setFont(font(17, bold=True))
-        self.focus_chart = FocusTrendChart(max_points=300)
+        self.focus_chart = FocusTrendChart(max_points=300, smoothing_alpha=0.22, max_step=0.10)
         self.model_card.layout.addWidget(model_title)
         self.model_card.layout.addWidget(self.extra_trees_state)
         self.model_card.layout.addWidget(self.random_forest_state)
@@ -238,7 +238,8 @@ class ActiveSessionPage(ThemedPage):
 
     def _render_telemetry(self, payload: dict) -> None:
         if "frame" in payload: self._render_frame(payload["frame"])
-        focus_score = float(payload.get("focus_score", 0.0))
+        raw_focus_score = float(payload.get("focus_score", 0.0))
+        focus_score = float(payload.get("presentation_signal", raw_focus_score) or 0.0)
         state = str(payload.get("state", "DISTRACTED"))
         ai_state = str(payload.get("ai_state", "WARMING_UP"))
         fps = float(payload.get("fps", 0.0))

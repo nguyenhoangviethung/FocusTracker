@@ -15,6 +15,7 @@ from collections import deque
 from edge.cloud_client import CloudClientConfig, FocusFlowCloudClient
 from shared.contracts import SessionCreate, SessionSummary, TelemetryPacket
 from tracking.buffer import DEPTH_ROBUST_V2_FRAME_FEATURE_DIM, FeatureSequenceBuffer, SEQUENCE_LENGTH
+from utils.focus_signal import presentation_signal
 from utils.logger import get_logger
 
 
@@ -271,6 +272,7 @@ class FocusSessionTracker:
                         "probability": 0.0,
                         "raw_probability": 0.0,
                         "focus_score": 0.0,
+                        "presentation_signal": 0.0,
                         "state": "NO_FACE",
                         "ready": True,
                     }
@@ -292,6 +294,7 @@ class FocusSessionTracker:
                             "probability": probability,
                             "raw_probability": probability,
                             "focus_score": probability,
+                            "presentation_signal": 0.0,
                             "ai_state": ai_result.get("state", "NO_FACE"),
                             "model_ready": model_ready,
                             "components": None,
@@ -336,6 +339,14 @@ class FocusSessionTracker:
                         ai_result = dict(last_ai_result)
 
                 probability = float(ai_result.get("focus_score", ai_result.get("probability", 0.0)))
+                display_signal = float(
+                    ai_result.get("presentation_signal")
+                    or presentation_signal(
+                        ai_result.get("predicted_class", ai_result.get("prediction_4class")),
+                        ai_result.get("class_probabilities", ai_result.get("probabilities_4class")),
+                        probability,
+                    )
+                )
                 model_ready = bool(ai_result.get("ready", False))
                 if model_ready:
                     raw_state = str(ai_result.get("state", "DISTRACTED"))
@@ -361,6 +372,7 @@ class FocusSessionTracker:
                         "probability": ai_result.get("probability", probability),
                         "raw_probability": ai_result.get("raw_probability", ai_result.get("probability", probability)),
                         "focus_score": probability,
+                        "presentation_signal": display_signal if model_ready else 0.0,
                         "ai_state": ai_result.get("ai_state", ai_result.get("state", "WARMING_UP")),
                         "model_ready": model_ready,
                         "components": ai_result.get("components"),
@@ -538,12 +550,21 @@ class FocusSessionTracker:
             try:
                 prediction = inferencer.predict(sequence)
                 focus_score = float(prediction.get("focus_score", prediction.get("probability", 0.0)))
+                display_signal = float(
+                    prediction.get("presentation_signal")
+                    or presentation_signal(
+                        prediction.get("prediction_4class"),
+                        prediction.get("probabilities_4class"),
+                        focus_score,
+                    )
+                )
                 self._put_latest(
                     self._local_responses,
                     {
                         **prediction,
                         "probability": focus_score,
                         "focus_score": focus_score,
+                        "presentation_signal": display_signal,
                         "state": "FOCUSED" if prediction.get("state") == "ENGAGED" else "DISTRACTED",
                         "ai_state": prediction.get("state", "DISTRACTED"),
                         "inference_source": "edge",
@@ -576,6 +597,7 @@ class FocusSessionTracker:
                 latest = {
                     **payload,
                     "probability": payload.get("focus_score", 0.0),
+                    "presentation_signal": payload.get("presentation_signal"),
                     "ready": True,
                     "state": payload.get("state", payload.get("ai_state", "DISTRACTED")),
                     "ai_state": payload.get("ai_state", "DISTRACTED"),

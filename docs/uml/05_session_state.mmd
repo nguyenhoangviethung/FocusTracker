@@ -1,60 +1,70 @@
-stateDiagram-v2
-    [*] --> Idle : Launch application
-
-    Idle --> Starting : Trigger 'Start Session'
-
-    Starting --> WarmingUp : Webcam stream active
-    Starting --> ErrorState : Stream/Hardware failure (timeout)
-
-    ErrorState --> Idle : Reset/Acknowledge error dialog
-
-    WarmingUp --> ActiveSession : Window buffer filled (30 frames accumulated)
-
-    state ActiveSession {
-        [*] --> Initializing
-        Initializing --> TrackingLocal : Local Mode (Offline)
-        Initializing --> Connecting : Cloud / Hybrid Mode
-        Connecting --> TrackingCloud : WSS connection established
-
-        state TrackingLocal {
-            [*] --> ProcessingLocal
-            ProcessingLocal --> FeatureExtractedLocal : Capture frame
-            FeatureExtractedLocal --> PredictionLocal : Local CPU Inference
-            PredictionLocal --> ProcessingLocal : Success
-        }
-
-        state TrackingCloud {
-            [*] --> Streaming
-            Streaming --> FeatureExtractedCloud : Capture frame (1 Hz)
-            FeatureExtractedCloud --> ResponseReceived : Telemetry sent & response processed
-            ResponseReceived --> Streaming : Success
-        }
-
-        TrackingCloud --> Reconnecting : Socket heartbeat lost (WSS disconnected)
-        Reconnecting --> TrackingCloud : Socket re-established
-        Reconnecting --> Connecting : Timeout / Retry limit reached
-    }
-
-    ActiveSession --> Paused : User triggers 'Pause'
-    Paused --> ActiveSession : User triggers 'Resume'
-
-    ActiveSession --> Completing : User triggers 'Stop' / Target timer ended
-    Paused --> Completing : User triggers 'Stop'
-
-    Completing --> ReportGenerated : Session payload processed & stored
-
-    ReportGenerated --> Idle : Dismiss report summary
-    ReportGenerated --> [*] : Terminate application
-
-    %% Node Styles
-    classDef normalState fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155
-    classDef greenState fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#065F46
-    classDef blueState fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
-    classDef redState fill:#FFF1F2,stroke:#F43F5E,stroke-width:2px,color:#9F1239
-    classDef compositeState fill:#FAF5FF,stroke:#8B5CF6,stroke-width:2px,color:#5B21B6
-
-    class Idle,Paused normalState
-    class Starting,WarmingUp,Connecting,Reconnecting,Completing,Initializing blueState
-    class TrackingCloud,Streaming,FeatureExtractedCloud,ResponseReceived,ReportGenerated,TrackingLocal,ProcessingLocal,FeatureExtractedLocal,PredictionLocal greenState
-    class ErrorState redState
-    class ActiveSession compositeState
+flowchart TD
+    %% State definitions
+    StartNode((( )))
+    Idle(["Idle<br/>(Trạng thái chờ)"])
+    Initializing(["Initializing<br/>(Khởi tạo)"])
+    
+    %% Left column
+    TrackingLocal(["TrackingLocal<br/>(Theo dõi Ngoại tuyến)"])
+    PausedLocal(["PausedLocal<br/>(Tạm dừng Ngoại tuyến)"])
+    
+    %% Center column
+    Reconnecting(["Reconnecting<br/>(Đang kết nối lại)"])
+    Completing(["Completing<br/>(Đang kết thúc)"])
+    
+    %% Right column
+    TrackingCloud(["TrackingCloud<br/>(Theo dõi Đám mây)"])
+    PausedCloud(["PausedCloud<br/>(Tạm dừng Đám mây)"])
+    
+    EndNode((( )))
+    
+    %% Layout constraints to force planar structure
+    Initializing ~~~ Reconnecting
+    Reconnecting ~~~ Completing
+    
+    TrackingLocal ~~~ Reconnecting
+    Reconnecting ~~~ TrackingCloud
+    
+    PausedLocal ~~~ Completing
+    Completing ~~~ PausedCloud
+    
+    %% Transitions
+    StartNode --> Idle
+    Idle -- "Bắt đầu" --> Initializing
+    Initializing -- "Lỗi thiết bị" --> Idle
+    
+    %% Initial state dispatch
+    Initializing -- "Chế độ Offline" --> TrackingLocal
+    Initializing -- "Chế độ Cloud" --> TrackingCloud
+    
+    %% Connection recovery (horizontal)
+    TrackingCloud <--> |"Mất mạng / Kết nối"| Reconnecting
+    Reconnecting -- "Hết giờ" --> TrackingLocal
+    
+    %% Loops (vertical local columns)
+    TrackingLocal <--> |"Tạm dừng / Tiếp tục"| PausedLocal
+    TrackingCloud <--> |"Tạm dừng / Tiếp tục"| PausedCloud
+    
+    %% Completion flow (converging at bottom center)
+    TrackingLocal -- "Kết thúc" --> Completing
+    PausedLocal -- "Kết thúc" --> Completing
+    
+    TrackingCloud -- "Kết thúc" --> Completing
+    PausedCloud -- "Kết thúc" --> Completing
+    
+    Completing --> EndNode
+    
+    %% Styling
+    style StartNode fill:#334155,stroke:#334155
+    style EndNode fill:#334155,stroke:#334155
+    
+    style Idle fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155
+    style PausedLocal fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155
+    style PausedCloud fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155
+    
+    style Initializing fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
+    style Reconnecting fill:#FFFBEB,stroke:#F59E0B,stroke-width:2px,color:#78350F
+    style Completing fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
+    
+    style TrackingCloud fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#065F46
+    style TrackingLocal fill:#ECFDF5,stroke:#10B981,stroke-width:2px,color:#065F46

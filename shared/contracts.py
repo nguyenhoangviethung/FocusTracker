@@ -77,6 +77,7 @@ class InferenceResponse(ContractModel):
     state: Literal["FOCUSED", "DISTRACTED", "NO_FACE"]
     ai_state: str
     focus_score: float = Field(ge=0.0, le=1.0)
+    presentation_signal: float | None = Field(default=None, ge=0.0, le=1.0)
     components: dict[str, Any] = Field(default_factory=dict)
     weights: dict[str, float] = Field(default_factory=dict)
     class_labels: list[str] = Field(default_factory=list)

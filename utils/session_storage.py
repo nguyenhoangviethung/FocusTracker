@@ -104,6 +104,8 @@ def normalize_session_record(record: dict[str, Any]) -> dict[str, Any]:
         normalized["cloud_session_id"] = str(record.get("cloud_session_id") or "")
     if record.get("live_state"):
         normalized["live_state"] = str(record.get("live_state") or "").strip()
+    if record.get("raw_focus_score") is not None:
+        normalized["raw_focus_score"] = _safe_float(record.get("raw_focus_score"), 0.0)
     if record.get("report_status"):
         normalized["report_status"] = str(record.get("report_status") or "").strip()
     if record.get("report_started_at"):

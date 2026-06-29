@@ -72,7 +72,7 @@ class AIVisionPage(ThemedPage):
         self.telemetry_card.layout.addWidget(t_title)
         for label in self.telemetry_labels.values():
             self.telemetry_card.layout.addWidget(label)
-        self.telemetry_card.layout.addWidget(QLabel("Focus Telemetry"))
+        self.telemetry_card.layout.addWidget(QLabel("Signal"))
         self.telemetry_card.layout.addWidget(self.focus_score_bar)
         self.telemetry_card.layout.addStretch()
         
@@ -81,7 +81,7 @@ class AIVisionPage(ThemedPage):
         layout.addWidget(self.model_card)
         m_title = QLabel("TRIPLE XGB DEPTH-ROBUST OUTPUT")
         m_title.setFont(font(16, bold=True))
-        self.focus_score_label = QLabel("Focus Telemetry: --")
+        self.focus_score_label = QLabel("Signal: --")
         self.final_xgb_label = QLabel("Final XGB : --")
         self.boost_xgb_label = QLabel("Boost XGB : --")
         self.targeted_xgb_label = QLabel("Targeted XGB : --")
@@ -177,10 +177,10 @@ class AIVisionPage(ThemedPage):
             f"Depth Cues: inter-eye {inter_eye:.4f} | normalized z-span {normalized_z_span:.4f}"
         )
 
-        score = self._clamp_score(payload.get("focus_score"))
+        score = self._clamp_score(payload.get("presentation_signal", payload.get("focus_score")))
         state = str(payload.get("state", "WARMING_UP")).upper()
         self._set_bar(self.focus_score_bar, score)
-        self.focus_score_label.setText(f"Focus Telemetry: {score * 100:.1f}%")
+        self.focus_score_label.setText(f"Signal: {score * 100:.1f}%")
 
         components = normalize_components(payload.get("components"))
         if components:

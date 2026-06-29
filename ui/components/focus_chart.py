@@ -6,7 +6,13 @@ from PyQt6.QtCore import Qt
 from ui.theme import font
 
 class FocusTrendChart(QWidget):
-    def __init__(self, max_points: int = 180, palette: dict | None = None) -> None:
+    def __init__(
+        self,
+        max_points: int = 180,
+        palette: dict | None = None,
+        smoothing_alpha: float = 0.28,
+        max_step: float = 0.12,
+    ) -> None:
         super().__init__()
         self._palette = palette or {
             "input": "#101a2a",
@@ -15,8 +21,11 @@ class FocusTrendChart(QWidget):
             "accent_warn": "#E74C3C",
         }
         self._threshold = 0.5
+        self._smoothing_alpha = max(0.05, min(1.0, float(smoothing_alpha)))
+        self._max_step = max(0.02, min(1.0, float(max_step)))
         self.setMinimumHeight(150)
         self._scores: deque[float] = deque(maxlen=max_points)
+        self._smoothed_scores: deque[float] = deque(maxlen=max_points)
 
     def apply_theme(self, palette: dict) -> None:
         self._palette = palette
@@ -28,10 +37,17 @@ class FocusTrendChart(QWidget):
 
     def clear(self) -> None:
         self._scores.clear()
+        self._smoothed_scores.clear()
         self.update()
 
     def add_score(self, score: float) -> None:
-        self._scores.append(max(0.0, min(1.0, float(score))))
+        value = max(0.0, min(1.0, float(score)))
+        self._scores.append(value)
+        previous = self._smoothed_scores[-1] if self._smoothed_scores else value
+        delta = max(-self._max_step, min(self._max_step, value - previous))
+        target = previous + delta
+        smoothed = previous + self._smoothing_alpha * (target - previous)
+        self._smoothed_scores.append(max(0.0, min(1.0, smoothed)))
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -65,7 +81,7 @@ class FocusTrendChart(QWidget):
             painter.drawText(left + 4, y - 4, f"{int(value * 100)}%")
             painter.setPen(pen)
 
-        # Visual guide for P(high). It is not the 4-class decision rule.
+        # Visual guide for the presentation signal. The model decision remains 4-class argmax.
         warn_pen = QPen(QColor(self._palette["accent_warn"]), 1, Qt.PenStyle.DashLine)
         painter.setPen(warn_pen)
         threshold_y = bottom - int(self._threshold * span_y)
@@ -75,18 +91,28 @@ class FocusTrendChart(QWidget):
         painter.setFont(font(9))
         painter.drawText(right - 72, threshold_y - 4, f"Guide: {int(self._threshold * 100)}%")
 
-        if len(self._scores) < 2:
+        scores = self._smoothed_scores
+        if len(scores) == 0:
             painter.setPen(QColor(self._palette["text_secondary"]))
             painter.setFont(font(12))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Waiting for focus data...")
+            return
+        if len(scores) == 1:
+            score = scores[0]
+            x = right - 4
+            y = bottom - score * span_y
+            point_color = QColor(self._palette.get("accent_focus", "#1E5EEB"))
+            painter.setPen(QPen(point_color, 2))
+            painter.setBrush(point_color)
+            painter.drawEllipse(int(x - 4), int(y - 4), 8, 8)
             return
 
         # Gather points
         max_capacity = self._scores.maxlen if self._scores.maxlen else 180
         step = span_x / max(1, max_capacity - 1)
         points = []
-        for idx, score in enumerate(self._scores):
-            x = right - (len(self._scores) - 1 - idx) * step
+        for idx, score in enumerate(scores):
+            x = right - (len(scores) - 1 - idx) * step
             y = bottom - score * span_y
             points.append((x, y))
 

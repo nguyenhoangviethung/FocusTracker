@@ -35,6 +35,7 @@ from shared.contracts import (
     UserStats,
     utc_now,
 )
+from utils.focus_signal import presentation_signal
 
 
 router = APIRouter()
@@ -183,6 +184,7 @@ def _live_session_updates(
             "state": response.state,
             "ai_state": response.ai_state,
             "focus_score": response.focus_score,
+            "presentation_signal": response.presentation_signal,
             "label_space": response.label_space,
             "face_found": packet.face_found,
             "latency_ms": response.latency_ms,
@@ -824,7 +826,18 @@ async def get_user_stats(
             average_focus = float(summary.get("average_focus") or 0.0)
         except (TypeError, ValueError):
             average_focus = 0.0
-        if average_focus <= 0.0 and live_metrics.get("focus_score") is not None:
+        if live_metrics.get("presentation_signal") is not None:
+            try:
+                average_focus = float(live_metrics.get("presentation_signal") or 0.0)
+            except (TypeError, ValueError):
+                average_focus = 0.0
+        elif live_metrics.get("predicted_class") is not None:
+            average_focus = presentation_signal(
+                live_metrics.get("predicted_class"),
+                live_metrics.get("class_probabilities"),
+                live_metrics.get("focus_score"),
+            )
+        elif average_focus <= 0.0 and live_metrics.get("focus_score") is not None:
             try:
                 average_focus = float(live_metrics.get("focus_score") or 0.0)
             except (TypeError, ValueError):

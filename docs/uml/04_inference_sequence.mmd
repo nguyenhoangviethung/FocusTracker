@@ -1,64 +1,36 @@
 sequenceDiagram
     autonumber
 
-    actor User as 👤 Người học
-
-    box rgb(239, 246, 255) Phân hệ Biên (Edge Application)
-        participant UI as 🎨 PyQt6 Giao diện
-        participant ST as ⚙️ Session Coordinator
-        participant MP as 👁️ MediaPipe Detector
-        participant EI as 🧠 Triple XGBoost Inferencer
-        participant CC as 📡 Cloud Client (WSS)
+    box rgb(239, 246, 255) Phân hệ Biên (Edge System)
+        participant EdgeApp as ⚙️ Ứng dụng Biên (Client)
+        participant MP as 👁️ Bộ Detector MediaPipe
+        participant LocalModel as 🧠 Mô hình XGBoost Cục bộ
     end
 
-    box rgb(240, 253, 244) Phân hệ Đám mây (Cloud Inference Platform)
-        participant API as 🌐 FastAPI API Gateway
-        participant INF as 🧠 Inference Engine
-        participant XGB as 🌲 Calibrated Triple XGBoost Classifier
-        participant DB as 💾 Firestore Database
+    box rgb(240, 253, 244) Phân hệ Đám mây (Cloud Platform)
+        participant Gateway as 🌐 FastAPI Gateway
+        participant CloudEngine as 🧠 Bộ xử lý Cloud Engine
+        participant CloudModel as 🌲 Mô hình Triple XGBoost Cloud
     end
 
-    %% Initialization phase
-    Note over User,DB: Phase 1: Khởi động phiên (Session Initialization)
-    User->>UI: Bắt đầu học tập
-    UI->>ST: start_session(config)
-    ST->>CC: connect_stream()
-    CC->>API: WSS Handshake (auth_token)
-    API->>DB: Verify credentials & create session
-    DB-->>API: session_record (status=active)
-    API-->>CC: Connection accepted
-    CC-->>ST: Ready for telemetry
-
-    %% Live streaming loop
+    %% Loop of inference
     rect rgb(248, 250, 252)
-        Note over User,DB: Phase 2: Vòng lặp suy luận (Real-time Inference Loop)
-        ST->>MP: detect_landmarks(camera_frame)
-        MP-->>ST: facial_features, face_found
-        Note over ST: Lưu đặc trưng vào sliding buffer (30 frames x 168 dims)
+        Note over EdgeApp,CloudModel: Quy trình suy luận thời gian thực (Real-time Inference)
+        EdgeApp->>MP: detect_landmarks(camera_frame)
+        MP-->>EdgeApp: facial_features (168 chiều)
+        Note over EdgeApp: Cập nhật đặc trưng vào hàng đợi trượt (sliding buffer 30 frames)
 
-        alt Local / Hybrid Inference Mode (Edge-First)
-            Note over ST,EI: Tải mô hình biên & suy luận trực tiếp trên CPU thiết bị
-            ST->>ST: enrich_features() (30x168 -> 30x504)
-            ST->>EI: predict(enriched_sequence)
-            EI-->>ST: InferenceResult (focus_score, state, latency_ms ~ 24.8ms)
+        alt Chế độ ngoại tuyến (Local Inference Mode)
+            EdgeApp->>EdgeApp: enrich_features() (30x168 -> 30x504)
+            EdgeApp->>LocalModel: predict(enriched_sequence)
+            LocalModel-->>EdgeApp: InferenceResult (focus_score, state)
+        else Chế độ đám mây (Cloud Inference Mode)
+            EdgeApp->>Gateway: TelemetryPacket (WSS) (raw features 30x168)
+            Gateway->>CloudEngine: process_inference(features_30x168)
+            Note over CloudEngine: Làm giàu đặc trưng (30x504)<br/>và trích xuất thống kê thời gian (3529 chiều)
+            CloudEngine->>CloudModel: predict_probabilities(x_vector)
+            CloudModel-->>CloudEngine: Phán quyết & hiệu chuẩn xác suất
+            CloudEngine-->>Gateway: InferenceResult (focus_score, state, message_id)
+            Gateway-->>EdgeApp: InferenceResponse (WSS)
         end
-
-        alt Cloud / Hybrid Inference Mode (Parallel sync & persistent telemetry)
-            ST->>CC: send_packet(TelemetryPacket)
-            CC->>API: WSS Frame (raw_features_30x168_matrix)
-            API->>INF: process_inference(features_30x168)
-            Note over INF: Làm giàu đặc trưng (Feature Enrichment)<br/>30x168 -> 30x504 matrix
-            Note over INF: Thống kê đặc trưng thời gian (Temporal Aggregation)<br/>3529 chiều
-            INF->>XGB: predict_probabilities(x_vector)
-            XGB-->>INF: Phán quyết & hiệu chuẩn phân loại (calibration)
-            INF-->>API: InferenceResult (focus_score, engagement_state)
-            API->>DB: update_live_metrics(session_id)
-            API-->>CC: InferenceResponse (focus_score, state, message_id)
-            CC-->>ST: update_state(focus_score, latency_ms)
-        end
-
-        ST-->>UI: display_visual_metrics()
-        UI-->>User: Hiển thị thanh trạng thái tập trung
     end
-
-    Note over User,MP: ⚠️ Bảo mật: Camera frames và Landmark thô chỉ xử lý tại RAM thiết bị biên, không gửi đi.

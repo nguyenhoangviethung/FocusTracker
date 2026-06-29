@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from ui.screens.base import ThemedPage, PageTitle, Card
 from ui.components.focus_chart import FocusTrendChart
 from ui.theme import ThemeManager, font
+from utils.focus_signal import presentation_signal
 from utils.session_storage import delete_session_record, is_meaningful_session_record, load_session_history
 
 class ReportPage(ThemedPage):
@@ -588,7 +589,15 @@ class ReportPage(ThemedPage):
             if status == "processing":
                 status = "pending"
             average_focus = summary.get("average_focus")
-            if average_focus in (None, "", 0, 0.0) and live_metrics.get("focus_score") is not None:
+            if live_metrics.get("presentation_signal") is not None:
+                average_focus = live_metrics.get("presentation_signal")
+            elif live_metrics.get("predicted_class") is not None:
+                average_focus = presentation_signal(
+                    live_metrics.get("predicted_class"),
+                    live_metrics.get("class_probabilities"),
+                    live_metrics.get("focus_score"),
+                )
+            elif average_focus in (None, "", 0, 0.0) and live_metrics.get("focus_score") is not None:
                 average_focus = live_metrics.get("focus_score")
             duration_seconds = summary.get("duration_seconds") or rec.get("duration_seconds") or 0
             focused_seconds = summary.get("focused_seconds")
@@ -598,6 +607,9 @@ class ReportPage(ThemedPage):
                 except (TypeError, ValueError):
                     focused_seconds = 0
             report_status = rec.get("report_status") or status or "completed"
+            minute_scores = summary.get("minute_focus_scores") or rec.get("minute_focus_scores") or []
+            if not minute_scores and average_focus not in (None, "", 0, 0.0):
+                minute_scores = [average_focus]
             mapped = {
                 "session_id": rec.get("session_id") or "",
                 "timestamp": rec.get("started_at") or rec.get("timestamp") or "",
@@ -610,12 +622,13 @@ class ReportPage(ThemedPage):
                 "focused_seconds": focused_seconds or rec.get("focused_seconds") or 0,
                 "distraction_count": summary.get("distraction_count") or rec.get("distraction_count") or 0,
                 "completed": summary.get("completed") if "completed" in summary else rec.get("completed", False),
-                "minute_focus_scores": summary.get("minute_focus_scores") or rec.get("minute_focus_scores") or [],
+                "minute_focus_scores": minute_scores,
                 "report_status": report_status,
                 "report_completed_at": rec.get("report_completed_at") or "",
                 "inference_mode": rec.get("inference_mode") or summary.get("inference_mode") or "local",
                 "cloud_session_id": rec.get("cloud_session_id") or "",
                 "live_state": live_metrics.get("state") or live_metrics.get("ai_state") or "",
+                "raw_focus_score": live_metrics.get("focus_score"),
             }
             if is_meaningful_session_record(mapped) and self._record_belongs_to_current_user(mapped):
                 local_history.append(mapped)

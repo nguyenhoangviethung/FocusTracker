@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import xgboost as xgb
 
+from utils.focus_signal import MEDIUM_HIGH_SUPPORT_THRESHOLD, presentation_signal
 from utils.logger import get_logger
 from utils.paths import resource_base_dir
 
@@ -21,11 +22,40 @@ MODEL_VERSION = "triple_xgb_depth_robust_target_band_product"
 LABEL_SPACE = "daisee_4class"
 CLASS_LABELS = ("very_low", "low", "medium", "high")
 ENGAGED_CLASS_INDICES = (3,)
+MEDIUM_CLASS_INDEX = 2
+HIGH_CLASS_INDEX = 3
+MEDIUM_HIGH_PROBABILITY_THRESHOLD = MEDIUM_HIGH_SUPPORT_THRESHOLD
 SEQUENCE_LENGTH = 30
 RAW_FEATURE_DIM = 168
 ENRICHED_FEATURE_DIM = 504
 FEATURE_MODE = "tsfresh"
 COMPONENTS = ("final_xgb", "boost_xgb", "targeted_xgb")
+
+
+def engagement_decision(probabilities: list[float] | np.ndarray) -> tuple[str, dict[str, Any]]:
+    values = np.asarray(probabilities, dtype=np.float32).reshape(-1)
+    if values.shape[0] != 4:
+        raise ValueError(f"Expected 4 class probabilities, got {values.shape[0]}")
+    predicted_class = int(np.argmax(values))
+    high_probability = float(values[HIGH_CLASS_INDEX])
+    medium_with_high_support = (
+        predicted_class == MEDIUM_CLASS_INDEX
+        and high_probability >= MEDIUM_HIGH_PROBABILITY_THRESHOLD
+    )
+    engaged = predicted_class == HIGH_CLASS_INDEX or medium_with_high_support
+    return (
+        "ENGAGED" if engaged else "DISTRACTED",
+        {
+            "decision_rule": "high_argmax_or_medium_with_high_support",
+            "predicted_class": predicted_class,
+            "predicted_label": CLASS_LABELS[predicted_class],
+            "high_probability": high_probability,
+            "medium_high_probability_threshold": MEDIUM_HIGH_PROBABILITY_THRESHOLD,
+            "medium_with_high_support": medium_with_high_support,
+            "engaged_class_indices": [HIGH_CLASS_INDEX],
+            "conditional_engaged_class_indices": [MEDIUM_CLASS_INDEX],
+        },
+    )
 
 
 @dataclass(frozen=True)
@@ -278,6 +308,8 @@ class TripleXGBDepthRobustInferencer:
         values = probabilities[0]
         prediction = int(np.argmax(values))
         focus_score = float(values[3])
+        display_signal = presentation_signal(prediction, values.tolist(), focus_score)
+        ai_state, decision = engagement_decision(values)
 
         components = {
             component: self._component(component_probs[component])
@@ -289,9 +321,11 @@ class TripleXGBDepthRobustInferencer:
             "label_space": LABEL_SPACE,
             "probability": focus_score,
             "focus_score": focus_score,
-            "state": "ENGAGED" if prediction in ENGAGED_CLASS_INDICES else "DISTRACTED",
+            "presentation_signal": display_signal,
+            "state": ai_state,
             "ready": True,
-            "decision_rule": "argmax_4class",
+            "decision_rule": decision["decision_rule"],
+            "decision": decision,
             "weights": dict(self._weights),
             "components": components,
             "class_labels": list(CLASS_LABELS),
@@ -299,6 +333,8 @@ class TripleXGBDepthRobustInferencer:
             "prediction_4class": prediction,
             "prediction_label": CLASS_LABELS[prediction],
             "engaged_class_indices": list(ENGAGED_CLASS_INDICES),
+            "conditional_engaged_class_indices": [MEDIUM_CLASS_INDEX],
+            "medium_high_probability_threshold": MEDIUM_HIGH_PROBABILITY_THRESHOLD,
             "model_inference_latency_ms": (time.perf_counter() - started) * 1000.0,
             "sequence_length": SEQUENCE_LENGTH,
             "raw_feature_dim": RAW_FEATURE_DIM,

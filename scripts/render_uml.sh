@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_dir="${repo_root}/docs/uml"
 output_dir="${source_dir}/rendered"
-thesis_img_dir="${repo_root}/../Thesis/SOICT_DATN_Base/Hinhve/focusflow"
+thesis_img_dir="${repo_root}/../Thesis/SOICT_DATN_Base/figure/focusflow"
 
 mkdir -p "${output_dir}"
 
